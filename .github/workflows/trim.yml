@@ -1,0 +1,118 @@
+name: CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - testing
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: node:18.20.4
+
+    steps:
+      - uses: actions/checkout@v2
+
+  deploy_main:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v2
+
+      - name: Check deployment flag
+        id: check-flag
+        run: |
+          DEPLOY_FLAG="yes" # Set the flag here. Change to "yes" to enable deployment.
+          echo "Deployment flag is set to: $DEPLOY_FLAG"
+          if [ "$DEPLOY_FLAG" != "yes" ]; then
+            echo "Deployment flag is not set to 'yes'. Skipping deployment."
+            exit 0
+          fi
+
+      - name: Create .env file dynamically
+        run: |
+          echo "Creating .env file..."
+          echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
+
+      - name: Create config folder and files
+        run: |
+          echo "Creating config folder..."
+          mkdir -p config
+          echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+
+      - name: Create .htaccess file
+        run: |
+          echo "Creating .htaccess_prod file..."
+          echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
+
+      - name: Creating firebase.json file
+        run: |
+          echo "Creating firebase.json..."
+          echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
+
+      - name: 📂 Sync files to production
+        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
+        with:
+          server: ${{ secrets.PROD_FTP_HOST }}
+          username: ${{ secrets.PROD_FTP_USERNAME }}
+          password: ${{ secrets.PROD_FTP_PASSWORD }}
+          debug: true
+
+      - name: Trigger npm install on server
+        run: |
+              echo "Triggering npm install via PHP script..."
+              curl -X GET "https://backend.trimworldwide.com/trigger.php"
+        env:
+            HOME: /home/trimworldwide
+
+  deploy_testing:
+    needs: build
+    if: github.ref == 'refs/heads/testing'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v2
+
+      - name: Create .env file dynamically
+        run: |
+          echo "Creating .env file..."
+          echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
+
+      - name: Create config folder and files
+        run: |
+          echo "Creating config folder..."
+          mkdir -p config
+          echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+
+      - name: Create .htaccess file
+        run: |
+          echo "Creating .htaccess_stage file..."
+          echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
+
+      - name: Creating firebase.json file
+        run: |
+          echo "Creating firebase.json..."
+          echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
+
+      - name: 📂 Sync files to development
+        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
+        with:
+          server: ${{ secrets.STAGE_FTP_HOST }}
+          username: ${{ secrets.STAGE_FTP_USERNAME }}
+          password: ${{ secrets.STAGE_FTP_PASSWORD }}
+          debug: true
+
+      - name: Trigger npm install on server
+        run: |
+              echo "Triggering npm install and pm2 start via PHP script..."
+              curl -X GET "https://stage.trimworldwide.com/trigger.php"
+        env:
+            HOME: /home/trimworldwide
