@@ -626,193 +626,203 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 }
 
 //* 8.Reports-> Income Report week------------------------------------------------------------------------------
+// controllers/reportController.js
 
-exports.weeklyIncomeReport = async (req, res, next) => {
-  // Extract startDate and endDate from query parameters
-  const { startDate, endDate } = req.query
+exports.hourlyIncomeReport = async (req, res, next) => {
+  try {
+    // Extract startDate and endDate from query parameters
+    const { startDate, endDate } = req.query
 
-  // Validate that both startDate and endDate are provided
-  if (!startDate || !endDate) {
-    return res.status(400).json({
-      status: '0',
-      message: 'startDate and endDate are required for weekly income report.',
-      data: {},
-      error: '',
-    })
-  }
-
-  // Validate date formats (basic check)
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-  if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-    return res.status(400).json({
-      status: '0',
-      message: "Invalid date format. Please use 'YYYY-MM-DD'.",
-      data: {},
-      error: '',
-    })
-  }
-
-  // Parse dates to ensure validity
-  const parsedStartDate = new Date(startDate)
-  const parsedEndDate = new Date(endDate)
-
-  if (isNaN(parsedStartDate) || isNaN(parsedEndDate)) {
-    return res.status(400).json({
-      status: '0',
-      message: 'Invalid dates provided.',
-      data: {},
-      error: '',
-    })
-  }
-
-  // Ensure startDate is before or equal to endDate
-  if (parsedStartDate > parsedEndDate) {
-    return res.status(400).json({
-      status: '0',
-      message: 'startDate must be before or equal to endDate.',
-      data: {},
-      error: '',
-    })
-  }
-
-  // Calculate Previous Week's Start and End Dates
-  const previousWeekEnd = new Date(parsedStartDate)
-  previousWeekEnd.setDate(previousWeekEnd.getDate() - 1) // End 1 day before startDate
-
-  const previousWeekStart = new Date(previousWeekEnd)
-  previousWeekStart.setDate(previousWeekStart.getDate() - 6) // Start 7 days before previousWeekEnd
-
-  // Format dates to 'YYYY-MM-DD' for SQL queries
-  const formattedStartDate = parsedStartDate.toISOString().split('T')[0]
-  const formattedEndDate = parsedEndDate.toISOString().split('T')[0]
-  const formattedPrevStartDate = previousWeekStart.toISOString().split('T')[0]
-  const formattedPrevEndDate = previousWeekEnd.toISOString().split('T')[0]
-
-  // Fetch the salon details for the current user
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) AppError('Salon not found!', 200)
-
-  // Define SQL queries for this week, previous week, and all-time average
-  const thisWeekRevenueQuery = `
-     SELECT 
-       DAYNAME(bookings.on) AS day,
-       SUM(bookings.total) AS revenue 
-     FROM bookings 
-     WHERE bookings.salonDetailId = :salonDetailId 
-       AND bookings.status = 'complete' 
-       AND bookings.on BETWEEN :startDate AND :endDate
-     GROUP BY DAYNAME(bookings.on)
-   `
-
-  const previousWeekRevenueQuery = `
-     SELECT 
-       DAYNAME(bookings.on) AS day,
-       SUM(bookings.total) AS revenue 
-     FROM bookings 
-     WHERE bookings.salonDetailId = :salonDetailId 
-       AND bookings.status = 'complete' 
-       AND bookings.on BETWEEN :prevStartDate AND :prevEndDate
-     GROUP BY DAYNAME(bookings.on)
-   `
-
-  const allTimeAverageRevenueQuery = `
-     SELECT 
-       DAYNAME(bookings.on) AS day,
-       AVG(bookings.total) AS averageRevenue 
-     FROM bookings 
-     WHERE bookings.salonDetailId = :salonDetailId 
-       AND bookings.status = 'complete' 
-     GROUP BY DAYNAME(bookings.on)
-   `
-
-  // Execute all three queries concurrently
-  const [thisWeekRevenue, previousWeekRevenue, allTimeAverageRevenue] =
-    await Promise.all([
-      sequelize.query(thisWeekRevenueQuery, {
-        replacements: {
-          salonDetailId: salon.id,
-          startDate: formattedStartDate,
-          endDate: formattedEndDate,
-        },
-        type: sequelize.QueryTypes.SELECT,
-      }),
-      sequelize.query(previousWeekRevenueQuery, {
-        replacements: {
-          salonDetailId: salon.id,
-          prevStartDate: formattedPrevStartDate,
-          prevEndDate: formattedPrevEndDate,
-        },
-        type: sequelize.QueryTypes.SELECT,
-      }),
-      sequelize.query(allTimeAverageRevenueQuery, {
-        replacements: { salonDetailId: salon.id },
-        type: sequelize.QueryTypes.SELECT,
-      }),
-    ])
-
-  // Define the order of days from Monday to Sunday
-  const orderedDays = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ]
-
-  // Initialize the report with all days set to '0.00'
-  const report = orderedDays.map((day) => ({
-    day,
-    thisWeek: '0.00',
-    previousWeek: '0.00',
-    allTimeAverage: '0.00',
-  }))
-
-  // Helper function to update the report
-  const updateReport = (data, weekType) => {
-    data.forEach((item) => {
-      const dayIndex = orderedDays.indexOf(item.day)
-      if (dayIndex !== -1) {
-        if (weekType === 'thisWeek') {
-          report[dayIndex].thisWeek = parseFloat(item.revenue).toFixed(2)
-        } else if (weekType === 'previousWeek') {
-          report[dayIndex].previousWeek = parseFloat(item.revenue).toFixed(2)
-        }
-      }
-    })
-  }
-
-  // Update the report with this week's revenue
-  updateReport(thisWeekRevenue, 'thisWeek')
-
-  // Update the report with previous week's revenue
-  updateReport(previousWeekRevenue, 'previousWeek')
-
-  // Update the report with all-time average revenue
-  allTimeAverageRevenue.forEach((item) => {
-    const dayIndex = orderedDays.indexOf(item.day)
-    if (dayIndex !== -1) {
-      report[dayIndex].allTimeAverage = parseFloat(item.averageRevenue).toFixed(
-        2,
-      )
+    // Validate that both startDate and endDate are provided
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        status: '0',
+        message: 'startDate and endDate are required for hourly income report.',
+        data: {},
+        error: '',
+      })
     }
-  })
 
-  // Optional: Calculate averagePerWeek if needed (not requested here)
-  // report.forEach(entry => {
-  //   entry.averagePerWeek = ((parseFloat(entry.thisWeek) + parseFloat(entry.previousWeek)) / 2).toFixed(2);
-  // });
+    // Validate date formats (basic check)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      return res.status(400).json({
+        status: '0',
+        message: "Invalid date format. Please use 'YYYY-MM-DD'.",
+        data: {},
+        error: '',
+      })
+    }
 
-  // Structure the response
-  return res.status(200).json(
-    response({
-      message: 'Income Report.',
-      data: { currencyUnit: CURRENCY_UNIT, report },
-    }),
-  )
+    // Parse dates to ensure validity
+    const parsedStartDate = new Date(startDate)
+    const parsedEndDate = new Date(endDate)
+
+    if (isNaN(parsedStartDate) || isNaN(parsedEndDate)) {
+      return res.status(400).json({
+        status: '0',
+        message: 'Invalid dates provided.',
+        data: {},
+        error: '',
+      })
+    }
+
+    // Ensure startDate is before or equal to endDate
+    if (parsedStartDate > parsedEndDate) {
+      return res.status(400).json({
+        status: '0',
+        message: 'startDate must be before or equal to endDate.',
+        data: {},
+        error: '',
+      })
+    }
+
+    // Calculate Previous Week's Start and End Dates
+    const previousWeekStart = new Date(parsedStartDate)
+    previousWeekStart.setDate(previousWeekStart.getDate() - 7)
+
+    const previousWeekEnd = new Date(parsedEndDate)
+    previousWeekEnd.setDate(previousWeekEnd.getDate() - 7)
+
+    // Format dates to 'YYYY-MM-DD' for SQL queries
+    const formattedStartDate = parsedStartDate.toISOString().split('T')[0]
+    const formattedEndDate = parsedEndDate.toISOString().split('T')[0]
+    const formattedPrevStartDate = previousWeekStart.toISOString().split('T')[0]
+    const formattedPrevEndDate = previousWeekEnd.toISOString().split('T')[0]
+
+    // Fetch the salon details for the current user
+    const salon = await salonDetail.findOne({
+      where: { userId: req.user.id },
+      attributes: ['id'],
+    })
+
+    if (!salon) {
+      return res.status(404).json({
+        status: '0',
+        message: 'Salon not found',
+        data: {},
+        error: '',
+      })
+    }
+
+    const salonId = salon.id
+
+    // Define SQL queries for this week and previous week, grouped by hour
+    const thisWeekRevenueQuery = `
+      SELECT 
+        HOUR(bookings.startTime) AS hour,
+        SUM(bookings.total) AS revenue 
+      FROM bookings 
+      WHERE bookings.salonDetailId = :salonDetailId 
+        AND bookings.status = 'complete' 
+        AND bookings.on BETWEEN :startDate AND :endDate
+      GROUP BY HOUR(bookings.startTime)
+      ORDER BY HOUR(bookings.startTime)
+    `
+
+    const previousWeekRevenueQuery = `
+      SELECT 
+        HOUR(bookings.startTime) AS hour,
+        SUM(bookings.total) AS revenue 
+      FROM bookings 
+      WHERE bookings.salonDetailId = :salonDetailId 
+        AND bookings.status = 'complete' 
+        AND bookings.on BETWEEN :prevStartDate AND :prevEndDate
+      GROUP BY HOUR(bookings.startTime)
+      ORDER BY HOUR(bookings.startTime)
+    `
+
+    // Define SQL query for all-time average per hour
+    const allTimeAverageRevenueQuery = `
+      SELECT 
+        HOUR(bookings.startTime) AS hour,
+        AVG(bookings.total) AS averageRevenue 
+      FROM bookings 
+      WHERE bookings.salonDetailId = :salonDetailId 
+        AND bookings.status = 'complete'
+      GROUP BY HOUR(bookings.startTime)
+      ORDER BY HOUR(bookings.startTime)
+    `
+
+    // Execute all three queries concurrently
+    const [thisWeekRevenue, previousWeekRevenue, allTimeAverageRevenue] =
+      await Promise.all([
+        sequelize.query(thisWeekRevenueQuery, {
+          replacements: {
+            salonDetailId: salonId,
+            startDate: formattedStartDate,
+            endDate: formattedEndDate,
+          },
+          type: sequelize.QueryTypes.SELECT,
+        }),
+        sequelize.query(previousWeekRevenueQuery, {
+          replacements: {
+            salonDetailId: salonId,
+            prevStartDate: formattedPrevStartDate,
+            prevEndDate: formattedPrevEndDate,
+          },
+          type: sequelize.QueryTypes.SELECT,
+        }),
+        sequelize.query(allTimeAverageRevenueQuery, {
+          replacements: { salonDetailId: salonId },
+          type: sequelize.QueryTypes.SELECT,
+        }),
+      ])
+
+    // Define the order of hours from 00:00 to 23:00
+    const orderedHours = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i.toString().padStart(2, '0')}:00 - ${((i + 1) % 24).toString().padStart(2, '0')}:00`,
+      currentWeek: '0.00',
+      previousWeek: '0.00',
+      averageWeek: '0.00',
+      allTimeAverage: '0.00',
+    }))
+
+    // Helper function to map revenue data to the report
+    const mapRevenueData = (data, key) => {
+      data.forEach((item) => {
+        const hourIndex = parseInt(item.hour, 10)
+        if (!isNaN(hourIndex) && hourIndex >= 0 && hourIndex < 24) {
+          orderedHours[hourIndex][key] = parseFloat(
+            item.revenue || item.averageRevenue,
+          ).toFixed(2)
+        }
+      })
+    }
+
+    // Populate the report with this week's revenue
+    mapRevenueData(thisWeekRevenue, 'currentWeek')
+
+    // Populate the report with previous week's revenue
+    mapRevenueData(previousWeekRevenue, 'previousWeek')
+
+    // Populate the report with all-time average revenue
+    mapRevenueData(allTimeAverageRevenue, 'allTimeAverage')
+
+    // Calculate averageWeek as (currentWeek + previousWeek) / 2
+    orderedHours.forEach((entry) => {
+      const current = parseFloat(entry.currentWeek) || 0
+      const previous = parseFloat(entry.previousWeek) || 0
+      const average = (current + previous) / 2
+      entry.averageWeek = average.toFixed(2)
+    })
+
+    // Structure the response
+    return res.status(200).json({
+      status: '1',
+      message: 'Hourly income report generated successfully.',
+      data: {
+        report: orderedHours,
+      },
+      error: '',
+    })
+  } catch (error) {
+    console.error('Error generating Hourly Income Report:', error)
+    return res.status(500).json({
+      status: '0',
+      message: 'Internal Server Error',
+      data: {},
+      error: error.message,
+    })
+  }
 }

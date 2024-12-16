@@ -8,17 +8,20 @@ node_modules/
 dist/
 config/
 
-
-.firebase.json
-
 .eslintrc.json
 .prettierrc
+.htaccess
 
 Public/
 
-
-
 .env
+
+firebase.json
+
+*.json
+*.yml
+*.php
+
 # Compiled Java class files
 *.class
 
@@ -59,4 +62,3 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
-
