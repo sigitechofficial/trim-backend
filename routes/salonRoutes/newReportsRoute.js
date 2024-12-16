@@ -37,9 +37,12 @@ router.get(
 router.get('/most-popular-services', catchAsync(Controller.mostPopularServices))
 
 router.get('/services-performance', catchAsync(Controller.bookingPerformance))
+
 router.get(
   '/income-report-yearly/:year',
   catchAsync(Controller.IncomeReportYear),
 )
+
+router.get('/income-report-week', catchAsync(Controller.weeklyIncomeReport))
 
 module.exports = router
