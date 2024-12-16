@@ -771,17 +771,17 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 
     // Define the order of hours from 00:00 to 23:00
     const orderedHours = Array.from({ length: 24 }, (_, i) => ({
-      hour: `${i.toString().padStart(2, '0')}:00 - ${((i + 1) % 24).toString().padStart(2, '0')}:00`,
+      day: `${i.toString().padStart(2, '0')}:00 - ${((i + 1) % 24).toString().padStart(2, '0')}:00`,
       currentWeek: '0.00',
       previousWeek: '0.00',
-      averageWeek: '0.00',
-      allTimeAverage: '0.00',
+      // averageWeek: '0.00',
+      averagePerWeek: '0.00',
     }))
 
     // Helper function to map revenue data to the report
     const mapRevenueData = (data, key) => {
       data.forEach((item) => {
-        const hourIndex = parseInt(item.hour, 10)
+        const hourIndex = parseInt(item.day, 10)
         if (!isNaN(hourIndex) && hourIndex >= 0 && hourIndex < 24) {
           orderedHours[hourIndex][key] = parseFloat(
             item.revenue || item.averageRevenue,
@@ -797,15 +797,15 @@ exports.hourlyIncomeReport = async (req, res, next) => {
     mapRevenueData(previousWeekRevenue, 'previousWeek')
 
     // Populate the report with all-time average revenue
-    mapRevenueData(allTimeAverageRevenue, 'allTimeAverage')
+    mapRevenueData(allTimeAverageRevenue, 'averagePerWeek')
 
     // Calculate averageWeek as (currentWeek + previousWeek) / 2
-    orderedHours.forEach((entry) => {
-      const current = parseFloat(entry.currentWeek) || 0
-      const previous = parseFloat(entry.previousWeek) || 0
-      const average = (current + previous) / 2
-      entry.averageWeek = average.toFixed(2)
-    })
+    // orderedHours.forEach((entry) => {
+    //   const current = parseFloat(entry.currentWeek) || 0
+    //   const previous = parseFloat(entry.previousWeek) || 0
+    //   const average = (current + previous) / 2
+    //   entry.averageWeek = average.toFixed(2)
+    // })
 
     // Structure the response
     return res.status(200).json({
