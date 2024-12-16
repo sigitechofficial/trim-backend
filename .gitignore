@@ -11,7 +11,7 @@ config/
 .eslintrc.json
 .prettierrc
 
-public/
+Public/
 
 .env
 # Compiled Java class files
