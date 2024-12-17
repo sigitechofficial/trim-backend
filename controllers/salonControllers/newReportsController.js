@@ -186,7 +186,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
         literal(
           `(SELECT GROUP_CONCAT(job.serviceId)
             FROM jobs AS job
-            WHERE job.employeeId = employee.id AND job.status = 'complete' AND jobs.on BETWEEN '${startDate}' AND '${endDate}')`, // AND job.status = 'complete'
+            WHERE job.employeeId = employee.id AND job.status = 'complete' AND job.on BETWEEN '${startDate}' AND '${endDate}')`, // AND job.status = 'complete'
         ),
         'servicesProvided',
       ],
@@ -207,10 +207,11 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   return res.status(200).json(
     response({
       data: {
+        appointments,
         // currencyUnit: CURRENCY_UNIT,
-        ouptut,
-        // report: input,
-        servicesList,
+        // ouptut,
+        // // report: input,
+        // servicesList,
       },
     }),
   )
@@ -367,7 +368,7 @@ exports.bookingPerformance = async (req, res, next) => {
   )
 }
 
-//* 8.Reports-> Income Report Year------------------------------------------------------------------------------
+//* 8.Reports-> Income Report Yearly------------------------------------------------------------------------------
 
 exports.IncomeReportYear = async (req, res, next) => {
   const { year } = req.params
@@ -486,7 +487,7 @@ exports.IncomeReportYear = async (req, res, next) => {
   )
 }
 
-//* 8.Reports-> Income Report week------------------------------------------------------------------------------
+//* 9.Reports-> Income Report weekly------------------------------------------------------------------------------
 exports.weeklyIncomeReport = async (req, res, next) => {
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
@@ -735,7 +736,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
   )
 }
 
-//* 8.Reports-> Income Report week------------------------------------------------------------------------------
+//* 10.Reports-> Income Report Houly------------------------------------------------------------------------------
 exports.hourlyIncomeReport = async (req, res, next) => {
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
@@ -933,4 +934,114 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       },
     }),
   )
+}
+
+//* 11.Reports-> Income Report week------------------------------------------------------------------------------
+const formatDateTime = (date) => {
+  const pad = (n) => String(n).padStart(2, '0')
+  const year = date.getUTCFullYear()
+  const month = pad(date.getUTCMonth() + 1) // Months are zero-indexed
+  const day = pad(date.getUTCDate())
+  const hours = pad(date.getUTCHours())
+  const minutes = pad(date.getUTCMinutes())
+  const seconds = pad(date.getUTCSeconds())
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
+const getNumberOfWeeks = (start, end) => {
+  const msInWeek = 7 * 24 * 60 * 60 * 1000
+  const diffInMs = end - start
+  return Math.ceil(diffInMs / msInWeek)
+}
+
+const getNumberOfMonths = (start, end) => {
+  const startYear = start.getUTCFullYear()
+  const startMonth = start.getUTCMonth()
+  const endYear = end.getUTCFullYear()
+  const endMonth = end.getUTCMonth()
+  return (endYear - startYear) * 12 + (endMonth - startMonth) + 1 // +1 to include the starting month
+}
+
+exports.averageJobsReport = async (req, res, next) => {
+  // 1. Extract the 'year' from query parameters
+  const { year } = req.query
+
+  let startDate, endDate
+
+  const salonData = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id', 'createdAt'],
+    raw: true,
+  })
+  console.log('🚀 ~ exports.averageJobsReport= ~ salonData:', salonData.id)
+
+  if (year) {
+    // Annual Report
+    startDate = new Date(`${year}-01-01T00:00:00Z`)
+    endDate = new Date(`${year}-12-31T23:59:59Z`)
+  } else {
+    if (salonData && salonData.createdAt) {
+      startDate = new Date(salonData.createdAt)
+    } else {
+      // If salon.createdAt is not found, default to a very early date
+      startDate = new Date('2024-01-01T00:00:00Z')
+    }
+
+    endDate = new Date() // Current date and time
+  }
+
+  // 2. Calculate the number of weeks and months in the reporting period
+  const numberOfWeeks = getNumberOfWeeks(startDate, endDate)
+  const numberOfMonths = getNumberOfMonths(startDate, endDate)
+
+  // 3. Fetch employees with their firstName, lastName, and count of jobs
+  const appointments = await employee.findAll({
+    where: {
+      salonDetailId: salonData.id,
+    },
+    attributes: [
+      'id',
+      [
+        literal(
+          `(SELECT CONCAT(users.firstName, ' ', users.lastName)
+             FROM users 
+             WHERE users.id = employee.userId)`,
+        ),
+        'fullName',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(job.id) 
+              FROM jobs AS job
+              WHERE job.employeeId = employee.id 
+                AND job.status = 'complete' 
+                AND job.on BETWEEN '${formatDateTime(startDate)}' AND '${formatDateTime(endDate)}')`,
+        ),
+        'servicesProvided',
+      ],
+    ],
+    raw: true,
+  })
+
+  // 4. Assemble the report
+  const report = appointments.map((emp) => {
+    const name = emp.fullName || `Emp #${emp.id}`
+    const totalJobs = parseInt(emp.servicesProvided, 10) || 0
+    const averageBookingsPerWeek =
+      numberOfWeeks > 0
+        ? parseFloat((totalJobs / numberOfWeeks).toFixed(1))
+        : 0.0
+    const averageBookingsPerMonth =
+      numberOfMonths > 0
+        ? parseFloat((totalJobs / numberOfMonths).toFixed(1))
+        : 0.0
+    return {
+      name: name,
+      averageBookingsPerWeek: averageBookingsPerWeek,
+      averageBookingsPerMonth: averageBookingsPerMonth,
+    }
+  })
+
+  // 5. Return the response
+  return res.status(200).json(response({ message: 'success', data: report }))
 }

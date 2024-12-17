@@ -45,5 +45,6 @@ router.get(
 
 router.get('/income-report-week', catchAsync(Controller.weeklyIncomeReport))
 router.get('/income-report-per-hour', catchAsync(Controller.hourlyIncomeReport))
+router.get('/average-bookings', catchAsync(Controller.averageJobsReport))
 
 module.exports = router
