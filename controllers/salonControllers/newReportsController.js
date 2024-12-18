@@ -21,6 +21,7 @@ const {
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
 const { response } = require('../../utils/response')
+
 const {
   busiestQuietestDays,
   busiestQuietestHours,
@@ -29,34 +30,20 @@ const {
   processServicesReport,
 } = require('../../utils/reportsFormator/servicesByStaffPerWeek')
 
-const getDayOccurrences = require('../../utils/reportsFormator/dayOccurrences')
+const {
+  getDayOccurrences,
+} = require('../../utils/reportsFormator/dayOccurrences')
+const { formatDateTime } = require('../../utils/reportsFormator/formatDateTime')
+const {
+  getNumberOfWeeks,
+} = require('../../utils/reportsFormator/numberofWeeks')
+
+const {
+  getNumberOfMonths,
+} = require('../../utils/reportsFormator/numberofMonths')
 
 const CustomDate = require('../../utils/currentDay')
 
-const formatDateTime = (date) => {
-  const pad = (n) => String(n).padStart(2, '0')
-  const year = date.getUTCFullYear()
-  const month = pad(date.getUTCMonth() + 1) // Months are zero-indexed
-  const day = pad(date.getUTCDate())
-  const hours = pad(date.getUTCHours())
-  const minutes = pad(date.getUTCMinutes())
-  const seconds = pad(date.getUTCSeconds())
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-}
-
-const getNumberOfWeeks = (start, end) => {
-  const msInWeek = 7 * 24 * 60 * 60 * 1000
-  const diffInMs = end - start
-  return Math.ceil(diffInMs / msInWeek)
-}
-
-const getNumberOfMonths = (start, end) => {
-  const startYear = start.getUTCFullYear()
-  const startMonth = start.getUTCMonth()
-  const endYear = end.getUTCFullYear()
-  const endMonth = end.getUTCMonth()
-  return (endYear - startYear) * 12 + (endMonth - startMonth) + 1 // +1 to include the starting month
-}
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
 exports.busiestVsQuietest = async (req, res, next) => {
@@ -119,10 +106,6 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
     deleted: false,
   }
 
-  // if (req.query && req.query.startDate && req.query.endDate) {
-  //   // condition.on = { [Op.between]: [req.query.startDate, req.query.endDate] }
-  // }
-
   const startDate = req.query.startDate
   const endDate = req.query.endDate
   const result = await service.findAll({
@@ -156,27 +139,19 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
         'servicesProvided',
       ],
     ],
-    // include: [
-    //   {
-    //     model: jobs,
-    //     required: true,
-    //     attributes: ['id', 'duration', 'total'],
-    //     include: { model: service, attributes: ['id', 'serviceName'] },
-    //   },
-    // ],
   })
 
   const servicesList = JSON.parse(JSON.stringify(result))
   const input = JSON.parse(JSON.stringify(appointments))
-  const ouptut = processServicesReport({ report: input, servicesList })
+  const ouptut = processServicesReport({ employees: input, servicesList })
   return res.status(200).json(
     response({
       data: {
-        appointments,
+        // appointments,
         // currencyUnit: CURRENCY_UNIT,
-        // ouptut,
-        // // report: input,
-        // servicesList,
+        ouptut,
+        input: input,
+        servicesList,
       },
     }),
   )
