@@ -147,7 +147,8 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   return res.status(200).json(
     response({
       data: {
-        ouptut,
+        servicesList,
+        report: ouptut,
       },
     }),
   )
