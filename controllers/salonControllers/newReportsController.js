@@ -110,7 +110,17 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   const endDate = req.query.endDate
   const result = await service.findAll({
     where: { salonDetailId: salon?.id },
-    attributes: ['id', 'serviceName'],
+    attributes: [
+      'id',
+      'serviceName',
+      [
+        literal(
+          `(SELECT categories.color
+         FROM categories WHERE categories.id = service.categoryId)`,
+        ),
+        'color',
+      ],
+    ],
   })
   const appointments = await employee.findAll({
     where: condition,
