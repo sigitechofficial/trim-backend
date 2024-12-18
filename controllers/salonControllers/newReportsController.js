@@ -20,6 +20,7 @@ const {
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
+const { response } = require('../../utils/response')
 const {
   busiestQuietestDays,
   busiestQuietestHours,
@@ -27,70 +28,34 @@ const {
 const {
   processServicesReport,
 } = require('../../utils/reportsFormator/servicesByStaffPerWeek')
-const Graph = require('../../utils/graphsGenerators')
-const Color = require('../../utils/colors')
 
-const response = ({ status, message, data, error }) => {
-  return {
-    status: status ? `${status}` : '1',
-    message: message ? `${message}` : 'success',
-    data: data || {},
-    error: error ? `${error}` : '',
-  }
-}
+const getDayOccurrences = require('../../utils/reportsFormator/dayOccurrences')
+
 const CustomDate = require('../../utils/currentDay')
-const getDayOccurrences = (start, end) => {
-  const occurrences = {
-    Monday: 0,
-    Tuesday: 0,
-    Wednesday: 0,
-    Thursday: 0,
-    Friday: 0,
-    Saturday: 0,
-    Sunday: 0,
-  }
 
-  const current = new Date(start)
+const formatDateTime = (date) => {
+  const pad = (n) => String(n).padStart(2, '0')
+  const year = date.getUTCFullYear()
+  const month = pad(date.getUTCMonth() + 1) // Months are zero-indexed
+  const day = pad(date.getUTCDate())
+  const hours = pad(date.getUTCHours())
+  const minutes = pad(date.getUTCMinutes())
+  const seconds = pad(date.getUTCSeconds())
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
 
-  while (current <= end) {
-    const dayNumber = current.getUTCDay() // 0 (Sunday) to 6 (Saturday)
-    let dayName = ''
+const getNumberOfWeeks = (start, end) => {
+  const msInWeek = 7 * 24 * 60 * 60 * 1000
+  const diffInMs = end - start
+  return Math.ceil(diffInMs / msInWeek)
+}
 
-    switch (dayNumber) {
-      case 0:
-        dayName = 'Sunday'
-        break
-      case 1:
-        dayName = 'Monday'
-        break
-      case 2:
-        dayName = 'Tuesday'
-        break
-      case 3:
-        dayName = 'Wednesday'
-        break
-      case 4:
-        dayName = 'Thursday'
-        break
-      case 5:
-        dayName = 'Friday'
-        break
-      case 6:
-        dayName = 'Saturday'
-        break
-      default:
-        dayName = ''
-    }
-
-    if (dayName) {
-      occurrences[dayName] += 1
-    }
-
-    // Move to the next day
-    current.setUTCDate(current.getUTCDate() + 1)
-  }
-
-  return occurrences
+const getNumberOfMonths = (start, end) => {
+  const startYear = start.getUTCFullYear()
+  const startMonth = start.getUTCMonth()
+  const endYear = end.getUTCFullYear()
+  const endMonth = end.getUTCMonth()
+  return (endYear - startYear) * 12 + (endMonth - startMonth) + 1 // +1 to include the starting month
 }
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
@@ -937,30 +902,6 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 }
 
 //* 11.Reports-> Income Report week------------------------------------------------------------------------------
-const formatDateTime = (date) => {
-  const pad = (n) => String(n).padStart(2, '0')
-  const year = date.getUTCFullYear()
-  const month = pad(date.getUTCMonth() + 1) // Months are zero-indexed
-  const day = pad(date.getUTCDate())
-  const hours = pad(date.getUTCHours())
-  const minutes = pad(date.getUTCMinutes())
-  const seconds = pad(date.getUTCSeconds())
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-}
-
-const getNumberOfWeeks = (start, end) => {
-  const msInWeek = 7 * 24 * 60 * 60 * 1000
-  const diffInMs = end - start
-  return Math.ceil(diffInMs / msInWeek)
-}
-
-const getNumberOfMonths = (start, end) => {
-  const startYear = start.getUTCFullYear()
-  const startMonth = start.getUTCMonth()
-  const endYear = end.getUTCFullYear()
-  const endMonth = end.getUTCMonth()
-  return (endYear - startYear) * 12 + (endMonth - startMonth) + 1 // +1 to include the starting month
-}
 
 exports.averageJobsReport = async (req, res, next) => {
   // 1. Extract the 'year' from query parameters
@@ -1042,6 +983,7 @@ exports.averageJobsReport = async (req, res, next) => {
     }
   })
 
-  // 5. Return the response
-  return res.status(200).json(response({ message: 'success', data: report }))
+  return res
+    .status(200)
+    .json(response({ message: 'success', data: { report } }))
 }
