@@ -147,11 +147,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   return res.status(200).json(
     response({
       data: {
-        // appointments,
-        // currencyUnit: CURRENCY_UNIT,
         ouptut,
-        input: input,
-        servicesList,
       },
     }),
   )
