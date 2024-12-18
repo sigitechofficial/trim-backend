@@ -20,7 +20,7 @@ firebase.json
 
 *.json
 *.yml
-*.php
+# *.php
 
 # Compiled Java class files
 *.class
