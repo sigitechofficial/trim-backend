@@ -1,9 +1,9 @@
 <?php
 // Path to your working directory
-$workingDir = '/home/trimworldwide/stage.trimworldwide.com';
+$workingDir = '/home/trimworldwide/backend.trimworldwide.com';
 
 // Absolute path to node and PM2 binaries
-$nodeBinPath = '/home/trimworldwide/.nvm/versions/node/v18.20.4/bin';
+$nodeBinPath = '/bin';
 
 // Set the PATH environment variable explicitly
 putenv("PATH=$nodeBinPath:" . getenv('PATH')); // Append nodeBinPath to system PATH
@@ -30,6 +30,3 @@ echo "Command Output:\n";
 echo htmlspecialchars($output);
 echo "</pre>";
 ?>
-
-
-
