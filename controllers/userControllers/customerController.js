@@ -76,6 +76,9 @@ const {
 const {
   bookingDataForEmailAndNotifications,
 } = require('../../utils/emailsNotificationsData')
+const {
+  socketForCalendar,
+} = require('../eventDrivenCommunication/calendarView')
 
 //! Return Function
 //* DEMO. Eamil Testing ----------------------
@@ -918,6 +921,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
     { where: { id: bookingId } },
   )
   fromCustomerSoloEmployee(bookingId)
+  socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   const output = response({
     message: 'Appointment re-schedule successfully.',
     data: {},
@@ -1040,6 +1044,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     { where: { id: bookingId } },
   )
   fromCustomerMultipleEmployees(bookingId)
+  socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   const output = response({ message: 'Appointment re-schedule successfully.' })
   return res.status(200).json(output)
 }
@@ -1402,6 +1407,7 @@ exports.bookAppointment = async (req, res, next) => {
   }
 
   //& Send Email Notification and Socket Event
+  socketForCalendar({ appointmentId: book?.id, type: 'new' })
 
   onlineAppointmentConfirm(book?.id)
 

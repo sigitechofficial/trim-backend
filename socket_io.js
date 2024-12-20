@@ -79,7 +79,7 @@ const sendEvent = async (userId, eventData) => {
             bookingId: eventData.bookingId,
           })
           // console.log(
-          //   `ðŸš€ðŸš€ðŸš€Unacknowledged event stored for user ${userId}`,
+          //   `ðŸš€ðŸš€ðŸš€Unacknowledged event stored for u90ser ${userId}`,
           // )
         }
       })

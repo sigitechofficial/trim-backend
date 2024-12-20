@@ -17,7 +17,7 @@ const path = require('path')
 
 // !Module:1 Auth
 router.use(validateToken)
-console.log('🚀 ~ IN NEW ROUTE FILe:')
+// console.log('🚀 ~ IN NEW ROUTE FILe:')
 
 router.get(
   '/busiest-vs-quietest/:basedOn',

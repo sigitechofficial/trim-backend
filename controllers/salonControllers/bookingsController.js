@@ -71,6 +71,9 @@ const {
 } = require('../eventDrivenCommunication/appointmentReschedule')
 
 const { editJob } = require('../eventDrivenCommunication/jobUpdate')
+const {
+  socketForCalendar,
+} = require('../eventDrivenCommunication/calendarView')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -94,6 +97,7 @@ exports.calendarAppointments = async (req, res, next) => {
   }
   const employeCondition = {
     salonDetailId: salon?.id,
+    deleted: 0,
   }
   const jobCondition = {
     status: {
@@ -227,6 +231,7 @@ exports.calendarAppointments = async (req, res, next) => {
       },
     ],
   })
+
   const results = JSON.parse(JSON.stringify(data))
   const startOfDay = '00:00:00'
   const endOfDay = '23:59:59'
@@ -312,6 +317,7 @@ exports.calendarAppointments = async (req, res, next) => {
     message: 'Success.',
     data: { salonTimes, employees: results || [] },
   })
+
   return res.status(200).json(output)
 }
 
@@ -1518,7 +1524,7 @@ exports.addWalkinBooking = async (req, res, next) => {
         })
       : 0
 
-  const AddBooking = await booking.create({
+  const newAppointment = await booking.create({
     startTime,
     status: appointmentStatus,
     endTime,
@@ -1542,18 +1548,18 @@ exports.addWalkinBooking = async (req, res, next) => {
 
   const finalInput = assiginEmployee.map((service) => ({
     ...service,
-    bookingId: AddBooking.id,
+    bookingId: newAppointment.id,
   }))
   console.log('Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ finalInput:', finalInput)
   await jobs.bulkCreate(finalInput)
-
-  walkinAppointmentConfirm(AddBooking, customerId, SalonDetail?.id)
+  walkinAppointmentConfirm(newAppointment, customerId, SalonDetail?.id)
+  socketForCalendar({ appointmentId: newAppointment?.id, type: 'new' })
 
   return res.json(
     returnFunction(
       '1',
       'Walkin Booking Added Successfully!',
-      { bookingId: AddBooking.id },
+      { bookingId: newAppointment.id },
       '',
     ),
   )
@@ -2031,6 +2037,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
     },
     { where: { id: bookingId } },
   )
+  socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
 
   return res.json(
     returnFunction('1', 'Appointment Reschedule Successfully!', {}, ''),
@@ -2157,6 +2164,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     { where: { id: bookingId } },
   )
   fromSalonMultipleEmployees(bookingId)
+  socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   return res.json(
     returnFunction('1', 'Appointment Reschedule Successfully!', {}, ''),
   )
