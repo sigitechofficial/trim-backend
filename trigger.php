@@ -30,6 +30,3 @@ echo "Command Output:\n";
 echo htmlspecialchars($output);
 echo "</pre>";
 ?>
-
-
-
