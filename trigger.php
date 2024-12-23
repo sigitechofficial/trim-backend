@@ -1,6 +1,6 @@
 <?php
 // Path to your working directory
-$workingDir = '/home/trimworldwide/backend.trimworldwide.com';
+$workingDir = '/home/trimworldwide/stage.trimworldwide.com';
 
 // Absolute path to node and PM2 binaries
 $nodeBinPath = '/home/trimworldwide/.nvm/versions/node/v18.20.4/bin';
@@ -13,13 +13,11 @@ $processName = 'trim.js';
 
 // Commands for PM2 management
 $pm2StopDeleteCommand = "pm2 stop $processName || true && pm2 delete $processName || true";
+$pm2CreateCommand = "npm install && pm2 start $processName";
 $pm2SaveCommand = "pm2 save";
 
-// Command to install dependencies and restart the PM2 process
-$pm2CreateCommand = "npm install && pm2 start $processName && pm2 save";
-
-// Combine all commands
-$command = "export PATH=$nodeBinPath:\$PATH && export HOME=/home/trimworldwide && cd $workingDir && $pm2StopDeleteCommand && $pm2SaveCommand && $pm2CreateCommand 2>&1";
+// Combine all commands (fix order of save command)
+$command = "export PATH=$nodeBinPath:\$PATH && export HOME=/home/trimworldwide && cd $workingDir && $pm2StopDeleteCommand && $pm2CreateCommand && $pm2SaveCommand 2>&1";
 
 // Execute the command and capture the output
 $output = shell_exec($command);
