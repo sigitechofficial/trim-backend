@@ -5,7 +5,7 @@
   "main": "thetrim.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon trim.js"
+    "start": "nodemon thetrim.js"
   },
   "author": "",
   "license": "ISC",
