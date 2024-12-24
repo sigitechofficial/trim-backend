@@ -43,9 +43,10 @@ const FormatPermissions = require('../../utils/permissionsFormator')
 const Graph = require('../../utils/graphsGenerators')
 const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
+const CustomDate = require('../../utils/currentDay')
+
 //Global Variables
 
-const CustomDate = require('../../utils/currentDay')
 const { salonDetails } = require('../userControllers/customerController')
 
 // console.log('🚀 ~ ', currentDateOnly);
@@ -306,20 +307,79 @@ exports.dashboard = async (req, res, next) => {
 //* 1.Fetch All Salons ---------------------
 
 exports.fecthSalons = async (req, res, next) => {
+  const currentDay = CustomDate.currentDay()
+
+  const condition = {}
+
+  if (req.params?.subscription == 'active') {
+    condition.registrationExpiryDate = { [Op.gte]: currentDay.currentDateOnly }
+    condition.metadata = { [Op.ne]: null }
+  } else if (req.params?.subscription == 'expire') {
+    condition.registrationExpiryDate = { [Op.lte]: currentDay.currentDateOnly }
+    condition.metadata = { [Op.ne]: null }
+  }
+
+  if (req.params?.sticker == 'sticker') {
+    condition.stickerSent = false
+  }
+
   const results = await salonDetail.findAll({
+    where: condition,
     attributes: [
-      'salonName',
       'id',
-      // 'coverImage',
-      // [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-      [fn('COUNT', col('employees.id')), 'employeeCount'],
+      'salonName',
+      'coverImage',
+      'metadata',
+      'stickerSent',
+      [
+        literal(`(
+          SELECT FORMAT(AVG(ratings.value), 1)
+          FROM ratings
+          WHERE ratings.salonDetailId = salonDetail.id
+        )`),
+        'salonAverageRating',
+      ],
+      [
+        literal(`(
+          SELECT COUNT(ratings.id)
+          FROM ratings
+          WHERE ratings.salonDetailId = salonDetail.id
+        )`),
+        'ratingCount',
+      ],
+      [
+        literal(`(
+          SELECT COUNT(employees.id)
+          FROM employees
+          WHERE employees.salonDetailId = salonDetail.id AND employees.status = true 
+            AND employees.deleted = false
+        )`),
+        'employeeCount',
+      ],
+      // AND employees.isOwner = false
     ],
     include: [
+      // {
+      //   model: rating,
+      //   attributes: [],
+      //   on: { salonDetailId: col('salonDetail.id') },
+      //   required: false,
+      // },
       {
-        model: employee,
-        attributes: [],
-        on: { salonDetailId: col('salonDetail.id') },
-        required: false,
+        model: addressDBS,
+        required: true,
+        attributes: [
+          'id',
+          'streetAddress',
+          'city',
+          'district',
+          'province',
+          'country',
+          'lat',
+          'lng',
+          'building',
+          'postalCode',
+        ],
       },
       {
         model: user,
@@ -344,7 +404,7 @@ exports.fecthSalons = async (req, res, next) => {
     group: ['salonDetail.id'],
   })
 
-  console.log('🚀 ~ ', results.averageRating)
+  // console.log('🚀 ~ ', results.averageRating)
   return res.status(200).json(response({ data: results }))
 }
 

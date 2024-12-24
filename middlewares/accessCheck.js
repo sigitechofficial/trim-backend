@@ -11,9 +11,9 @@ module.exports = async function validateToken(req, res, next) {
     if (!acccessToken) throw new Error()
     // Verify Token , If not auto Throw Error
     const validToken = verify(acccessToken, process.env.JWT_ACCESS_SECRET)
-    console.log('🚀 ~ validateToken ~ validToken:', validToken)
+
     req.user = validToken
-    console.log('🚀 ~ validateToken ~  req.user:', req.user)
+    console.log('🚀 ~ validateToken ~  req.user:', req.user?.id)
     const check = await deviceToken.findOne({
       where: { tokenId: req.user.dvToken },
       attributes: ['id'],

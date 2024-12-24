@@ -75,6 +75,17 @@ router.delete(
 
 router.get('/salon-view', protect, catchAsync(adminController.fecthSalons))
 router.get(
+  '/salon-without/:sticker',
+  protect,
+  catchAsync(adminController.fecthSalons),
+)
+router.get(
+  '/salon-with-subscription/:subscription',
+  protect,
+  catchAsync(adminController.fecthSalons),
+)
+
+router.get(
   '/salon-filter',
   protect,
   catchAsync(adminController.fecthSalonsForFilter),

@@ -81,7 +81,11 @@ module.exports = (sequelize, DataTypes) => {
     subscriptionLatestPaymentStatus: {
       type: DataTypes.STRING(),
       allowNull: true,
-      defaultValue: 'invoice.payment_succeeded',
+      defaultValue: 'payment_succeeded',
+    },
+    stickerSent: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   })
 
