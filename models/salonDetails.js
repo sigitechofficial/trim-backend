@@ -68,6 +68,14 @@ module.exports = (sequelize, DataTypes) => {
     metadata: {
       type: DataTypes.JSON,
       allowNull: true,
+      defaultValue: {
+        freeTrialDays: '',
+        members: '',
+        membersCount: '',
+        paymentMethodId: '',
+        sloanId: '',
+        subscriptionName: '',
+      },
     },
     subscriptionPrice: {
       type: DataTypes.DECIMAL(10, 2),

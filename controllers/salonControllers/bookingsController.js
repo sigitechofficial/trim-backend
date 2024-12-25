@@ -840,6 +840,7 @@ exports.cancelBooking = async (req, res, next) => {
     reasonId,
   })
   cancelBySalon(bookingId)
+  socketForCalendar({ appointmentId: bookingId, type: 'finish' })
 
   return res.json(
     returnFunction('1', 'Booking Cancelled Successfully!', {}, ''),
@@ -1258,6 +1259,8 @@ exports.addExtraService = async (req, res, next) => {
   const workers = await employeeForSocket(bookingData.salonDetailId)
   workers.forEach((el) => sendEvent(`${el}E`, socketInputService))
 
+  socketForCalendar({ appointmentId: bookingData?.id, type: 'new' })
+
   return res.json(
     returnFunction('1', 'Extra Service Added Successfully!', {}, ''),
   )
@@ -1633,6 +1636,9 @@ exports.jobStatus = async (req, res, next) => {
   sendEvent(`${jobData?.booking?.salonDetailId}S`, socketInput)
   const workers = await employeeForSocket(jobData?.booking?.salonDetailId)
   workers.forEach((el) => sendEvent(`${el}E`, socketInput))
+
+  socketForCalendar({ appointmentId: jobData?.bookingId, type: 'finish' })
+
   return res.json(
     returnFunction('1', 'Job Status Updated Successfully!', {}, ''),
   )
@@ -2656,6 +2662,8 @@ exports.editService = async (req, res, next) => {
   )
 
   editJob(jobId, jobStatus)
+  socketForCalendar({ appointmentId: jobData?.bookingId, type: 'reschedule' })
+
   return res.json(returnFunction('1', 'Service Edit Successfully!', {}, ''))
 }
 
@@ -2803,6 +2811,8 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
   } else {
     noShowMessages(appointment?.id, finePercentage)
   }
+
+  socketForCalendar({ appointmentId: bookingId, type: 'finish' })
 
   //notifications
   const output = response({

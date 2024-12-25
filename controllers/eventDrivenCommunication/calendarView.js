@@ -70,15 +70,21 @@ exports.socketForCalendar = async ({ appointmentId, type }) => {
     const appointment = await booking.findByPk(appointmentId, {
       attributes: ['id', 'salonDetailId'],
       include: {
+        where: {
+          status: { [Op.or]: ['pending', 'assign'] },
+        },
         model: jobs,
         attributes: jobAttributes,
       },
     })
-    const event =
+    if (!appointment) return 0
+
+    let event =
       type == 'new'
         ? 'new-appointment-calendar'
         : 'reschedule-appointment-calendar'
 
+    if (type == 'finish') event = 'finish-appointment-calendar'
     const socketInput = {
       event: event,
       data: {

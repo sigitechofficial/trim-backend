@@ -957,7 +957,18 @@ exports.customerSubscription = async (req, res, next) => {
     customerSubscription.price = salonData?.subscriptionPrice
     customerSubscription.subscriptionLatestPaymentStatus =
       salonData?.subscriptionLatestPaymentStatus
-    if (salonData.metadata) customerSubscription.metaData = salonData.metadata
+    if (salonData?.metadata) {
+      customerSubscription.metaData = JSON.parse(salonData.metadata)
+    } else {
+      customerSubscription.metaData = {
+        freeTrialDays: '',
+        members: '',
+        membersCount: '',
+        paymentMethodId: '',
+        sloanId: '',
+        subscriptionName: '',
+      }
+    }
   } else {
     return res.json(returnFunction('2', 'No Subcription Plan', {}, ''))
   }

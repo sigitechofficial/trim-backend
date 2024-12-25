@@ -1233,6 +1233,7 @@ exports.cancelAppointment = async (req, res, next) => {
     await jobs.update({ status: 'cancel' }, { where: { bookingId } })
     calculatePayoutsOnBooking(appointment, finePercentage, 'cancel')
     cancelByCustomer(appointment.id) //Notifications etc
+    socketForCalendar({ appointmentId: bookingId, type: 'finish' })
   }
   employeeCommission.update(
     { appointmentClosed: true },
