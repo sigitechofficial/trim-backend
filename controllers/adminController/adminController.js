@@ -408,6 +408,21 @@ exports.fecthSalons = async (req, res, next) => {
   return res.status(200).json(response({ data: results }))
 }
 
+//* 1.Fetch All Salons ---------------------(send stickers include) sendSticker
+
+exports.updateSalonDetails = async (req, res, next) => {
+  salonDetail.update(req.body, {
+    where: { id: req.params?.salon },
+  })
+
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
+    }),
+  )
+}
+
 //* 1.Fetch All Salons For Filters ---------------------
 
 exports.fecthSalonsForFilter = async (req, res, next) => {
