@@ -957,13 +957,13 @@ exports.customerSubscription = async (req, res, next) => {
     customerSubscription.price = salonData?.subscriptionPrice
     customerSubscription.subscriptionLatestPaymentStatus =
       salonData?.subscriptionLatestPaymentStatus
-    if (salonData?.metadata) {
+    if (salonData.metadata) {
       customerSubscription.metaData = JSON.parse(salonData.metadata)
     } else {
       customerSubscription.metaData = {
         freeTrialDays: '',
         members: '',
-        membersCount: '',
+        membersCount: 1,
         paymentMethodId: '',
         sloanId: '',
         subscriptionName: '',

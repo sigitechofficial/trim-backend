@@ -65,30 +65,38 @@ const jobAttributes = [
     'customerId',
   ],
 ]
+
 exports.socketForCalendar = async ({ appointmentId, type }) => {
   try {
-    const appointment = await booking.findByPk(appointmentId, {
-      attributes: ['id', 'salonDetailId'],
-      include: {
-        where: {
-          status: { [Op.or]: ['pending', 'assign'] },
-        },
-        model: jobs,
-        attributes: jobAttributes,
-      },
-    })
-    if (!appointment) return 0
-
     let event =
       type == 'new'
         ? 'new-appointment-calendar'
         : 'reschedule-appointment-calendar'
 
-    if (type == 'finish') event = 'finish-appointment-calendar'
+    let include = [
+      {
+        where: {
+          status: { [Op.or]: ['pending', 'assign'] },
+        },
+        required: false,
+        model: jobs,
+        attributes: jobAttributes,
+      },
+    ]
+    if (type == 'finish') {
+      event = 'finish-appointment-calendar'
+      include = []
+    }
+
+    const appointment = await booking.findByPk(appointmentId, {
+      attributes: ['id', 'salonDetailId', 'on'],
+      include: include,
+    })
+
     const socketInput = {
       event: event,
       data: {
-        jobs: appointment?.jobs,
+        jobs: appointment?.jobs || [],
         bookingId: appointment?.id,
         on: appointment.on,
       },

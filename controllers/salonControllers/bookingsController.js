@@ -1117,7 +1117,7 @@ exports.employeeAvailability = async (req, res, next) => {
 exports.addExtraService = async (req, res, next) => {
   const { extraServices } = req.body
   let startTime, endTime
-  const bookingData = await booking.findOne({
+  const result = await booking.findOne({
     where: { id: extraServices[0].bookingId },
     include: [
       { model: user, attributes: ['firstName', 'lastName', 'email', 'image'] },
@@ -1138,22 +1138,22 @@ exports.addExtraService = async (req, res, next) => {
   })
 
   if (
-    bookingData.status == 'complete' ||
-    bookingData.status == 'cancel' ||
-    bookingData.status == 'no-show'
+    result.status == 'complete' ||
+    result.status == 'cancel' ||
+    result.status == 'no-show'
   ) {
     let message =
       'You cannot add service because the Appointment has already been Completed.'
-    if (bookingData.status == 'cancel') {
+    if (result.status == 'cancel') {
       message =
         'You cannot add service because the appointment is marked as Canceled'
-    } else if (bookingData.status == 'no-show') {
+    } else if (result.status == 'no-show') {
       message =
         'You cannot add service because the appointment is marked as No-Show'
     }
     throw new appError(message, 200)
   }
-
+  const bookingData = JSON.parse(JSON.stringify(result))
   const newServiceIds = await Promise.all(
     extraServices.map(async (ele) => {
       const startTime = dateManipulation.convertTo24HourFormat(ele.startTime)
@@ -2573,7 +2573,10 @@ exports.editService = async (req, res, next) => {
   if (employeeId) jobStatus = 'assign'
 
   startTime = dateManipulation.convertTo24HourFormat(startTime)
-  console.log('ðŸš€ ~ exports.editService= ~ startTime:', startTime)
+  console.log(
+    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ startTime:',
+    startTime,
+  )
 
   let startTimeParts = startTime.split(':')
   let startHour = parseInt(startTimeParts[0])
@@ -2582,11 +2585,17 @@ exports.editService = async (req, res, next) => {
   let setendTime = new Date()
   setendTime.setHours(startHour)
   setendTime.setMinutes(startMinute + duration)
+
   // Formatting the end time as HH:MM
   let endTime =
     ('0' + setendTime.getHours()).slice(-2) +
     ':' +
     ('0' + setendTime.getMinutes()).slice(-2)
+
+  console.log(
+    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ endTime:',
+    endTime,
+  )
 
   const jobData = await jobs.findOne({
     where: { id: jobId },
@@ -2603,27 +2612,6 @@ exports.editService = async (req, res, next) => {
     parseInt(jobData.booking.duration) - parseInt(jobData.duration)
 
   updatedBookingDuration = updatedBookingDuration + parseInt(duration)
-
-  const allJobs = await jobs.findAll({
-    where: { bookingId: jobData?.booking?.id },
-    attributes: ['id', `startTime`, `endTime`],
-    order: [['startTime', 'ASC']],
-  })
-
-  let startFrom = jobData?.booking?.startTime
-  let endsAt = jobData?.booking?.endTime
-
-  if (allJobs.length === 1) {
-    // If there's only one entry
-    startFrom = allJobs[0].startTime
-    endsAt = allJobs[0].endTime
-  } else if (allJobs.length > 1) {
-    // If there are multiple entries
-    startFrom = allJobs[0].startTime // start time of the first entry
-    endsAt = allJobs[allJobs.length - 1].endTime // end time of the last entry
-  }
-
-  // console.log('🚀 ~ exports.editService= ~ jobData.duration:', jobData.duration)
 
   await jobs.update(
     {
@@ -2644,6 +2632,42 @@ exports.editService = async (req, res, next) => {
     },
   )
 
+  const allJobs = await jobs.findAll({
+    where: { bookingId: jobData?.booking?.id },
+    attributes: ['id', `startTime`, `endTime`],
+    order: [['startTime', 'ASC']],
+  })
+
+  let startFrom = jobData?.booking?.startTime
+  let endsAt = jobData?.booking?.endTime
+
+  console.log(
+    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom= ~ OLd TIME:',
+    startFrom,
+  )
+  console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.endsAt= ~ OLd TIME:', endsAt)
+
+  if (allJobs.length === 1) {
+    console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.CASE IF:')
+
+    // If there's only one entry
+    startFrom = allJobs[0].startTime
+    endsAt = allJobs[0].endTime
+  } else if (allJobs.length > 1) {
+    console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.CASE ELSEIF IF:')
+
+    // If there are multiple entries
+    startFrom = allJobs[0].startTime // start time of the first entry
+    endsAt = allJobs[allJobs.length - 1].endTime // end time of the last entry
+  }
+
+  console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom EndsAt NEW TIMES:', {
+    startFrom,
+    endsAt,
+  })
+
+  console.log('🚀 ~ exports.editService= ~ jobData.duration:', jobData.duration)
+
   const findUnAssign = await jobs.findOne({
     where: { bookingId: jobData.bookingId, status: 'pending' },
   })
@@ -2661,7 +2685,16 @@ exports.editService = async (req, res, next) => {
     { where: { id: jobData.bookingId } },
   )
 
-  editJob(jobId, jobStatus)
+  console.log(
+    '🚀 ~ 🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~exports.editService= ~ WHEN UDATE BOOKING ENDAT:',
+    {
+      endsAt,
+      startFrom,
+      id: jobData.bookingId,
+    },
+  )
+
+  editJob(jobId, jobStatus, startFrom, endsAt)
   socketForCalendar({ appointmentId: jobData?.bookingId, type: 'reschedule' })
 
   return res.json(returnFunction('1', 'Service Edit Successfully!', {}, ''))

@@ -100,9 +100,11 @@ exports.editJob = async (jobId, jobStatus) => {
     const statTime = DateManupulation.convertTo12HourFormat(
       bookingData.startTime,
     )
+    console.log('🚀 ~ exports.editJob= ~ statTime:', statTime)
     const endTimeBooking = DateManupulation.convertTo12HourFormat(
       bookingData.endTime,
     )
+    console.log('🚀 ~ exports.editJob= ~ endTimeBooking:', endTimeBooking)
 
     let socketData = {
       id: bookingData.id,
