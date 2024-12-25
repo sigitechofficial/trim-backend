@@ -68,6 +68,14 @@ module.exports = (sequelize, DataTypes) => {
     metadata: {
       type: DataTypes.JSON,
       allowNull: true,
+      defaultValue: {
+        freeTrialDays: '',
+        members: '',
+        membersCount: '',
+        paymentMethodId: '',
+        sloanId: '',
+        subscriptionName: '',
+      },
     },
     subscriptionPrice: {
       type: DataTypes.DECIMAL(10, 2),
@@ -81,7 +89,11 @@ module.exports = (sequelize, DataTypes) => {
     subscriptionLatestPaymentStatus: {
       type: DataTypes.STRING(),
       allowNull: true,
-      defaultValue: 'invoice.payment_succeeded',
+      defaultValue: 'payment_succeeded',
+    },
+    stickerSent: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   })
 
