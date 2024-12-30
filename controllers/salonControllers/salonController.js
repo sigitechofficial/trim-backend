@@ -73,6 +73,7 @@ exports.addSalonDetail = async (req, res, next) => {
     userId,
     onlinePayments,
   })
+
   await employee.create({
     position: 'Salon Owner',
     userId,
@@ -2078,4 +2079,16 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
       data: { price: output },
     }),
   )
+}
+
+exports.updateCoverImage = async (req, res, next) => {
+  const image = await salonImage.findOne({
+    where: { id: req.body.coverImageId },
+  })
+
+  await salonDetail.update(
+    { coverImage: image.imageUrl },
+    { where: { id: req.params.id } },
+  )
+  return res.status(200).json(returnFunction('1', `success`, {}, ''))
 }

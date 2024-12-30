@@ -536,6 +536,7 @@ exports.salonDetails = async (req, res, next) => {
       exclude: ['updatedAt', 'salonDetailId'],
     },
   })
+
   return res.status(200).json(
     response({
       data: {
