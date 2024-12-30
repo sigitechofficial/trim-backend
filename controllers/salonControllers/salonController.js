@@ -2088,7 +2088,50 @@ exports.updateCoverImage = async (req, res, next) => {
 
   await salonDetail.update(
     { coverImage: image.imageUrl },
-    { where: { id: req.params.id } },
+    { where: { userId: req.user.id } },
   )
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
+}
+
+exports.clientFeedBackSalon = async (req, res, next) => {
+  let limit = 2
+  const condition = { status: 'complete', rating: 'done' }
+  if (req.query.limit) limit = req.query.limit * 1
+  if (req.params.salon) {
+    condition.salonDetailId = req.params.salon
+  }
+
+  const feedbacks = await booking.findAll({
+    where: condition,
+    attributes: [
+      'id',
+      'feedback',
+      'createdAt',
+      [
+        literal(
+          '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.bookingId = booking.id)',
+        ),
+        'averageRatingPerBooking',
+      ],
+    ],
+    include: {
+      model: user,
+      attributes: ['firstName', 'lastName', 'image'],
+    },
+  })
+
+  const feedbackCount = await rating.count({
+    distinct: true,
+    col: 'bookingId',
+    where: {
+      salonDetailId: req.params?.salon,
+    },
+  })
+
+  return res.json(
+    response({
+      message: 'Client Feedbacks.',
+      data: { limit, feedbacks, feedbackCount },
+    }),
+  )
 }
