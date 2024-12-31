@@ -38,12 +38,13 @@ const appError = require('../../utils/appError')
 const bcrypt = require('bcryptjs')
 const AppError = require('../../utils/appError')
 const Custom = require('../../utils/customFunctions')
-const ThrowNotification = require('../../utils/throwNotification')
+const ThrowNotification = require('../../utils/throwNotificationByAdmin')
 const FormatPermissions = require('../../utils/permissionsFormator')
 const Graph = require('../../utils/graphsGenerators')
 const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
+const CutomEmails = require('../../helper/CustomEmails')
 
 //Global Variables
 
@@ -518,13 +519,23 @@ exports.employeeDetails = async (req, res, next) => {
     employeeData.employee.salonDetailId,
   )
   const salonData = employeeData.employee.salonDetailId
-    ? await salonDetail.findByPk(employeeData.employee.salonDetailId, {
+    ? await salonDetail.findByPk(employeeData?.employee?.salonDetailId, {
         attributes: [
           'id',
           'salonName',
           'coverImage',
-          [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-          [fn('COUNT', col('ratings.id')), 'ratingCount'],
+          [
+            literal(
+              '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+            ),
+            'salonAverageRating',
+          ],
+          [
+            literal(
+              '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+            ),
+            'ratingCount',
+          ],
         ],
         include: [
           {
@@ -1119,7 +1130,7 @@ exports.throwNotifications = async (req, res, next) => {
   })
 
   let notification = { title, body }
-  ThrowNotification(to, notification)
+  ThrowNotification(to, notification, sendTo, 'admin')
 
   let dt = new Date()
 
@@ -2055,6 +2066,16 @@ exports.changeReasonStatus = async (req, res, next) => {
 exports.deleteReasons = async (req, res, next) => {
   const data = await reason.destroy({ where: { id: req.params?.id } })
 
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
+    }),
+  )
+}
+
+exports.customEmails = async (req, res, next) => {
+  CutomEmails(req.body)
   return res.status(200).json(
     response({
       message: 'success',

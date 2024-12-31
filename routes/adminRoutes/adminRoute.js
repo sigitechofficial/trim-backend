@@ -363,4 +363,10 @@ router.delete(
   catchAsync(adminController.deleteReasons),
 )
 
+router.delete(
+  '/custom-emails',
+  protect,
+  catchAsync(adminController.customEmails),
+)
+
 module.exports = router

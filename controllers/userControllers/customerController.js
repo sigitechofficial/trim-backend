@@ -375,10 +375,10 @@ exports.salonDetails = async (req, res, next) => {
       ],
       [
         literal(
-          '(SELECT COUNT(ratings.id) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+          '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
         ),
         'ratingCount',
-      ],
+      ], //TODO Remove
     ],
     include: [
       {
@@ -536,6 +536,15 @@ exports.salonDetails = async (req, res, next) => {
       exclude: ['updatedAt', 'salonDetailId'],
     },
   })
+
+  const feedbackCount = await rating.count({
+    distinct: true,
+    col: 'bookingId',
+    where: {
+      salonDetailId: req.params.id,
+    },
+  })
+
   return res.status(200).json(
     response({
       data: {
@@ -545,6 +554,7 @@ exports.salonDetails = async (req, res, next) => {
         detail: results,
         policies,
         currencyUnit: CURRENCY_UNIT,
+        feedbackCount,
       },
     }),
   )
@@ -2112,7 +2122,9 @@ exports.clientFeedBack = async (req, res, next) => {
   let limit = 2
   const condition = {}
   if (req.query.limit) limit = req.query.limit * 1
-  if (req.params.salon) condition.salonDetailId = req.params.salon
+  if (req.params.salon) {
+    condition.salonDetailId = req.params.salon
+  }
   if (req.params.employee) condition.employeeId = req.params.employee
   if (req.params.client) condition.userId = req.params.client
   if (req.params.booking) condition.bookingId = req.params.booking
@@ -2331,6 +2343,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
 
   return res.status(200).json(output)
 }
+
 //* 2. Check Subcription Feedback  -----------------
 
 exports.checkSubscription = async (req, res, next) => {

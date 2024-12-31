@@ -73,6 +73,7 @@ exports.addSalonDetail = async (req, res, next) => {
     userId,
     onlinePayments,
   })
+
   await employee.create({
     position: 'Salon Owner',
     userId,
@@ -1981,7 +1982,9 @@ exports.fetchNotifications = async (req, res, next) => {
   const id = req.user.id
 
   const notifications = await pushNotification.findAll({
-    where: { userId: id },
+    where: {
+      [Op.or]: [{ userId: id }, { type: { [Op.in]: ['salon', 'all'] } }],
+    },
     attributes: [`id`, `at`, `to`, `title`, `body`, `data`, 'type'],
   })
 
@@ -1993,6 +1996,9 @@ exports.fetchNotifications = async (req, res, next) => {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'review') {
         accumulator.reviewNotifications.push(notification)
+      } else {
+        //All other notifications from admin side ... we can use thrid arry as well
+        accumulator.appointmentNotifications.push(notification)
       }
 
       return accumulator
@@ -2076,6 +2082,61 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     response({
       message: 'Subscription.',
       data: { price: output },
+    }),
+  )
+}
+
+exports.updateCoverImage = async (req, res, next) => {
+  const image = await salonImage.findOne({
+    where: { id: req.body.coverImageId },
+  })
+
+  await salonDetail.update(
+    { coverImage: image.imageUrl },
+    { where: { userId: req.user.id } },
+  )
+  return res.status(200).json(returnFunction('1', `success`, {}, ''))
+}
+
+exports.clientFeedBackSalon = async (req, res, next) => {
+  let limit = 2
+  const condition = { status: 'complete', rating: 'done' }
+  if (req.query.limit) limit = req.query.limit * 1
+  if (req.params.salon) {
+    condition.salonDetailId = req.params.salon
+  }
+
+  const feedbacks = await booking.findAll({
+    where: condition,
+    attributes: [
+      'id',
+      'feedback',
+      'createdAt',
+      [
+        literal(
+          '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.bookingId = booking.id)',
+        ),
+        'averageRatingPerBooking',
+      ],
+    ],
+    include: {
+      model: user,
+      attributes: ['firstName', 'lastName', 'image'],
+    },
+  })
+
+  const feedbackCount = await rating.count({
+    distinct: true,
+    col: 'bookingId',
+    where: {
+      salonDetailId: req.params?.salon,
+    },
+  })
+
+  return res.json(
+    response({
+      message: 'Client Feedbacks.',
+      data: { limit, feedbacks, feedbackCount },
     }),
   )
 }

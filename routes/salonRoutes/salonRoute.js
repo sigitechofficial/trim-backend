@@ -20,6 +20,11 @@ const catchAsync = require('../../middlewares/catchAync')
 const path = require('path')
 
 // !Module:1 Auth
+router.get(
+  '/salon-feedback/:salon',
+  catchAsync(salonController.clientFeedBackSalon),
+)
+
 router.use(validateToken)
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
@@ -263,17 +268,25 @@ router.get(
   '/client-feedback/employee/:employee',
   catchAsync(customerController.clientFeedBack),
 )
+
 router.get(
   '/client-feedback/customer/:client',
   catchAsync(customerController.clientFeedBack),
 )
+
 router.get(
   '/client-feedback/appointment/:booking',
   catchAsync(customerController.clientFeedBack),
 )
+
 router.get(
   '/subscription-price',
   catchAsync(salonController.fetchSubscriptionPrice),
+)
+
+router.patch(
+  '/update-cover-image',
+  catchAsync(salonController.updateCoverImage),
 )
 
 router.get('/cancellation-reasons-for/:type', catchAsync(fetchReasons))
