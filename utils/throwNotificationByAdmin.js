@@ -3,9 +3,6 @@ const serviceAccount = require('../firebase.json')
 const { pushNotification } = require('../models')
 
 // Initialize Firebase Admin SDK using the service account JSON file
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-})
 
 // Function to send notification using Firebase Admin SDK
 module.exports = async function Throw(
