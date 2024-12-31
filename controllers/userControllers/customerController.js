@@ -375,7 +375,7 @@ exports.salonDetails = async (req, res, next) => {
       ],
       [
         literal(
-          '(SELECT COUNT(ratings.id) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+          '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
         ),
         'ratingCount',
       ], //TODO Remove
@@ -2343,6 +2343,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
 
   return res.status(200).json(output)
 }
+
 //* 2. Check Subcription Feedback  -----------------
 
 exports.checkSubscription = async (req, res, next) => {

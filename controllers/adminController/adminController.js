@@ -44,6 +44,7 @@ const Graph = require('../../utils/graphsGenerators')
 const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
+const CutomEmails = require('../../helper/CustomEmails')
 
 //Global Variables
 
@@ -518,13 +519,23 @@ exports.employeeDetails = async (req, res, next) => {
     employeeData.employee.salonDetailId,
   )
   const salonData = employeeData.employee.salonDetailId
-    ? await salonDetail.findByPk(employeeData.employee.salonDetailId, {
+    ? await salonDetail.findByPk(employeeData?.employee?.salonDetailId, {
         attributes: [
           'id',
           'salonName',
           'coverImage',
-          [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-          [fn('COUNT', col('ratings.id')), 'ratingCount'],
+          [
+            literal(
+              '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+            ),
+            'salonAverageRating',
+          ],
+          [
+            literal(
+              '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+            ),
+            'ratingCount',
+          ],
         ],
         include: [
           {
@@ -2055,6 +2066,16 @@ exports.changeReasonStatus = async (req, res, next) => {
 exports.deleteReasons = async (req, res, next) => {
   const data = await reason.destroy({ where: { id: req.params?.id } })
 
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
+    }),
+  )
+}
+
+exports.customEmails = async (req, res, next) => {
+  CutomEmails(req.body)
   return res.status(200).json(
     response({
       message: 'success',
