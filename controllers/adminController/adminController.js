@@ -38,7 +38,7 @@ const appError = require('../../utils/appError')
 const bcrypt = require('bcryptjs')
 const AppError = require('../../utils/appError')
 const Custom = require('../../utils/customFunctions')
-const ThrowNotification = require('../../utils/throwNotification')
+const ThrowNotification = require('../../utils/throwNotificationByAdmin')
 const FormatPermissions = require('../../utils/permissionsFormator')
 const Graph = require('../../utils/graphsGenerators')
 const Stripe = require('../stripe')
@@ -1130,7 +1130,7 @@ exports.throwNotifications = async (req, res, next) => {
   })
 
   let notification = { title, body }
-  ThrowNotification(to, notification)
+  ThrowNotification(to, notification, sendTo, 'admin')
 
   let dt = new Date()
 
