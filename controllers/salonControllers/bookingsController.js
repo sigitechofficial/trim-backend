@@ -73,6 +73,7 @@ const {
 const { editJob } = require('../eventDrivenCommunication/jobUpdate')
 const {
   socketForCalendar,
+  socketForCalendarJobOnly,
 } = require('../eventDrivenCommunication/calendarView')
 
 //! Return Function
@@ -1645,7 +1646,10 @@ exports.jobStatus = async (req, res, next) => {
   const workers = await employeeForSocket(jobData?.booking?.salonDetailId)
   workers.forEach((el) => sendEvent(`${el}E`, socketInput))
 
-  socketForCalendar({ appointmentId: jobData?.bookingId, type: 'reschedule' })
+  socketForCalendarJobOnly({
+    appointmentId: jobData?.bookingId,
+    jobId: jobData.id,
+  })
 
   return res.json(
     returnFunction('1', 'Job Status Updated Successfully!', {}, ''),
