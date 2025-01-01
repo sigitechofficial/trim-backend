@@ -1994,7 +1994,7 @@ exports.fetchNotifications = async (req, res, next) => {
 
       if (type === 'appointment') {
         accumulator.appointmentNotifications.push(notification)
-      } else if (type === 'review') {
+      } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
