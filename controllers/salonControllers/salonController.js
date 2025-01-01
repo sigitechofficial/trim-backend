@@ -1998,12 +1998,16 @@ exports.fetchNotifications = async (req, res, next) => {
         accumulator.reviewNotifications.push(notification)
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
-        accumulator.appointmentNotifications.push(notification)
+        accumulator.otherNotifications.push(notification)
       }
 
       return accumulator
     },
-    { appointmentNotifications: [], reviewNotifications: [] }, // Initial accumulator
+    {
+      appointmentNotifications: [],
+      reviewNotifications: [],
+      otherNotifications: [],
+    }, // Initial accumulator
   )
 
   return res.json(

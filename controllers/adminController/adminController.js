@@ -1719,7 +1719,7 @@ exports.roleDetails = async (req, res, next) => {
 exports.serviceHistory = async (req, res, next) => {
   const history = await booking.findAll({
     where: {
-      // status :'complete', //TODO un-comment
+      status: 'complete',
     },
     attributes: [
       'id',
@@ -1736,6 +1736,7 @@ exports.serviceHistory = async (req, res, next) => {
       },
       {
         model: jobs,
+        where: { employeeId: req.params.employee, status: 'complete' },
         required: true,
         attributes: [
           [
@@ -1745,7 +1746,6 @@ exports.serviceHistory = async (req, res, next) => {
             'serviceNames',
           ],
         ],
-        where: { employeeId: req.params.employee },
       },
     ],
   })
