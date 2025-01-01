@@ -1983,7 +1983,7 @@ exports.fetchNotifications = async (req, res, next) => {
 
   const notifications = await pushNotification.findAll({
     where: {
-      [Op.or]: [{ userId: id }, { type: { [Op.in]: ['salon', 'all'] } }],
+      [Op.or]: [{ userId: id }, { to: { [Op.in]: ['salon', 'all'] } }],
     },
     attributes: [`id`, `at`, `to`, `title`, `body`, `data`, 'type'],
   })
@@ -1994,16 +1994,20 @@ exports.fetchNotifications = async (req, res, next) => {
 
       if (type === 'appointment') {
         accumulator.appointmentNotifications.push(notification)
-      } else if (type === 'review') {
+      } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
-        accumulator.appointmentNotifications.push(notification)
+        accumulator.otherNotifications.push(notification)
       }
 
       return accumulator
     },
-    { appointmentNotifications: [], reviewNotifications: [] }, // Initial accumulator
+    {
+      appointmentNotifications: [],
+      reviewNotifications: [],
+      otherNotifications: [],
+    }, // Initial accumulator
   )
 
   return res.json(

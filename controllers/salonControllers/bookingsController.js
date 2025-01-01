@@ -1121,19 +1121,6 @@ exports.addExtraService = async (req, res, next) => {
     where: { id: extraServices[0].bookingId },
     include: [
       { model: user, attributes: ['firstName', 'lastName', 'email', 'image'] },
-      {
-        model: jobs,
-        include: [
-          {
-            model: service,
-            include: { model: category, attributes: ['color'] },
-          },
-          {
-            model: employee,
-            include: { model: user, attributes: ['firstName'] },
-          },
-        ],
-      },
     ],
   })
 
@@ -1180,6 +1167,9 @@ exports.addExtraService = async (req, res, next) => {
       return job.id
     }),
   )
+  newServiceIds
+
+  console.log('🚀 ~ exports.addExtraService= ~ newServiceIds:', newServiceIds)
   const findUnAssign = extraServices.find((service) => service.employeeId == 0)
   let status = 'book'
   if (findUnAssign) status = 'pending'
@@ -1192,7 +1182,22 @@ exports.addExtraService = async (req, res, next) => {
   let specialists = []
   let assigned = true
   const newJobs = []
-  bookingData.jobs.map((ele) => {
+
+  const allJobs = await jobs.findAll({
+    where: { bookingId: bookingData?.id },
+    include: [
+      {
+        model: service,
+        include: { model: category, attributes: ['color'] },
+      },
+      {
+        model: employee,
+        include: { model: user, attributes: ['firstName'] },
+      },
+    ],
+  })
+
+  allJobs.map((ele) => {
     if (ele.employeeId === null) {
       assigned = false
     }
@@ -1202,6 +1207,8 @@ exports.addExtraService = async (req, res, next) => {
     servicesNames.push(ele.service?.serviceName)
 
     const isNew = newServiceIds.find((u) => u == ele.id)
+    console.log('🚀 ~ exports.addExtraService= ~ isNew:', isNew)
+
     if (isNew) {
       const job = {
         id: ele.id,
@@ -1218,6 +1225,7 @@ exports.addExtraService = async (req, res, next) => {
         specialists: ele.employee ? `${ele.employee.user.firstName}` : '',
         extra: ele.Extra,
       }
+
       newJobs.push(job)
     }
   })
