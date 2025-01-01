@@ -112,3 +112,33 @@ exports.socketForCalendar = async ({ appointmentId, type }) => {
     console.log('🚀 ~ exports.onlineAppointmentConfirm= ~ error:', error)
   }
 }
+
+exports.socketForCalendarJobOnly = async ({
+  appointmentId,
+  jobId,
+  type = 'finish',
+}) => {
+  try {
+    let event = `${type}-job`
+
+    const appointment = await booking.findByPk(appointmentId, {
+      attributes: ['id', 'salonDetailId', 'on'],
+    })
+
+    const socketInput = {
+      event: event,
+      data: {
+        jobId: jobId,
+      },
+      bookingId: appointmentId,
+    }
+    sendEvent(`${appointment?.salonDetailId}S`, socketInput)
+    const workers = await employeeForSocket(appointment?.salonDetailId)
+    workers.forEach((el) => sendEvent(`${el}E`, socketInput))
+
+    console.log('🚀 ~~~~~ eventDrivenCommunication ~~~~~~~CALENDAR 🚀')
+    return true
+  } catch (error) {
+    console.log('🚀 ~ exports.onlineAppointmentConfirm= ~ error:', error)
+  }
+}
