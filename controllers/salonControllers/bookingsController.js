@@ -1645,7 +1645,7 @@ exports.jobStatus = async (req, res, next) => {
   const workers = await employeeForSocket(jobData?.booking?.salonDetailId)
   workers.forEach((el) => sendEvent(`${el}E`, socketInput))
 
-  socketForCalendar({ appointmentId: jobData?.bookingId, type: 'finish' })
+  socketForCalendar({ appointmentId: jobData?.bookingId, type: 'reschedule' })
 
   return res.json(
     returnFunction('1', 'Job Status Updated Successfully!', {}, ''),
