@@ -22,8 +22,11 @@ const appError = require('../../utils/appError')
 const Email = require('../../utils/Email')
 const Convert = require('../../utils/dateManipulation')
 const otpGenerator = require('otp-generator')
+const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 
 const { salonDetails } = require('../userControllers/customerController')
+const { sortAndCompleteTimes } = require('../../utils/timesFormator')
+const e = require('cors')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -105,6 +108,7 @@ exports.AddEmployee = async (req, res, next) => {
     password,
     position,
   } = req.body
+
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
@@ -114,8 +118,9 @@ exports.AddEmployee = async (req, res, next) => {
       model: time,
       attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'],
     },
-    attributes: ['id', 'teamSize'],
+    attributes: ['id', 'salonName', 'teamSize', 'addressDBId'],
   })
+
   let teamCount = await employee.count({
     where: {
       salonDetailId: salonDetails.id,
@@ -145,7 +150,7 @@ exports.AddEmployee = async (req, res, next) => {
     },
   })
 
-  //return res.json(userExist)
+  //   return res.json(req.body)
   if (userExist) {
     if (email === userExist.email)
       return next(
@@ -170,6 +175,7 @@ exports.AddEmployee = async (req, res, next) => {
         ),
       )
     }
+
     const employeeData = await employee.findOne({
       where: {
         userId: userExist.id,
@@ -185,9 +191,9 @@ exports.AddEmployee = async (req, res, next) => {
       ),
     )
   } else {
-    let DT = new Date()
-    // if No User Exist with the same email create new user
-    let newEntry = await user.create({
+    let DT = Date.now()
+
+    const employeeInput = {
       firstName,
       lastName,
       email,
@@ -195,18 +201,74 @@ exports.AddEmployee = async (req, res, next) => {
       countryCode,
       status: true,
       password,
-      verfiedAt: DT,
+      verifiedAt: DT,
       signedFrom: 'email',
       userTypeId: 3,
-    })
+    }
+
+    if (req.file) {
+      let tmpprofileImage = req.file.path
+      let profileImageName = tmpprofileImage.replace(/\\/g, '/')
+      employeeInput.image = profileImageName
+    }
+
+    const isExternalEmployeeCondition = req.body?.isExternalEmployee == 'true'
+
+    if (isExternalEmployeeCondition) {
+      employeeInput.isExternalEmployee = true
+      employeeInput.userTypeId = 2
+    }
+
+    // if No User Exist with the same email create new user
+    let newEntry = await user.create(employeeInput)
     // save  Employee data in the table by creating new entry
-    const employeeData = await employee.create({
+    let employeeData = await employee.create({
       position,
       userId: newEntry.id,
       salonDetailId,
+      isExternalEmployee: isExternalEmployeeCondition,
     })
 
-    const employeeWallet = await wallet.create({
+    let workerId = employeeData.id
+    let externalEmployeeSalonId = null
+    if (isExternalEmployeeCondition) {
+      //create a slaon of external employee
+      const externalEmployeeSalon = await salonDetail.create({
+        slaonName: `${firstName} ${lastName}`,
+        status: true,
+        isExternalEmployee: true,
+        addressDBId: salonDetails?.addressDBId,
+        teamSize: 0,
+        userId: newEntry.id,
+        isExternalEmployee: true,
+        parentSalonId: salonDetails?.id,
+        approvedByAdmin: true,
+      })
+
+      externalEmployeeSalonId = externalEmployeeSalon.id
+
+      const externalEmployee = await employee.create({
+        position: 'Me',
+        userId: newEntry.id,
+        salonDetailId: externalEmployeeSalon.id,
+        parentEmployeeId: workerId,
+        isOwner: true,
+      })
+      workerId = externalEmployee.id
+
+      await wallet.create({
+        salonDetailId: externalEmployeeSalon.id,
+      })
+      //Optional need more data from client side
+      employeeWagesMethod.create({
+        value: 10,
+        wagesMethodId: 3,
+        employeeId: employeeData.id,
+        cycle: 'Monthly',
+      })
+    }
+
+    wallet.create({
       employeeId: employeeData.id,
     })
 
@@ -216,19 +278,22 @@ exports.AddEmployee = async (req, res, next) => {
       newTime.closingTime = dat.closingTime
       newTime.day = dat.day
       newTime.status = dat.status
-      newTime.employeeId = employeeData.id
+      newTime.employeeId = workerId
+      if (externalEmployeeSalonId) {
+        newTime.salonDetailId = externalEmployeeSalonId
+      }
       await newTime.save()
     })
-    // Handling the uploaded pictures
-    if (req.file) {
-      let tmpprofileImage = req.file.path
-      let profileImageName = tmpprofileImage.replace(/\\/g, '/')
-      let userUpdate = await newEntry.update(
-        { image: profileImageName },
-        { where: { id: newEntry.id } },
-      )
-    }
 
+    // Handling the uploaded pictures
+    const emailData = {
+      name: `${firstName} ${lastName} `,
+      email,
+      password,
+      salonName: salonDetails.salonName,
+      link: req.body.link,
+    }
+    inviteEmployeeEmail([email], emailData)
     return res.json(
       returnFunction(
         '1',
@@ -340,6 +405,7 @@ exports.addWagesMethod = async (req, res, next) => {
 
 exports.employeeDetail = async (req, res, next) => {
   const employeeId = req.body.employeeId
+
   const result = await employee.findByPk(employeeId, {
     include: [
       {
@@ -497,6 +563,8 @@ exports.employeeDetail = async (req, res, next) => {
       ? Convert.convertTo12HourFormat(timeSlot.closingTime)
       : ''
   })
+
+  employeeData.times = sortAndCompleteTimes(employeeData?.times || [])
 
   employeeData.paymentPending = paymentPending
   return res.json(returnFunction('1', 'Employee Deyails', employeeData, ''))

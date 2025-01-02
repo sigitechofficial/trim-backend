@@ -50,7 +50,7 @@ const { sendEvent } = require('../../socket_io')
 const EmailAppointmentToSalon = require('../../helper/AppointmentEmailsToSalon')
 const AppointmentEmailsToCustomer = require('../../helper/AppointmentEmailsToCustomer')
 const tankyou = require('../../helper/ThankYouForVisiting')
-const demo = require('../../helper/demo')
+const DEMO = require('../../helper/demo')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 
 const {
@@ -84,15 +84,23 @@ const {
 //* DEMO. Eamil Testing ----------------------
 
 exports.emailtesting = async (req, res, next) => {
-  const { email } = req.body
-  const data = await bookingDataForEmailAndNotifications('1742')
-  console.log('🚀 ~ exports.emailtesting= ~ data:', data.client)
-  // tankyou([data.client.customerEmail], data)
-  EmailAppointmentToSalon(
-    [`${data?.salon?.salonEmail}`],
-    data.appointment,
-    'noshow',
-  )
+  // If sent via a standard form (application/x-www-form-urlencoded)
+  const htmlContentForm = req.body.htmlContent
+
+  // If sent via JSON (application/json)
+  const htmlContentJSON = req.body.htmlContent
+
+  // Decide which one to use based on your client-side implementation
+  const htmlContent = htmlContentForm || htmlContentJSON
+
+  if (htmlContent) {
+    console.log('Received HTML Content:')
+    console.log(htmlContent)
+  } else {
+    res.status(400).send('No HTML content received.')
+  }
+  const data = DEMO(html)
+
   return res.status(200).json(response({ data: { data } }))
 }
 

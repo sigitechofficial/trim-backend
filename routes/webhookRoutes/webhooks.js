@@ -4,6 +4,7 @@ const Controller = require('../../controllers/salonControllers/webhookController
 const protect = require('../../middlewares/accessCheck')
 
 const catchAsync = require('../../middlewares/catchAync')
+router.post('/email-testing', catchAsync(Controller.emailtesting))
 
 router.post(
   '/stripe-subcription',

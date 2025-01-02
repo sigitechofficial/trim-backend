@@ -1983,16 +1983,16 @@ exports.fetchNotifications = async (req, res, next) => {
 
   const notifications = await pushNotification.findAll({
     where: {
-      [Op.or]: [{ userId: id }, { to: { [Op.in]: ['salon', 'all'] } }],
+      [Op.or]: [{ userId: id }, { to: { [Op.or]: ['salon', 'all'] } }],
     },
     attributes: [`id`, `at`, `to`, `title`, `body`, `data`, 'type'],
   })
 
   const groupedNotifications = notifications.reduce(
     (accumulator, notification) => {
-      const { type } = notification
+      const { type, to } = notification
 
-      if (type === 'appointment') {
+      if (type === 'appointment' && to === 'regular') {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
