@@ -1990,9 +1990,9 @@ exports.fetchNotifications = async (req, res, next) => {
 
   const groupedNotifications = notifications.reduce(
     (accumulator, notification) => {
-      const { type } = notification
+      const { type, to } = notification
 
-      if (type === 'appointment') {
+      if (type === 'appointment' && to === 'regular') {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)

@@ -7,7 +7,7 @@ const dateManipulation = require('../../utils/dateManipulation')
 const { salonDetail, user, subscriptions } = require('../../models')
 
 // const subscriptions = require('../models/subscriptions')
-
+const DEMO = require('../../helper/demo')
 const endpointSecret = `whsec_4UTYsBGVUlQ2Ej4TKuvdNxGn0lvcuOxu`
 
 exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
@@ -272,6 +272,27 @@ const handleSubscriptionDeleted = async (subscription) => {
   } catch (error) {
     console.error('Error handling customer.subscription.deleted:', error)
   }
+}
+
+exports.emailtesting = async (req, res, next) => {
+  // If sent via a standard form (application/x-www-form-urlencoded)
+  const htmlContentForm = req.body.htmlContent
+
+  // If sent via JSON (application/json)
+  const htmlContentJSON = req.body.htmlContent
+
+  // Decide which one to use based on your client-side implementation
+  const htmlContent = htmlContentForm || htmlContentJSON
+
+  if (htmlContent) {
+    console.log('Received HTML Content:')
+    console.log(htmlContent)
+  } else {
+    res.status(400).send('No HTML content received.')
+  }
+  const data = DEMO(html)
+
+  return res.status(200).json(response({ data: { data } }))
 }
 
 // TODO Work Pending if auto payment failed then we have to change default payment method then make payments fro subscribtions
