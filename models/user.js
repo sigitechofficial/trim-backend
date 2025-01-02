@@ -90,6 +90,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         defaultValue: '',
       },
+      isExternalEmployee: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      },
     },
     {
       primaryKey: true,

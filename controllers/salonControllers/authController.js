@@ -482,6 +482,15 @@ exports.login = async (req, res, next) => {
 
   // console.log(JSON.parse(JSON.stringify(User)))
 
+  if (!password && User.signedFrom == 'email') {
+    return next(
+      new appError(
+        `An account with this email (${email}) is not registered by this singin method`,
+        200,
+      ),
+    )
+  }
+
   if (
     User.signedFrom == 'email' &&
     !(await bcrypt.compare(password, User.password))

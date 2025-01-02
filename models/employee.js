@@ -28,6 +28,15 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: false,
     },
+    isExternalEmployee: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    parentEmployeeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   })
 
   employee.associate = (models) => {

@@ -1137,7 +1137,8 @@ exports.throwNotifications = async (req, res, next) => {
   //adding 5 hours
   dt.setTime(dt.getTime() + 5 * 60 * 60 * 1000)
 
-  if (req.body) pushNotification.create({ at: dt, to: sendTo, title, body })
+  if (req.body)
+    pushNotification.create({ at: dt, to: sendTo, title, body, type: 'admin' })
 
   return res.status(200).json({
     status: '1',

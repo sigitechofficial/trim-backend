@@ -95,6 +95,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    isExternalEmployee: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    parentSalonId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   })
 
   salonDetail.associate = (models) => {
