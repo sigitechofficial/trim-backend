@@ -108,6 +108,7 @@ exports.AddEmployee = async (req, res, next) => {
     password,
     position,
   } = req.body
+
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
@@ -149,7 +150,7 @@ exports.AddEmployee = async (req, res, next) => {
     },
   })
 
-  //return res.json(userExist)
+  //   return res.json(req.body)
   if (userExist) {
     if (email === userExist.email)
       return next(
@@ -190,7 +191,8 @@ exports.AddEmployee = async (req, res, next) => {
       ),
     )
   } else {
-    let DT = new Date()
+    let DT = Date.now()
+
     const employeeInput = {
       firstName,
       lastName,
@@ -199,7 +201,7 @@ exports.AddEmployee = async (req, res, next) => {
       countryCode,
       status: true,
       password,
-      verfiedAt: DT,
+      verifiedAt: DT,
       signedFrom: 'email',
       userTypeId: 3,
     }
@@ -240,6 +242,7 @@ exports.AddEmployee = async (req, res, next) => {
         userId: newEntry.id,
         isExternalEmployee: true,
         parentSalonId: salonDetails?.id,
+        approvedByAdmin: true,
       })
 
       externalEmployeeSalonId = externalEmployeeSalon.id
@@ -258,9 +261,10 @@ exports.AddEmployee = async (req, res, next) => {
       })
       //Optional need more data from client side
       employeeWagesMethod.create({
+        value: 10,
         wagesMethodId: 3,
         employeeId: employeeData.id,
-        employeeId: '',
+        cycle: 'Monthly',
       })
     }
 
@@ -276,7 +280,7 @@ exports.AddEmployee = async (req, res, next) => {
       newTime.status = dat.status
       newTime.employeeId = workerId
       if (externalEmployeeSalonId) {
-        salonDetailId: externalEmployeeSalonId
+        newTime.salonDetailId = externalEmployeeSalonId
       }
       await newTime.save()
     })

@@ -641,8 +641,7 @@ exports.login = async (req, res, next) => {
         hasWorkingHours: salon.times.length !== 0,
         hasTeamMembers: salon.employees.length !== 0,
         hasSubscription: salon.approvedByAdmin,
-        accountConnected:
-          salon.wallet && salon.wallet.accountConnected ? true : false,
+        accountConnected: salon.connectAccountId ? true : false,
       }
     }
   } else if (User.userTypeId === 3) {
@@ -757,6 +756,11 @@ exports.login = async (req, res, next) => {
         hasWagesMethod: employeeDetails.employeeWagesMethod ? true : false,
       }
     }
+  }
+
+  response.data.isExternalEmployee = User.isExternalEmployee
+  if (response && response.data && response.data.profileCompletion) {
+    response.data.profileCompletion.hasSubscription = true
   }
 
   return res.json(
@@ -996,6 +1000,7 @@ exports.session = async (req, res, next) => {
         email: `${User.email}`,
         accessToken: req.header('accessToken'),
         phoneNum: `${User.countryCode} ${User.phoneNum}`,
+        isExternalEmployee: User.isExternalEmployee,
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
@@ -1043,7 +1048,9 @@ exports.session = async (req, res, next) => {
   const isServiceDataAvailable = User.salonDetails[0].services.length !== 0
   const isTimeDataAvailable = User.salonDetails[0].times.length !== 0
   const isAddressDataAvailable = User.salonDetails[0].addressDB !== null
-  const isSubscription = User.salonDetails[0].approvedByAdmin
+  const isSubscription = User?.isExternalEmployee
+    ? true
+    : User.salonDetails[0].approvedByAdmin
   const isaccountConnected = User.salonDetails[0]?.connectAccountId
     ? true
     : false
@@ -1069,6 +1076,7 @@ exports.session = async (req, res, next) => {
       email: `${User.email}`,
       accessToken: req.header('accessToken'),
       phoneNum: `${User.countryCode} ${User.phoneNum}`,
+      isExternalEmployee: User.isExternalEmployee,
       profileCompletion: {
         salonDetailId: User.salonDetails[0].id ?? '',
         salonName: User.salonDetails[0].salonName,
@@ -1077,7 +1085,9 @@ exports.session = async (req, res, next) => {
         hasServiceList: User.salonDetails[0].services.length !== 0,
         hasWorkingHours: User.salonDetails[0].times.length !== 0,
         hasTeamMembers: User.salonDetails[0].employees.length !== 0,
-        hasSubscription: User.salonDetails[0].approvedByAdmin,
+        hasSubscription: User?.isExternalEmployee
+          ? true
+          : User.salonDetails[0].approvedByAdmin,
         accountConnected: User.salonDetails[0]?.connectAccountId ? true : false,
       },
     },

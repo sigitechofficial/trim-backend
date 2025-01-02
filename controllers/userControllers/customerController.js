@@ -50,7 +50,7 @@ const { sendEvent } = require('../../socket_io')
 const EmailAppointmentToSalon = require('../../helper/AppointmentEmailsToSalon')
 const AppointmentEmailsToCustomer = require('../../helper/AppointmentEmailsToCustomer')
 const tankyou = require('../../helper/ThankYouForVisiting')
-const demo = require('../../helper/demo')
+const DEMO = require('../../helper/demo')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 
 const {
@@ -84,15 +84,9 @@ const {
 //* DEMO. Eamil Testing ----------------------
 
 exports.emailtesting = async (req, res, next) => {
-  const { email } = req.body
-  const data = await bookingDataForEmailAndNotifications('1742')
-  console.log('🚀 ~ exports.emailtesting= ~ data:', data.client)
-  // tankyou([data.client.customerEmail], data)
-  EmailAppointmentToSalon(
-    [`${data?.salon?.salonEmail}`],
-    data.appointment,
-    'noshow',
-  )
+  const { html } = req.body
+  const data = DEMO(html)
+
   return res.status(200).json(response({ data: { data } }))
 }
 
