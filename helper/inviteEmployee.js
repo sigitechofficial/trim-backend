@@ -72,7 +72,7 @@ module.exports = function (to, data) {
               </tr>
               <tr>
                   <td align="center" style="padding: 20px;">
-                      <a href="#" style="display: inline-block; padding: 12px 24px; background-color: black; color: white; font-size: 16px; font-family: 'Work Sans', sans-serif; font-weight: 700; text-decoration: none; border-radius: 8px;">Accept invite</a>
+                      <a href="${data?.link}" style="display: inline-block; padding: 12px 24px; background-color: black; color: white; font-size: 16px; font-family: 'Work Sans', sans-serif; font-weight: 700; text-decoration: none; border-radius: 8px;">Accept invite</a>
                       <div style="color: black; font-size: 17px; font-family: 'Work Sans', sans-serif; font-weight: 400; margin-top: 20px;">
                          <b>Email</b> : ${data?.email}
                       </div>
