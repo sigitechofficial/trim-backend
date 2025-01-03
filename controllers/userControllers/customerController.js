@@ -84,22 +84,9 @@ const {
 //* DEMO. Eamil Testing ----------------------
 
 exports.emailtesting = async (req, res, next) => {
-  // If sent via a standard form (application/x-www-form-urlencoded)
-  const htmlContentForm = req.body.htmlContent
+  const { htmlContent } = req.body
 
-  // If sent via JSON (application/json)
-  const htmlContentJSON = req.body.htmlContent
-
-  // Decide which one to use based on your client-side implementation
-  const htmlContent = htmlContentForm || htmlContentJSON
-
-  if (htmlContent) {
-    console.log('Received HTML Content:')
-    console.log(htmlContent)
-  } else {
-    res.status(400).send('No HTML content received.')
-  }
-  const data = DEMO(html)
+  const data = DEMO(htmlContent)
 
   return res.status(200).json(response({ data: { data } }))
 }

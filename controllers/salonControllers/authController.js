@@ -1028,6 +1028,7 @@ exports.session = async (req, res, next) => {
         email: `${User.email}`,
         accessToken: req.header('accessToken'),
         phoneNum: `${User.countryCode} ${User.phoneNum}`,
+        isExternalEmployee: User.isExternalEmployee,
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
