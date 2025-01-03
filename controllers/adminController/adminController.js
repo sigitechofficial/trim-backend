@@ -1107,9 +1107,9 @@ exports.throwNotifications = async (req, res, next) => {
   //employee = 3
   let to = []
   const condition = { status: true, verifiedAt: { [Op.not]: null } }
-  if (sendTo === 'customers') condition.userTypeId = 1
-  if (sendTo === 'salons') condition.userTypeId = 2
-  if (sendTo === 'employees') condition.userTypeId = 3
+  if (sendTo === 'customer') condition.userTypeId = 1
+  if (sendTo === 'salon') condition.userTypeId = 2
+  if (sendTo === 'employee') condition.userTypeId = 3
   if (sendTo === 'all') condition.userTypeId = [1, 2, 3]
 
   const data = await user.findAll({

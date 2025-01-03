@@ -234,7 +234,7 @@ exports.AddEmployee = async (req, res, next) => {
     if (isExternalEmployeeCondition) {
       //create a slaon of external employee
       const externalEmployeeSalon = await salonDetail.create({
-        slaonName: `${firstName} ${lastName}`,
+        salonName: `${firstName} ${lastName}`,
         status: true,
         isExternalEmployee: true,
         addressDBId: salonDetails?.addressDBId,
@@ -841,11 +841,10 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
 exports.activeBlockEmployee = async (req, res, next) => {
   const userId = req.params.employee
 
-  const worker = await user.findByPk(userId, {
+  const result = await user.findByPk(userId, {
     attributes: [
       'id',
       'status',
-      'isOwner',
       [
         literal(
           `(SELECT employees.id
@@ -853,9 +852,16 @@ exports.activeBlockEmployee = async (req, res, next) => {
         ),
         'employeeId',
       ],
+      [
+        literal(
+          `(SELECT employees.isOwner
+           FROM employees WHERE employees.userId = user.id)`,
+        ),
+        'isOwner',
+      ],
     ],
   })
-
+  const worker = JSON.parse(JSON.stringify(result))
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
     attributes: ['id', 'teamSize'],

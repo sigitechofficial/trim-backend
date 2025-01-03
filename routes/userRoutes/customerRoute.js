@@ -33,8 +33,11 @@ const ProfileImage = multer({
 })
 
 // !Module:1 Home
+const upload = multer().none()
 
-router.post('/email-testing', catchAsync(appController.emailtesting))
+// Apply multer middleware to the route
+router.post('/email-testing', upload, catchAsync(appController.emailtesting))
+
 router.post(
   '/notification-testing',
   catchAsync(appController.notificationTesting),
