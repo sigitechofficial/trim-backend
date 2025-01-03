@@ -892,7 +892,7 @@ exports.activeBlockEmployee = async (req, res, next) => {
     )
   }
 
-  const employeeId = worker?.dataValues?.employeeId
+  const employeeId = worker?.employeeId
   console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
   const work = await jobs.findAll({
     where: { status: 'assign', employeeId },
