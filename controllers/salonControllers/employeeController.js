@@ -243,6 +243,7 @@ exports.AddEmployee = async (req, res, next) => {
         isExternalEmployee: true,
         parentSalonId: salonDetails?.id,
         approvedByAdmin: true,
+        coverImage: employeeInput?.image,
       })
 
       externalEmployeeSalonId = externalEmployeeSalon.id
@@ -259,6 +260,7 @@ exports.AddEmployee = async (req, res, next) => {
       await wallet.create({
         salonDetailId: externalEmployeeSalon.id,
       })
+
       //Optional need more data from client side
       employeeWagesMethod.create({
         value: 10,
