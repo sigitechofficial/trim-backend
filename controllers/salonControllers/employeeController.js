@@ -370,9 +370,7 @@ exports.getServices = async (req, res, next) => {
     where: condition,
   })
 
-  return res.json(
-    returnFunction('1', 'Services of Salon', { serviceData, salon }, ''),
-  )
+  return res.json(returnFunction('1', 'Services of Salon', { serviceData }, ''))
 }
 /*
             4.Add Employee Services
