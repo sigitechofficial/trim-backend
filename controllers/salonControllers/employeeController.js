@@ -344,18 +344,35 @@ exports.getEmployeeTiming = async (req, res, next) => {
 */
 exports.getServices = async (req, res, next) => {
   const userId = req.user.id
-
-  const serviceData = await service.findAll({
-    include: {
-      model: salonDetail,
-      where: {
-        userId,
-      },
-      attributes: [],
-    },
+  const salon = await salonDetail.findOne({
+    where: { userId },
+    attributes: [
+      'isExternalEmployee',
+      'id',
+      [
+        literal(
+          '(SELECT COUNT(services.id) FROM services WHERE services.salonDetailId = salonDetail.id)',
+        ),
+        'totalServices',
+      ],
+      'parentSalonId',
+    ],
   })
 
-  return res.json(returnFunction('1', 'Services of Salon', { serviceData }, ''))
+  if (!salon) return next(new appError('Data not found', 404))
+
+  const condition = { salonDetailId: salon.id }
+  if (salon?.isExternalEmployee && salon?.dataValues?.totalServices < 1) {
+    condition.salonDetailId = salon?.parentSalonId
+  }
+
+  const serviceData = await service.findAll({
+    where: condition,
+  })
+
+  return res.json(
+    returnFunction('1', 'Services of Salon', { serviceData, salon }, ''),
+  )
 }
 /*
             4.Add Employee Services
