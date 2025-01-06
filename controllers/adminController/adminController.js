@@ -102,7 +102,7 @@ exports.login = async (req, res, next) => {
   const { email, password, dvToken } = req.body
 
   if (!email || !password) {
-    return next(new AppError('Please provide Email or Password', 400))
+    return next(new AppError('Please provide Email or Password', 200))
   }
 
   const User = await user.findOne({
@@ -116,7 +116,7 @@ exports.login = async (req, res, next) => {
   if (User.status == false) throw new AppError('Blocked by admin.', 200)
 
   if (!User || !(await bcrypt.compare(password, User.password))) {
-    return next(new AppError('Incorrect Password.', 401))
+    return next(new AppError('Incorrect Password.', 200))
   }
 
   const features = await feature.findAll({
@@ -155,7 +155,7 @@ exports.addServieType = async (req, res, next) => {
     const imagePath = tmpPath.replace(/\\/g, '/')
     input.image = imagePath
   } else {
-    throw new AppError('Image is required. Please upload Image', 400)
+    throw new AppError('Image is required. Please upload Image', 200)
   }
   const data = await serviceType.create(input)
 
@@ -186,7 +186,7 @@ exports.fetchServiceTypes = async (req, res, next) => {
 //& 3.Update service types --------------------------
 
 exports.updateServiceTypes = async (req, res, next) => {
-  if (!req.params.id) throw new AppError(`Invalid request format`, 400)
+  if (!req.params.id) throw new AppError(`Invalid request format`, 200)
   const { id } = req.params
   console.log('🚀 ~ exports.updateServiceTypes= ~ id:', id)
   const input = req.body
@@ -509,7 +509,7 @@ exports.employeeDetails = async (req, res, next) => {
       },
     ],
   })
-  if (!results) throw new AppError('Resource not found', 404)
+  if (!results) throw new AppError('Resource not found', 200)
 
   const employeeData = results.toJSON()
   employeeData.employee = employeeData.employees[0]
@@ -727,7 +727,7 @@ exports.addSubscription = async (req, res, next) => {
     features,
   )
   const plan = await subscriptionPlan.create(input)
-  if (!plan) throw new AppError('Not creatred', 409)
+  if (!plan) throw new AppError('Not creatred', 200)
 
   const featureInput = features.map((ele) => {
     ele.subscriptionPlanId = plan.id
@@ -1036,7 +1036,7 @@ exports.fetchHelpSupport = async (req, res, next) => {
 //* 3.Update Help Support --------------------------
 
 exports.updateHelpSupport = async (req, res, next) => {
-  if (!req.params.id) throw new AppError(`Invalid request format`, 400)
+  if (!req.params.id) throw new AppError(`Invalid request format`, 200)
   const { id } = req.params
   const input = req.body
   const [rows] = await helpSupport.update(input, { where: { id } })
@@ -1542,7 +1542,7 @@ exports.fetchAdminEmployeeDetails = async (req, res, next) => {
     include: { model: role, attributes: ['name'] },
   })
 
-  if (!emplData) throw new AppError('Record not found.', 404)
+  if (!emplData) throw new AppError('Record not found.', 200)
 
   const permissionData = await permission.findAll({
     where: { roleId: emplData.roleId },
@@ -1599,7 +1599,7 @@ exports.addRoles = async (req, res, next) => {
   const { name, permissionRole } = req.body
   // making   unique
   const checkExist = await role.findOne({ where: { name } })
-  if (checkExist) throw new AppError('Role already exists.', 409)
+  if (checkExist) throw new AppError('Role already exists.', 200)
   const data = await role.create({ name, status: true })
   // manipulating to our desired format
   let bulkArray = []
@@ -1690,7 +1690,7 @@ exports.roleDetails = async (req, res, next) => {
   const roleData = await role.findByPk(roleId, {
     attributes: ['name'],
   })
-  if (!roleData) throw new AppError('Role not Found', 404)
+  if (!roleData) throw new AppError('Role not Found', 200)
   const permissionData = await permission.findAll({
     where: { roleId },
   })
@@ -1919,7 +1919,7 @@ exports.changeSalonStatus = async (req, res, next) => {
   const existingRecord = await user.findByPk(id, { attributes: ['status'] })
 
   if (!existingRecord) {
-    throw new AppError('No record found with that ID', 404)
+    throw new AppError('No record found with that ID', 200)
   }
   const newStatus = existingRecord.status === true ? 0 : 1
   const [updatedCount] = await user.update(
@@ -1949,7 +1949,7 @@ exports.changeStatus = (Model) => async (req, res, next) => {
   const existingRecord = await Model.findByPk(id, { attributes: ['status'] })
 
   if (!existingRecord) {
-    throw new AppError('No record found with that ID', 404)
+    throw new AppError('No record found with that ID', 200)
   }
   const newStatus = existingRecord.status === true ? 0 : 1
   const [updatedCount] = await Model.update(
@@ -1984,14 +1984,14 @@ exports.softDelete = (Model) => async (req, res, next) => {
 //& Delete --------------------------
 
 exports.delete = (Model) => async (req, res, next) => {
-  if (!req.params.id) throw new AppError(`Invalid request format`, 400)
+  if (!req.params.id) throw new AppError(`Invalid request format`, 200)
 
   const data = await Model.destroy({
     where: { id: req.params.id },
   })
 
   if (!data) {
-    throw new AppError(`Record not found`, 404)
+    throw new AppError(`Record not found`, 200)
   } else {
     return res.status(200).json(
       response({

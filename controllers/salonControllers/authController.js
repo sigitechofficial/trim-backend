@@ -109,7 +109,7 @@ exports.signup = async (req, res, next) => {
     ],
   })
 
-  if (!userExist && ['google', 'apple'].includes(signedBy)) {
+  if (!userExist && ['google', 'apple', 'facebook'].includes(signedBy)) {
     const stripeCustomerId = await Stripe.addCustomer(firstName, email)
 
     let userData = await user.create({
@@ -151,7 +151,7 @@ exports.signup = async (req, res, next) => {
 
   if (userExist) {
     // if user registered by apple or google already exist  then throw him towards home screen
-    if (['google', 'apple'].includes(userExist.signedFrom)) {
+    if (['google', 'apple', 'facebook'].includes(userExist.signedFrom)) {
       //  checking the status
       if (!userExist.status) {
         return next(

@@ -81,7 +81,7 @@ module.exports = function (to, data) {
                       </div>
                   </td>
               </tr>
-            
+
        ${newFooter}
       `,
     },
