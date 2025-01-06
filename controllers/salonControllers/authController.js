@@ -620,10 +620,7 @@ exports.login = async (req, res, next) => {
         '🚀 ~ exports.login= ~ salon.services.length:',
         salon.services.length,
       )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.categories.length:',
-        salon.categories.length,
-      )
+
       console.log(
         '🚀 ~ exports.login= ~  isAllDataAvailable ',
         isAllDataAvailable,
@@ -1046,25 +1043,45 @@ exports.session = async (req, res, next) => {
   }
 
   const isCategoryDataAvailable = User.salonDetails[0].categories.length !== 0
+  console.log(
+    '🚀 ~ exports.session= ~ isCategoryDataAvailable:',
+    isCategoryDataAvailable,
+  )
   const isServiceDataAvailable = User.salonDetails[0].services.length !== 0
+  console.log(
+    '🚀 ~ exports.session= ~ isServiceDataAvailable:',
+    isServiceDataAvailable,
+  )
   const isTimeDataAvailable = User.salonDetails[0].times.length !== 0
+  console.log(
+    '🚀 ~ exports.session= ~ isTimeDataAvailable:',
+    isTimeDataAvailable,
+  )
   const isAddressDataAvailable = User.salonDetails[0].addressDB !== null
+  console.log(
+    '🚀 ~ exports.session= ~ isAddressDataAvailable:',
+    isAddressDataAvailable,
+  )
   const isSubscription = User?.isExternalEmployee
     ? true
     : User.salonDetails[0].approvedByAdmin
+  console.log('🚀 ~ exports.session= ~ isSubscription:', isSubscription)
   const isaccountConnected = User.salonDetails[0]?.connectAccountId
     ? true
     : false
+  console.log('🚀 ~ exports.session= ~ isaccountConnected:', isaccountConnected)
 
   const isAllDataAvailable =
-    isCategoryDataAvailable &&
+    // isCategoryDataAvailable &&
     isServiceDataAvailable &&
     isTimeDataAvailable &&
     isSubscription &&
     isaccountConnected &&
     isAddressDataAvailable
 
+  console.log('🚀 ~ exports.session= ~ isAllDataAvailable:', isAllDataAvailable)
   const hasEmployee = User.salonDetails[0].employees.length !== 0
+  console.log('🚀 ~ exports.session= ~ hasEmployee:', hasEmployee)
 
   return res.status(200).json({
     status: isAllDataAvailable && hasEmployee ? '1' : '2',

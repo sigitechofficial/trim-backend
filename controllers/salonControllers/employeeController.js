@@ -843,24 +843,14 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
 exports.activeBlockEmployee = async (req, res, next) => {
   const userId = req.params.employee
 
-  const result = await user.findByPk(userId, {
+  const result = await employee.findOne({
+    where: { userId },
     attributes: [
-      'id',
+      ['userId', 'id'],
       'status',
-      [
-        literal(
-          `(SELECT employees.id
-           FROM employees WHERE employees.userId = user.id)`,
-        ),
-        'employeeId',
-      ],
-      [
-        literal(
-          `(SELECT employees.isOwner
-           FROM employees WHERE employees.userId = user.id)`,
-        ),
-        'isOwner',
-      ],
+      ['id', 'employeeId'],
+      'isOwner',
+      'isExternalEmployee',
     ],
   })
   const worker = JSON.parse(JSON.stringify(result))
@@ -896,22 +886,24 @@ exports.activeBlockEmployee = async (req, res, next) => {
 
   const employeeId = worker?.employeeId
   console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
-  const work = await jobs.findAll({
-    where: { status: 'assign', employeeId },
-    attributes: ['id', 'bookingId'],
-  })
-  // return res.json({ work, employeeId })
-  if (work && work.length > 0) {
-    const jobsIds = work.map((ele) => ele.id)
-    console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
-    const bookingIds = work.map((ele) => ele.bookingId)
-    console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
-    const uniqueBookingIds = [...new Set(bookingIds)]
-    jobs.update(
-      { employeeId: null, status: 'pending' },
-      { where: { id: jobsIds } },
-    )
-    booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
+  if (!worker?.isExternalEmployee) {
+    const work = await jobs.findAll({
+      where: { status: 'assign', employeeId },
+      attributes: ['id', 'bookingId'],
+    })
+    // return res.json({ work, employeeId })
+    if (work && work.length > 0) {
+      const jobsIds = work.map((ele) => ele.id)
+      console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
+      const bookingIds = work.map((ele) => ele.bookingId)
+      console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
+      const uniqueBookingIds = [...new Set(bookingIds)]
+      jobs.update(
+        { employeeId: null, status: 'pending' },
+        { where: { id: jobsIds } },
+      )
+      booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
+    }
   }
   user.update({ status: req.body.status }, { where: { id: userId } })
   employee.update({ status: req.body.status }, { where: { userId: userId } })
