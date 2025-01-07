@@ -1023,7 +1023,7 @@ exports.addExternalEmployeeDefaultService = async (req, res, next) => {
     }
   })
 
-  employeeService.bulkCreate(employeeServicesList)
+  await employeeService.bulkCreate(employeeServicesList)
 
   return res.json(returnFunction('1', 'success', {}, ''))
 }
