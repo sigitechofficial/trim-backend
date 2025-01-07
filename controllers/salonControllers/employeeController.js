@@ -1000,12 +1000,30 @@ exports.addExternalEmployeeDefaultService = async (req, res, next) => {
   })
 
   const newCategories = await category.bulkCreate(newCategoriesInput)
+
   const newServicesInput = updateServiceCategoryIds({
     newCategories,
     oldCategories: categoiesData,
     serviceList,
     salonDetailId: salon,
   })
-  service.bulkCreate(newServicesInput)
+
+  const newServices = await service.bulkCreate(newServicesInput)
+
+  const selfEmployee = await employee.findOne({
+    where: { salonDetailId: salon, isOwner: true },
+  })
+
+  const employeeServicesList = newServices.map((el) => {
+    return {
+      serviceId: el.id,
+      employeeId: selfEmployee.id,
+      salonDetailId: salon,
+      status: true,
+    }
+  })
+
+  employeeService.bulkCreate(employeeServicesList)
+
   return res.json(returnFunction('1', 'success', {}, ''))
 }
