@@ -266,10 +266,10 @@ exports.AddEmployee = async (req, res, next) => {
 
       //Optional need more data from client side
       employeeWagesMethod.create({
-        value: 10,
+        value: req.body?.rentAmount || 0,
         wagesMethodId: 3,
         employeeId: employeeData.id,
-        cycle: 'Monthly',
+        cycle: req.body?.rentType || 'Monthly',
       })
     }
 
