@@ -16,17 +16,20 @@ const {
   employeeAccessDefault,
   jobs,
   booking,
+  category,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
 const Email = require('../../utils/Email')
 const Convert = require('../../utils/dateManipulation')
+const {
+  updateServiceCategoryIds,
+} = require('../../utils/updateServiceCategoryIds')
 const otpGenerator = require('otp-generator')
 const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 
 const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
-const e = require('cors')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -973,5 +976,36 @@ exports.deleteEmployee = async (req, res, next) => {
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })
   deviceToken.destroy({ where: { userId } })
+  return res.json(returnFunction('1', 'success', {}, ''))
+}
+
+exports.addExternalEmployeeDefaultService = async (req, res, next) => {
+  const { salon } = req.params
+  const { serviceList } = req.body
+
+  const uniqueCategoryIds = [
+    ...new Set(serviceList.map((service) => service.categoryId)),
+  ]
+
+  const categoiesData = await category.findAll({
+    where: { id: uniqueCategoryIds },
+    attributes: [`id`, `categoryName`, `color`, `description`],
+  })
+
+  const newCategoriesInput = JSON.parse(JSON.stringify(categoiesData))
+
+  newCategoriesInput.forEach((el) => {
+    el.salonDetailId = salon
+    delete el.id
+  })
+
+  const newCategories = await category.bulkCreate(newCategoriesInput)
+  const newServicesInput = updateServiceCategoryIds({
+    newCategories,
+    oldCategories: categoiesData,
+    serviceList,
+    salonDetailId: salon,
+  })
+  service.bulkCreate(newServicesInput)
   return res.json(returnFunction('1', 'success', {}, ''))
 }
