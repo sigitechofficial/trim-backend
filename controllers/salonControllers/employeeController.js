@@ -16,17 +16,20 @@ const {
   employeeAccessDefault,
   jobs,
   booking,
+  category,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
 const Email = require('../../utils/Email')
 const Convert = require('../../utils/dateManipulation')
+const {
+  updateServiceCategoryIds,
+} = require('../../utils/updateServiceCategoryIds')
 const otpGenerator = require('otp-generator')
 const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 
 const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
-const e = require('cors')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -344,15 +347,30 @@ exports.getEmployeeTiming = async (req, res, next) => {
 */
 exports.getServices = async (req, res, next) => {
   const userId = req.user.id
+  const salon = await salonDetail.findOne({
+    where: { userId },
+    attributes: [
+      'isExternalEmployee',
+      'id',
+      [
+        literal(
+          '(SELECT COUNT(services.id) FROM services WHERE services.salonDetailId = salonDetail.id)',
+        ),
+        'totalServices',
+      ],
+      'parentSalonId',
+    ],
+  })
+
+  if (!salon) return next(new appError('Data not found', 404))
+
+  const condition = { salonDetailId: salon.id }
+  if (salon?.isExternalEmployee && salon?.dataValues?.totalServices < 1) {
+    condition.salonDetailId = salon?.parentSalonId
+  }
 
   const serviceData = await service.findAll({
-    include: {
-      model: salonDetail,
-      where: {
-        userId,
-      },
-      attributes: [],
-    },
+    where: condition,
   })
 
   return res.json(returnFunction('1', 'Services of Salon', { serviceData }, ''))
@@ -958,5 +976,54 @@ exports.deleteEmployee = async (req, res, next) => {
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })
   deviceToken.destroy({ where: { userId } })
+  return res.json(returnFunction('1', 'success', {}, ''))
+}
+
+exports.addExternalEmployeeDefaultService = async (req, res, next) => {
+  const { salon } = req.params
+  const { serviceList } = req.body
+
+  const uniqueCategoryIds = [
+    ...new Set(serviceList.map((service) => service.categoryId)),
+  ]
+
+  const categoiesData = await category.findAll({
+    where: { id: uniqueCategoryIds },
+    attributes: [`id`, `categoryName`, `color`, `description`],
+  })
+
+  const newCategoriesInput = JSON.parse(JSON.stringify(categoiesData))
+
+  newCategoriesInput.forEach((el) => {
+    el.salonDetailId = salon
+    delete el.id
+  })
+
+  const newCategories = await category.bulkCreate(newCategoriesInput)
+
+  const newServicesInput = updateServiceCategoryIds({
+    newCategories,
+    oldCategories: categoiesData,
+    serviceList,
+    salonDetailId: salon,
+  })
+
+  const newServices = await service.bulkCreate(newServicesInput)
+
+  const selfEmployee = await employee.findOne({
+    where: { salonDetailId: salon, isOwner: true },
+  })
+
+  const employeeServicesList = newServices.map((el) => {
+    return {
+      serviceId: el.id,
+      employeeId: selfEmployee.id,
+      salonDetailId: salon,
+      status: true,
+    }
+  })
+
+  employeeService.bulkCreate(employeeServicesList)
+
   return res.json(returnFunction('1', 'success', {}, ''))
 }

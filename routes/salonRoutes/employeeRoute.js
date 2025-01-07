@@ -131,4 +131,9 @@ router.patch(
   catchAsync(employeeController.deleteEmployee),
 )
 
+router.post(
+  '/add-external-employee-default-service/:salon',
+  catchAsync(employeeController.addExternalEmployeeDefaultService),
+)
+
 module.exports = router

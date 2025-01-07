@@ -135,7 +135,10 @@ exports.home = async (req, res, next) => {
 
   // Initialize salon conditions
   const salonCondition = {
-    registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
+    [Op.or]: [
+      { isExternalEmployee: true },
+      { registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly } },
+    ],
     approvedByAdmin: true,
     status: 1,
   }
@@ -209,6 +212,7 @@ exports.home = async (req, res, next) => {
       'id',
       'salonName',
       'coverImage',
+      'isExternalEmployee',
       'isOnline',
       [
         literal(`(
@@ -352,7 +356,7 @@ exports.salonDetails = async (req, res, next) => {
 
   const results = await salonDetail.findByPk(req.params.id, {
     where: {
-      registrationExpiryDate: { [Op.gt]: currentDay.currentDateOnly },
+      // registrationExpiryDate: { [Op.gt]: currentDay.currentDateOnly },
       approvedByAdmin: true,
     },
     attributes: [
