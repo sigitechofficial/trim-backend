@@ -691,7 +691,10 @@ exports.employeesWithAllServices = async (req, res, next) => {
       },
     },
     attributes: ['employeeId'],
-    include: { model: employee, where: { deleted: false, status: true } },
+    include: {
+      model: employee,
+      where: { deleted: false, status: true, isExternalEmployee: false },
+    },
     group: ['employeeId'],
     having: literal(`COUNT(DISTINCT serviceId) = ${services.length}`),
   })
@@ -720,7 +723,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
           'position',
           [
             literal(
-              '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.employeeId = employees.id)',
+              '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.employeeId = employees.id )',
             ),
             'employeeAverageRating',
           ],
@@ -962,6 +965,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
       salonDetailId: appointment.salonDetailId,
       deleted: false,
       status: true,
+      isExternalEmployee: false,
     },
     attributes: ['id'],
     include: [
@@ -1349,6 +1353,7 @@ exports.bookAppointment = async (req, res, next) => {
         salonDetailId: appointment.salonDetailId,
         deleted: false,
         status: true,
+        isExternalEmployee: false,
       },
       attributes: ['id'],
       include: [

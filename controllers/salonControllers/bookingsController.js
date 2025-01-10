@@ -99,6 +99,8 @@ exports.calendarAppointments = async (req, res, next) => {
   const employeCondition = {
     salonDetailId: salon?.id,
     deleted: 0,
+    status: true,
+    isExternalEmployee: false,
   }
   const jobCondition = {
     status: {
@@ -2088,6 +2090,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
         salonDetailId: appointment.salonDetailId,
         deleted: false,
         status: true,
+        isExternalEmployee: false,
       },
       attributes: ['id'],
       include: [
@@ -2392,6 +2395,7 @@ exports.serviceData = async (req, res, next) => {
     where: {
       deleted: false,
       status: true,
+      isExternalEmployee: false,
       // Add your conditions here
       [Op.and]: literal(`EXISTS (
         SELECT 1

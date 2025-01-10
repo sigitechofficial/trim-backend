@@ -1,6 +1,6 @@
 require('dotenv').config()
 const { verify } = require('jsonwebtoken')
-const { deviceToken } = require('../models')
+const { deviceToken, user } = require('../models')
 
 module.exports = async function validateToken(req, res, next) {
   try {
@@ -17,6 +17,7 @@ module.exports = async function validateToken(req, res, next) {
     const check = await deviceToken.findOne({
       where: { tokenId: req.user.dvToken },
       attributes: ['id'],
+      include: { model: user, where: { status: true }, attributes: [] },
       //not working for employee cause we pass salon id in employee accessToken ,userId: req.user.id
     })
     console.log('🚀 ~ validateToken ~ check:', check)
