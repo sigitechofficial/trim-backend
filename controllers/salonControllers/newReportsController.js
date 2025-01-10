@@ -55,7 +55,7 @@ exports.busiestVsQuietest = async (req, res, next) => {
   if (!salon) throw new AppError('resource not found', 404)
 
   const condition = {
-    // salonDetailId: salon.id,
+    salonDetailId: salon.id,
     status: 'complete',
   }
 
