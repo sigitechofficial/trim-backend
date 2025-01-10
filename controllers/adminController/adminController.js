@@ -1929,6 +1929,12 @@ exports.changeSalonStatus = async (req, res, next) => {
 
   await salonDetail.update({ status: newStatus }, { where: { userId: id } })
 
+  if (!newStatus) {
+    await deviceToken.destroy({
+      where: { userId: req.params.id },
+    })
+  }
+
   res.status(200).json(
     response({
       message: 'Status changed successfully',
