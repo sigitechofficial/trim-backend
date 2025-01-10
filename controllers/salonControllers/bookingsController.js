@@ -1143,7 +1143,7 @@ exports.addExtraService = async (req, res, next) => {
     }
     throw new appError(message, 200)
   }
-  const bookingData = JSON.parse(JSON.stringify(result))
+  let bookingData = JSON.parse(JSON.stringify(result))
   const newServiceIds = await Promise.all(
     extraServices.map(async (ele) => {
       const startTime = dateManipulation.convertTo24HourFormat(ele.startTime)
@@ -1180,6 +1180,13 @@ exports.addExtraService = async (req, res, next) => {
     { status },
     { where: { id: extraServices[0].bookingId } },
   )
+
+  bookingData = await booking.findOne({
+    where: { id: extraServices[0].bookingId },
+    include: [
+      { model: user, attributes: ['firstName', 'lastName', 'email', 'image'] },
+    ],
+  })
 
   let servicesNames = []
   let specialists = []
