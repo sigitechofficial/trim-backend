@@ -1143,7 +1143,7 @@ exports.addExtraService = async (req, res, next) => {
     }
     throw new appError(message, 200)
   }
-  let bookingData = JSON.parse(JSON.stringify(result))
+  const bookingData = JSON.parse(JSON.stringify(result))
   const newServiceIds = await Promise.all(
     extraServices.map(async (ele) => {
       const startTime = dateManipulation.convertTo24HourFormat(ele.startTime)
@@ -1162,6 +1162,8 @@ exports.addExtraService = async (req, res, next) => {
         Extra: true,
       })
 
+      bookingData.total = parseFloat(bookingData.total) + parseFloat(ele.total)
+
       await booking.increment(
         { total: ele.total, subTotal: ele.total, duration: ele.duration },
         { where: { id: ele.bookingId } },
@@ -1170,7 +1172,6 @@ exports.addExtraService = async (req, res, next) => {
       return job.id
     }),
   )
-  newServiceIds
 
   console.log('🚀 ~ exports.addExtraService= ~ newServiceIds:', newServiceIds)
   const findUnAssign = extraServices.find((service) => service.employeeId == 0)
@@ -1180,13 +1181,6 @@ exports.addExtraService = async (req, res, next) => {
     { status },
     { where: { id: extraServices[0].bookingId } },
   )
-
-  bookingData = await booking.findOne({
-    where: { id: extraServices[0].bookingId },
-    include: [
-      { model: user, attributes: ['firstName', 'lastName', 'email', 'image'] },
-    ],
-  })
 
   let servicesNames = []
   let specialists = []
