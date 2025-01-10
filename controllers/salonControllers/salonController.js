@@ -2071,7 +2071,7 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
   output.ownerAmount = limited.flat_amount / 100
   output.memberAmount = limited.unit_amount / 100
   output.upTo = limited.up_to
-  output.freeTrialDays = 1
+  output.freeTrialDays = 30
   output.stripeCustomer = stripeCustomer
   output.clientSecret = setupIntent.client_secret
   output.teamSize = salon?.dataValues?.teamSize || 0

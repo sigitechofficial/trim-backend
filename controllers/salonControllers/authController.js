@@ -572,7 +572,7 @@ exports.login = async (req, res, next) => {
         { model: wallet, required: false },
       ],
     })
-
+    // return res.json(salon)
     if (!salon || User.verifiedAt === null) {
       response.status = User.verifiedAt === null ? '3' : '2'
       response.message =
@@ -592,11 +592,11 @@ exports.login = async (req, res, next) => {
       }
     } else {
       const isAllDataAvailable =
-        salon.categories.length !== 0 &&
+        // salon.categories.length !== 0 &&
         salon.services.length !== 0 &&
         salon.times.length !== 0 &&
         salon.approvedByAdmin &&
-        salon.connectAccountId &&
+        salon?.wallet?.accountConnected &&
         salon.approvedByAdmin
 
       const hasEmployee = salon.employees.length !== 0
@@ -638,7 +638,7 @@ exports.login = async (req, res, next) => {
         hasWorkingHours: salon.times.length !== 0,
         hasTeamMembers: salon.employees.length !== 0,
         hasSubscription: salon.approvedByAdmin,
-        accountConnected: salon.connectAccountId ? true : false,
+        accountConnected: salon?.wallet?.accountConnected ? true : false,
       }
     }
   } else if (User.userTypeId === 3) {
@@ -976,6 +976,7 @@ exports.session = async (req, res, next) => {
       },
     ],
   })
+  // return res.json(User)
   if (!User.status) {
     return next(
       new appError(
@@ -1066,7 +1067,7 @@ exports.session = async (req, res, next) => {
     ? true
     : User.salonDetails[0].approvedByAdmin
   console.log('🚀 ~ exports.session= ~ isSubscription:', isSubscription)
-  const isaccountConnected = User.salonDetails[0]?.connectAccountId
+  const isaccountConnected = User.salonDetails[0]?.wallet?.accountConnected
     ? true
     : false
   console.log('🚀 ~ exports.session= ~ isaccountConnected:', isaccountConnected)
@@ -1106,7 +1107,9 @@ exports.session = async (req, res, next) => {
         hasSubscription: User?.isExternalEmployee
           ? true
           : User.salonDetails[0].approvedByAdmin,
-        accountConnected: User.salonDetails[0]?.connectAccountId ? true : false,
+        accountConnected: User.salonDetails[0]?.wallet?.accountConnected
+          ? true
+          : false,
       },
     },
     error: '',
