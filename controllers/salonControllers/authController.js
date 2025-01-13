@@ -756,7 +756,7 @@ exports.login = async (req, res, next) => {
   }
 
   response.data.isExternalEmployee = User.isExternalEmployee
-  if (response && response.data && response.data.profileCompletion) {
+  if (response && response.data && response.data.isExternalEmployee) {
     response.data.profileCompletion.hasSubscription = true
   }
 

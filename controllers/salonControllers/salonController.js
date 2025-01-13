@@ -30,6 +30,7 @@ const {
   blockCustomer,
   pushNotification,
   announcement,
+  deviceToken,
   cancelledSubscriptions,
 } = require('../../models')
 const appError = require('../../utils/appError')
@@ -41,6 +42,7 @@ const CustomDate = require('../../utils/currentDay')
 const { sendEvent } = require('../../socket_io')
 const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
+const ThrowNotification = require('../../utils/throwNotification')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -379,7 +381,7 @@ exports.addImages = async (req, res, next) => {
 */
 exports.Types = async (req, res, next) => {
   const { salonDetailId } = req.body
-  const serviceTypes = await serviceType.findAll({ where: { deleted: false } })
+  const serviceTypes = await serviceType.findAll({ where: {} })
   const categories = await category.findAll({
     where: {
       salonDetailId,
@@ -834,15 +836,16 @@ exports.defaultCategories = async (req, res, next) => {
 //* Add multiple categories
 exports.addMultipleCategories = async (req, res, next) => {
   const { categories } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { userId: req?.user?.id } })
+  console.log('------------', req?.user)
+  console.log('------------', salon?.id)
   const Input = categories.filter((cat) => cat.isSelected === true)
-  const finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon.id }))
+  const finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
   const categoriesData = await category.bulkCreate(finalInput)
   return res.json(
     returnFunction('1', 'Categories have been successfully added!', {}, ''),
   )
 }
-
 // Salon's
 exports.getCategories = async (req, res, next) => {
   const userId = req.user.id
@@ -1985,7 +1988,16 @@ exports.fetchNotifications = async (req, res, next) => {
     where: {
       [Op.or]: [{ userId: id }, { to: { [Op.or]: ['salon', 'all'] } }],
     },
-    attributes: [`id`, `at`, `to`, `title`, `body`, `data`, 'type'],
+    attributes: [
+      `id`,
+      `at`,
+      `to`,
+      `title`,
+      `body`,
+      `data`,
+      'type',
+      'repliedAt',
+    ],
   })
 
   const groupedNotifications = notifications.reduce(
@@ -2143,4 +2155,29 @@ exports.clientFeedBackSalon = async (req, res, next) => {
       data: { limit, feedbacks, feedbackCount },
     }),
   )
+}
+
+exports.reviewReply = async (req, res, next) => {
+  await pushNotification.update(
+    { repliedAt: Date.now() },
+    { where: { id: req.body?.appointmentId } },
+  )
+
+  const client = await booking.findOne({
+    where: { id: req.body?.appointmentId },
+    attributes: ['customerId', 'feedback'],
+  })
+  if (client) {
+    client.feedback = req.body?.reply
+    await client.save()
+  }
+  const tokens = await deviceToken.findAll({
+    where: { userId: client?.customerId },
+  })
+
+  // if (tokens && tokens.length > 0) {
+  //   ThrowNotification(tokens)
+  // }
+
+  return res.status(200).json(returnFunction('1', `success`, {}, ''))
 }

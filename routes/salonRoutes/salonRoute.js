@@ -290,5 +290,6 @@ router.patch(
 )
 
 router.get('/cancellation-reasons-for/:type', catchAsync(fetchReasons))
+router.get('/feedback-reply', catchAsync(salonController.reviewReply))
 
 module.exports = router

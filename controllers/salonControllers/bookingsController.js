@@ -630,6 +630,7 @@ exports.bookingDetails = async (req, res, next) => {
     attributes: ['id'],
   })
   const { bookingId } = req.body
+  console.log('🚀 ~ exports.bookingDetails= ~ bookingId:', bookingId)
   let bookings = []
   const bookingData = await booking.findByPk(bookingId, {
     include: [
@@ -678,8 +679,9 @@ exports.bookingDetails = async (req, res, next) => {
     '🚀 ~ exports.bookingDetails= ~ bookingData:',
     // JSON.parse(JSON.stringify(bookingData)),
   )
+  return res.json(bookingData)
   let cardDetails
-  if (bookingData.paymentMethod == 'card') {
+  if (bookingData?.paymentMethod == 'card') {
     cardDetails = await Stripe.retrievePaymentMethod(bookingData.stripeCardId)
   }
   let customerStatus = 'active'
