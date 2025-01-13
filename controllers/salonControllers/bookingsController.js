@@ -432,6 +432,8 @@ exports.salonBookings = async (req, res, next) => {
         WHERE salonDetails.id = employee.salonDetailId
         AND salonDetails.userId = ${userId}
       )`),
+      isExternalEmployee: false,
+      status: true,
     },
     include: [
       {
@@ -590,6 +592,7 @@ exports.getbookingByFilter = async (req, res, next) => {
   })
 
   const salonEmployee = await employee.findAll({
+    where: { isExternalEmployee: false, status: true },
     include: [
       {
         model: salonDetail,
@@ -937,7 +940,10 @@ exports.employeesWithAllServices = async (req, res, next) => {
       },
     },
     attributes: ['employeeId'],
-    include: { model: employee, where: { deleted: false, status: true } },
+    include: {
+      model: employee,
+      where: { deleted: false, status: true, isExternalEmployee: false },
+    },
     group: ['employeeId'],
     having: literal(`COUNT(DISTINCT serviceId) = ${services.length}`),
   })
@@ -967,6 +973,9 @@ exports.employeesWithAllServices = async (req, res, next) => {
           id: {
             [Op.in]: employeeIds,
           },
+          deleted: false,
+          status: true,
+          isExternalEmployee: false,
         },
         attributes: [
           'id',
@@ -988,10 +997,6 @@ exports.employeesWithAllServices = async (req, res, next) => {
           {
             model: time,
             attributes: ['openingTime', 'closingTime', 'day'],
-          },
-          {
-            model: rating,
-            attributes: [],
           },
         ],
       },
