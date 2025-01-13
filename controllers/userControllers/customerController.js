@@ -736,10 +736,6 @@ exports.employeesWithAllServices = async (req, res, next) => {
         ],
         include: [
           {
-            model: rating,
-            attributes: [],
-          },
-          {
             model: time,
             where: { status: true },
             attributes: ['day', 'openingTime', 'closingTime'],

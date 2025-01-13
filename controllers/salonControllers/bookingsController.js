@@ -1179,6 +1179,10 @@ exports.addExtraService = async (req, res, next) => {
   )
 
   console.log('🚀 ~ exports.addExtraService= ~ newServiceIds:', newServiceIds)
+  console.log(
+    '🚀 ~ exports.addExtraService= ~ newServiceIds:',
+    bookingData.total,
+  )
   const findUnAssign = extraServices.find((service) => service.employeeId == 0)
   let status = 'book'
   if (findUnAssign) status = 'pending'
@@ -1254,7 +1258,7 @@ exports.addExtraService = async (req, res, next) => {
     client: `${bookingData.user?.firstName} ${bookingData.user?.lastName}`,
     clientEmail: `${bookingData.user?.email}`,
     clientImage: `${bookingData.user?.image}`,
-    total: bookingData.total,
+    total: `${bookingData.total}`,
     services: servicesNames,
     specialists: specialists.length > 0 ? [...new Set(specialists)] : [''],
   }
@@ -1269,7 +1273,7 @@ exports.addExtraService = async (req, res, next) => {
 
   const socketInputService = {
     event: 'update-service',
-    data: { type: 'add', job: newJobs, total: bookingData.total },
+    data: { type: 'add', job: newJobs, total: `${bookingData.total}` },
     bookingId: bookingData.id,
   }
   sendEvent(`${bookingData.salonDetailId}S`, socketInputService)
@@ -1327,6 +1331,7 @@ function scheduleJobs(startTime, jobs, jobDate, bookingId, employeeId) {
   */
 exports.getSalonCustomer = async (req, res, next) => {
   const userId = req.user.id
+
   const SalonDetail = await salonDetail.findOne({
     where: {
       userId,
