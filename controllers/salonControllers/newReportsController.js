@@ -104,6 +104,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
     salonDetailId: salon.id,
     // status: 'complete'
     deleted: false,
+    isExternalEmployee: false,
   }
 
   const startDate = req.query.startDate
@@ -144,7 +145,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
         literal(
           `(SELECT GROUP_CONCAT(job.serviceId)
             FROM jobs AS job
-            WHERE job.employeeId = employee.id AND job.status = 'complete' AND job.on BETWEEN '${startDate}' AND '${endDate}')`, // AND job.status = 'complete'
+            WHERE job.employeeId = employee.id AND job.status = 'complete' AND job.on BETWEEN '${startDate}' AND '${endDate} AND job.status = 'complete'')`,
         ),
         'servicesProvided',
       ],
