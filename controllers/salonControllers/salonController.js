@@ -2158,18 +2158,19 @@ exports.clientFeedBackSalon = async (req, res, next) => {
 }
 
 exports.reviewReply = async (req, res, next) => {
-  await pushNotification.update(
-    { repliedAt: Date.now() },
-    { where: { id: req.body?.appointmentId } },
-  )
-
   const client = await booking.findOne({
     where: { id: req.body?.appointmentId },
-    attributes: ['customerId', 'feedback'],
+    attributes: ['id', 'customerId', 'feedback'],
   })
   if (client) {
-    client.feedback = req.body?.reply
-    await client.save()
+    await pushNotification.update(
+      { feedback: req.body.reply },
+      { where: { id: client?.id } },
+    )
+    await pushNotification.update(
+      { repliedAt: new Date() },
+      { where: { id: req.body?.reviewId } },
+    )
   }
   const tokens = await deviceToken.findAll({
     where: { userId: client?.customerId },
