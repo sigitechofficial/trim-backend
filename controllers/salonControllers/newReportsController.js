@@ -175,6 +175,7 @@ exports.totalBookings = async (req, res, next) => {
   const condition = {
     salonDetailId: salon.id,
     deleted: false,
+    isExternalEmployee: false,
   }
 
   let queryString = `(SELECT COUNT(*) FROM jobs WHERE jobs.employeeId = employee.id AND jobs.status = 'complete')`
@@ -921,6 +922,8 @@ exports.averageJobsReport = async (req, res, next) => {
   const appointments = await employee.findAll({
     where: {
       salonDetailId: salonData.id,
+      deleted: false,
+      isExternalEmployee: false,
     },
     attributes: [
       'id',
