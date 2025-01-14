@@ -39,7 +39,7 @@ module.exports = async function Throw(
   pushNotification.create(input)
 
   const message = {
-    tokens: to, // Use tokens for multiple devices
+    tokens: [...new Set(to)], // Use tokens for multiple devices
     notification,
     data: validData, // Ensure data is a valid object
   }

@@ -291,5 +291,9 @@ router.patch(
 
 router.get('/cancellation-reasons-for/:type', catchAsync(fetchReasons))
 router.post('/feedback-reply', catchAsync(salonController.reviewReply))
+router.post(
+  '/send-permotional-notifications/:audienceType',
+  catchAsync(salonController.customPermotionalNotificaiton),
+)
 
 module.exports = router
