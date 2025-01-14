@@ -1,7 +1,7 @@
 const origin = '655 South Hope Street 901 Los Angeles California 90017'
 const address = '560 Juan J Jimenez street, San Juan Puerto Rico 00918'
-const copyRight = 'Copyright © 2023 trim'
-const supportEmail = 'support@trim.com'
+const copyRight = 'Copyright @ 2025 trimworldwide'
+const supportEmail = 'support@trimworldwide.com'
 const supportNumber = '017874854624'
 
 exports.footer = ` <table
