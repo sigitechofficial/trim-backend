@@ -431,9 +431,12 @@ exports.verifyOTP = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   const { email, password, dvToken } = req.body
 
+  if (!req.body?.loginBy) req.body.loginBy = 'email'
   if (!email) {
     // !password
-    throw new appError('Please provide both Email and Password', 400)
+    throw new appError('Please provide Email', 200)
+  } else if (req.body.loginBy == 'email' && !password) {
+    throw new appError('Please provide Password', 200)
   }
 
   const User = await user.findOne({
@@ -455,7 +458,7 @@ exports.login = async (req, res, next) => {
     return res.json(
       returnFunction(
         '6',
-        `No account found with this email. Please check your email or sign up.`,
+        `No account found with this email. Please check your email or sign up`,
         {},
         '',
       ),
@@ -479,10 +482,18 @@ exports.login = async (req, res, next) => {
       ),
     )
   }
+  if (!User.status) {
+    return next(
+      new appError(
+        'Your account is currently restricted. Please contact support for further assistance.',
+        200,
+      ),
+    )
+  }
 
   // console.log(JSON.parse(JSON.stringify(User)))
 
-  if (!password && User.signedFrom == 'email') {
+  if (req.body?.loginBy != User?.signedFrom) {
     return next(
       new appError(
         `An account with this email (${email}) is not registered by this singin method`,
@@ -497,15 +508,6 @@ exports.login = async (req, res, next) => {
   ) {
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
-    )
-  }
-
-  if (!User.status) {
-    return next(
-      new appError(
-        'Your account is currently restricted. Please contact support for further assistance.',
-        200,
-      ),
     )
   }
 
@@ -756,7 +758,7 @@ exports.login = async (req, res, next) => {
   }
 
   response.data.isExternalEmployee = User.isExternalEmployee
-  if (response && response.data && response.data.profileCompletion) {
+  if (response && response.data && response.data.isExternalEmployee) {
     response.data.profileCompletion.hasSubscription = true
   }
 

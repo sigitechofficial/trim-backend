@@ -30,6 +30,7 @@ const {
   blockCustomer,
   pushNotification,
   announcement,
+  deviceToken,
   cancelledSubscriptions,
 } = require('../../models')
 const appError = require('../../utils/appError')
@@ -41,6 +42,8 @@ const CustomDate = require('../../utils/currentDay')
 const { sendEvent } = require('../../socket_io')
 const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
+const ThrowNotification = require('../../utils/throwNotification')
+const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -379,7 +382,7 @@ exports.addImages = async (req, res, next) => {
 */
 exports.Types = async (req, res, next) => {
   const { salonDetailId } = req.body
-  const serviceTypes = await serviceType.findAll({ where: { deleted: false } })
+  const serviceTypes = await serviceType.findAll({ where: {} })
   const categories = await category.findAll({
     where: {
       salonDetailId,
@@ -834,15 +837,16 @@ exports.defaultCategories = async (req, res, next) => {
 //* Add multiple categories
 exports.addMultipleCategories = async (req, res, next) => {
   const { categories } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { userId: req?.user?.id } })
+  console.log('------------', req?.user)
+  console.log('------------', salon?.id)
   const Input = categories.filter((cat) => cat.isSelected === true)
-  const finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon.id }))
+  const finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
   const categoriesData = await category.bulkCreate(finalInput)
   return res.json(
     returnFunction('1', 'Categories have been successfully added!', {}, ''),
   )
 }
-
 // Salon's
 exports.getCategories = async (req, res, next) => {
   const userId = req.user.id
@@ -1985,7 +1989,16 @@ exports.fetchNotifications = async (req, res, next) => {
     where: {
       [Op.or]: [{ userId: id }, { to: { [Op.or]: ['salon', 'all'] } }],
     },
-    attributes: [`id`, `at`, `to`, `title`, `body`, `data`, 'type'],
+    attributes: [
+      `id`,
+      `at`,
+      `to`,
+      `title`,
+      `body`,
+      `data`,
+      'type',
+      'repliedAt',
+    ],
   })
 
   const groupedNotifications = notifications.reduce(
@@ -2143,4 +2156,110 @@ exports.clientFeedBackSalon = async (req, res, next) => {
       data: { limit, feedbacks, feedbackCount },
     }),
   )
+}
+
+exports.reviewReply = async (req, res, next) => {
+  const client = await booking.findOne({
+    where: { id: req.body?.appointmentId },
+    attributes: [
+      'id',
+      'customerId',
+      'feedback',
+      [
+        literal(
+          '(SELECT `salonName` FROM salonDetails WHERE salonDetails.id = booking.salonDetailId ORDER BY createdAt ASC LIMIT 1)',
+        ),
+        'salonName',
+      ],
+      [
+        literal(
+          '(SELECT `coverImage` FROM salonDetails WHERE salonDetails.id = booking.salonDetailId ORDER BY createdAt ASC LIMIT 1)',
+        ),
+        'image',
+      ],
+    ],
+  })
+  console.log('🚀 ~ exports.reviewReply= ~ client:', client)
+  if (client) {
+    await pushNotification.update(
+      { feedback: req.body.reply },
+      { where: { id: client?.id } },
+    )
+    await pushNotification.update(
+      { repliedAt: new Date() },
+      { where: { id: req.body?.reviewId } },
+    )
+  }
+  const dvTokens = await deviceToken.findAll({
+    where: { userId: client?.customerId },
+  })
+
+  if (dvTokens && dvTokens.length > 0) {
+    const tokens = dvTokens?.map((ele) => {
+      return ele?.tokenId
+    })
+
+    const customerNotification = {
+      title: `Salon Reply`,
+      body: `${req.body?.reply}. From  ${client?.dataValues?.salonName}`,
+    }
+    const data = {
+      appointment: client?.id,
+      name: `${client?.dataValues?.salonName}`,
+      image: `${client?.dataValues?.image}`,
+    }
+    ThrowNotification(tokens, customerNotification, data, client?.customerId)
+  }
+
+  return res.status(200).json(returnFunction('1', `success`, {}, ''))
+}
+
+//* Slon custom notification
+exports.customPermotionalNotificaiton = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req?.user?.id },
+    attributes: ['id', 'coverImage', 'salonName'],
+  })
+
+  const Notification = {
+    title: `${req.body.title}`,
+    body: `${req.body?.body}`,
+  }
+
+  const data = {
+    name: `${salon?.salonName}`,
+    image: `${salon?.coverImage}`,
+  }
+  if (req.params?.audienceType == 'staff' && req.body?.ids?.length > 0) {
+    const staffCondition = {}
+    const staffTokens = await deviceToken.findAll({
+      where: { userId: req?.body?.ids },
+    })
+    if (staffTokens && staffTokens.length > 0) {
+      const tokens = staffTokens?.map((ele) => {
+        return ele?.tokenId
+      })
+
+      const staffIds = [...new Set(req?.body?.ids || [])]
+
+      const notificationInput =
+        staffIds.length > 0
+          ? staffIds.map((id) => ({
+              userId: id,
+              type: 'permotional',
+              at: Date.now(),
+              title: Notification.title,
+              body: Notification.body,
+            }))
+          : []
+
+      if (notificationInput.length > 0)
+        pushNotification.bulkCreate(notificationInput)
+
+      ThrowSalonPermotionalNotification(tokens, Notification, data)
+    }
+  }
+  // console.log('🚀 ~ exports.reviewReply= ~ client:', client)
+
+  return res.status(200).json(returnFunction('1', `success`, {}, ''))
 }

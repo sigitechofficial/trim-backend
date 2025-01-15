@@ -25,6 +25,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('appointment', 'rating', 'admin', 'permotional'),
       defaultValue: 'appointment',
     },
+    repliedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   })
 
   return pushNotification
