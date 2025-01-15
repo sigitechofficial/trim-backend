@@ -1,6 +1,6 @@
 const origin = '655 South Hope Street 901 Los Angeles California 90017'
-const address = '560 Juan J Jimenez street, San Juan Puerto Rico 00918'
-const copyRight = 'Copyright @ 2025 trimworldwide'
+const address = '128 City Road, London, United Kingdom, EC1V 2NX'
+const copyRight = 'Copyright @ 2025 trim'
 const supportEmail = 'support@trimworldwide.com'
 const supportNumber = '017874854624'
 
@@ -70,7 +70,7 @@ width="100%"
                 "
               >
                 <p>
-                  If you have any questions or need help,  please check our FAQ or email ${supportEmail}
+                  If you have any questions or need help, please check our FAQ or email <a href="mailto:${supportEmail}" style="color: black; text-decoration: none;">${supportEmail}</a>.
                   <br /><br />
                   Thank you for choosing our services!
                 </p>
@@ -354,8 +354,7 @@ width="100%"
                       "
                     >
                       <p style="margin: 0">
-                        Edif. Gate Center, San Francisco, Cl. 67
-                        Panamá
+                        ${address}
                       </p>
                     </div>
                   </td>

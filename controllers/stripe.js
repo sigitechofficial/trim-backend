@@ -920,6 +920,38 @@ async function isConnectAccountComplete(accountId) {
     throw error
   }
 }
+
+async function expireManually(subscription_id) {
+  try {
+    // Get the current date
+    const currentDate = new Date()
+
+    // Subtract 1 day from the current date (you can adjust this for a different period)
+    const previousDate = new Date(currentDate)
+    previousDate.setDate(currentDate.getDate() - 1) // 1 day before current date
+
+    // Convert the previous date to a Unix timestamp in seconds
+    const previousTimestamp = Math.floor(previousDate.getTime() / 1000)
+
+    // Update the subscription with the expired date
+    const expiredSubscription = await stripe.subscriptions.update(
+      subscription_id, // Replace with your subscription ID
+      {
+        current_period_end: previousTimestamp, // Set to previous timestamp
+      },
+    )
+
+    console.log('Subscription expired:', expiredSubscription)
+    return false
+  } catch (error) {
+    console.error(
+      `Error retrieving Stripe subscription ${subscription_id}:`,
+      error,
+    )
+    throw error
+  }
+}
+
 module.exports = {
   sessionCheckoutPaymnet,
   // customer
@@ -959,6 +991,7 @@ module.exports = {
   getPriceById,
   createTieredPrice,
   setupIntent,
+  expireManually,
 }
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination

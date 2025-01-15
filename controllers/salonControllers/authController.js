@@ -584,6 +584,7 @@ exports.login = async (req, res, next) => {
       response.data.profileCompletion = {
         salonDetailId: '',
         salonName: '',
+        subscriptionLatestPaymentStatus: '',
         hasBusinessDetails: false,
         hasBusinessAddress: false,
         hasServiceList: false,
@@ -634,6 +635,7 @@ exports.login = async (req, res, next) => {
       response.data.profileCompletion = {
         salonDetailId: salon.id ?? '',
         salonName: salon.salonName,
+        subscriptionLatestPaymentStatus: salon?.subscriptionLatestPaymentStatus,
         hasBusinessDetails: salon ? true : false,
         hasBusinessAddress: salon.addressDB !== null,
         hasServiceList: salon.services.length !== 0,
@@ -1004,6 +1006,7 @@ exports.session = async (req, res, next) => {
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
+          subscriptionLatestPaymentStatus: '',
           hasBusinessDetails: false,
           hasBusinessAddress: false,
           hasServiceList: false,
@@ -1032,6 +1035,7 @@ exports.session = async (req, res, next) => {
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
+          subscriptionLatestPaymentStatus: '',
           hasBusinessDetails: false,
           hasBusinessAddress: false,
           hasServiceList: false,
@@ -1101,6 +1105,8 @@ exports.session = async (req, res, next) => {
       profileCompletion: {
         salonDetailId: User.salonDetails[0].id ?? '',
         salonName: User.salonDetails[0].salonName,
+        subscriptionLatestPaymentStatus:
+          User.salonDetails[0].subscriptionLatestPaymentStatus,
         hasBusinessDetails: User.salonDetails[0] ? true : false,
         hasBusinessAddress: User.salonDetails[0].addressDB !== null,
         hasServiceList: User.salonDetails[0].services.length !== 0,

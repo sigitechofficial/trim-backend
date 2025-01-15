@@ -1,13 +1,13 @@
 const origin = '655 South Hope Street 901 Los Angeles California 90017'
-const address = '560 Juan J Jimenez street, San Juan Puerto Rico 00918'
-const copyRight = 'Copyright © 2023 trim'
+const address = '128 City Road, London, United Kingdom, EC1V 2NX'
+const copyRight = 'Copyright © 2025 trim'
 const supportEmail = 'support@trimworldwide.com'
 const supportNumber = '017874854624'
 
 exports.newFooter = `<tr>
             <td style="padding: 20px; text-align: center;">
                 <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px;">
-                    If you have any questions or need help, please check our FAQ or email <a href="mailto:support@trimworldwide.com" style="color: black; text-decoration: none;">support@trimworldwide.com</a>.
+                    If you have any questions or need help, please check our FAQ or email <a href="mailto:${supportEmail}" style="color: black; text-decoration: none;">${supportEmail}</a>.
                 </div>
             </td>
         </tr>
@@ -33,10 +33,10 @@ exports.newFooter = `<tr>
                     Follow Us
                 </div>
                 <div style="margin-top: 10px; font-size: 14px; font-family: 'Switzer', sans-serif; font-weight: 500;">
-                    128 City Road, London, United Kingdom, EC1V 2NX
+                    ${address}
                 </div>
                 <div style="margin-top: 5px; font-size: 13px; font-family: 'Switzer', sans-serif; font-weight: 400;">
-                    Copyright © 2024 TrimWorldWide
+                    ${copyRight}
                 </div>
                 <div style="font-size: 13px; font-family: 'Switzer', sans-serif; font-weight: 400; text-decoration: underline;">
                     <a href="#" style="color: black; text-decoration: underline;"></a>
