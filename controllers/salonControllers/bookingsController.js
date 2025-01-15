@@ -679,7 +679,7 @@ exports.bookingDetails = async (req, res, next) => {
     '🚀 ~ exports.bookingDetails= ~ bookingData:',
     // JSON.parse(JSON.stringify(bookingData)),
   )
-  return res.json(bookingData)
+  // return res.json(bookingData)
   let cardDetails
   if (bookingData?.paymentMethod == 'card') {
     cardDetails = await Stripe.retrievePaymentMethod(bookingData.stripeCardId)

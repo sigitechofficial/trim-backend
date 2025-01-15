@@ -68,6 +68,14 @@ exports.addSalonDetail = async (req, res, next) => {
     addressDetail,
   } = req.body
   const addressData = await addressDBS.create(addressDetail)
+  const salon = await salonDetail.findOne({ where: { userId } })
+  if (salon) {
+    addressDBS.destroy({ where: { id: addressData.id } })
+    console.log('---------------------> 2nd Attempt')
+    return res.json(
+      returnFunction('1', 'Salon Details Successfully Added!', salon, ''),
+    )
+  }
   const newEntry = await salonDetail.create({
     salonName,
     description,
