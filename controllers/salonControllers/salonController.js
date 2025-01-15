@@ -2225,7 +2225,7 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
     name: `${salon?.salonName}`,
     image: `${salon?.coverImage}`,
   }
-  if (req.params?.audienceType == 'staff' && req.body?.ids?.length > 0) {
+  if (req.params?.audienceType == 'staff' || req.body?.ids?.length > 0) {
     const staffCondition = {}
     const staffTokens = await deviceToken.findAll({
       where: { userId: req?.body?.ids },
@@ -2252,6 +2252,16 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
         pushNotification.bulkCreate(notificationInput)
 
       ThrowSalonPermotionalNotification(tokens, Notification, data)
+    }
+  } else if (req.params?.audienceType == 'client') {
+    let { ids, clientType } = req.body
+    if (clientType != 'custom' && ids?.length < 1) {
+      if (clientType == 'all') {
+        const clientList = await booking.findAll({
+          where: { salonDetailId: salon.id, customerId: { [Op.ne]: null } },
+          attributes: ['customerId', 'customerStatus'],
+        })
+      }
     }
   }
   // console.log('🚀 ~ exports.reviewReply= ~ client:', client)
