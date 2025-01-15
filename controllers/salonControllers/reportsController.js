@@ -50,10 +50,7 @@ exports.peakTimesReport = async (req, res, next) => {
   }
 
   const appointments = await booking.findAll({
-    where: {
-      // salonDetailId: salonId,//TODO
-      // status: ''
-    },
+    where: condition,
     attributes: [
       'id',
       'status',
@@ -65,12 +62,6 @@ exports.peakTimesReport = async (req, res, next) => {
         ),
         'serviceCount',
       ],
-    ],
-    include: [
-      {
-        model: jobs,
-        attributes: [],
-      },
     ],
   })
 

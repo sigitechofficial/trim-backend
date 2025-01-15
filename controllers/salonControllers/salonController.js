@@ -232,18 +232,13 @@ exports.accountAdded = async (req, res, next) => {
   const userId = req.user.id
 
   let salonData = await salonDetail.findOne({
-    where: { userId },
-    include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
+    where: { userId: userId },
   })
 
-  let salonWallet = await wallet.findOne({
-    where: {
-      salonDetailId: salonData.id,
-    },
-  })
-
-  salonWallet.accountConnected = true
-  await salonWallet.save()
+  await wallet.update(
+    { accountConnected: true },
+    { where: { salonDetailId: salonData.id } },
+  )
 
   return res.json(
     returnFunction('1', 'Account Connected Successfully!', {}, ''),
