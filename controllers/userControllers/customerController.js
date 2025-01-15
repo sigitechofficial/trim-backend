@@ -99,7 +99,7 @@ exports.notificationTesting = async (req, res, next) => {
     body: `Your appointment has been confirmed. Looking forward to seeing you!`,
   }
 
-  if (req.body?.subId) expireManually(req?.body?.subId)
+  if (req.body?.subId) Stripe.expireManually(req?.body?.subId)
 
   // ThrowNotification(req.body.to, customerNotification, {
   //   appointment: 1,
