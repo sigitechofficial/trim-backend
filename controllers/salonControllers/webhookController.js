@@ -36,10 +36,14 @@ exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
   console.log('🚀🚀🚀 ~~~~~~~~~~ >  EVENT TYPE }:', event.type)
   switch (event.type) {
     case 'invoice.payment_succeeded':
-      await handleInvoicePayment(event.data.object, 'success', event.type)
+      await handleInvoicePayment(
+        event.data.object,
+        'success',
+        'payment_succeeded',
+      )
       break
     case 'invoice.payment_failed':
-      await handleInvoicePayment(event.data.object, 'fail', event.type)
+      await handleInvoicePayment(event.data.object, 'fail', 'payment_failed')
       break
     // case 'customer.subscription.created':
     //   await handleSubscriptionCreated(event.data.object)
