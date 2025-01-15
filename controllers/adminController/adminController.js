@@ -206,7 +206,9 @@ exports.updateServiceTypes = async (req, res, next) => {
 
 exports.dashboard = async (req, res, next) => {
   // salons or subscriptions
-  const totalSalon = await salonDetail.count()
+  const totalSalon = await salonDetail.count({
+    where: { isExternalEmployee: false },
+  })
   //appointments
   const upcommingConfirmAppointments = await booking.count({
     where: { status: 'book' },
@@ -221,7 +223,9 @@ exports.dashboard = async (req, res, next) => {
     where: { status: 'pending' },
   })
   // customers
-  const totalCustomers = await user.count({ where: { userTypeId: 1 } })
+  const totalCustomers = await user.count({
+    where: { userTypeId: 1, deleted: 0 },
+  })
 
   //revenue
   const revenue = await booking.sum('total', { where: { status: 'complete' } })
