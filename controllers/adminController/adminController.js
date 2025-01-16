@@ -207,7 +207,7 @@ exports.updateServiceTypes = async (req, res, next) => {
 exports.dashboard = async (req, res, next) => {
   // salons or subscriptions
   const totalSalon = await salonDetail.count({
-    where: { isExternalEmployee: false },
+    where: { isExternalEmployee: { [Op.or]: [false, null] } },
   })
   //appointments
   const upcommingConfirmAppointments = await booking.count({
