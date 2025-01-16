@@ -297,7 +297,8 @@ exports.dashboard = async (req, res, next) => {
       totalAppointments:
         completeAppointments +
         unAssignedAppointments +
-        upcommingConfirmAppointments,
+        upcommingConfirmAppointments +
+        cancelAppointments,
       totalCustomers,
       revenue: revenue || 0,
       dashboardBarChartData,
