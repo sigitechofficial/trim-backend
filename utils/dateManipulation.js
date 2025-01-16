@@ -153,3 +153,18 @@ exports.calculateMinutes = (openingTime, closingTime, status) => {
 
   return differenceInMinutes
 }
+
+// Get a Date Range
+exports.getDateRange = () => {
+  const today = new Date()
+  const last30Days = new Date()
+
+  last30Days.setDate(today.getDate() - 30)
+
+  const formatDate = (date) => date.toISOString().split('T')[0]
+
+  return {
+    today: formatDate(today),
+    last30Days: formatDate(last30Days),
+  }
+}
