@@ -2206,6 +2206,7 @@ exports.reviewReply = async (req, res, next) => {
       title: `Salon Reply`,
       body: `${req.body?.reply}. From  ${client?.dataValues?.salonName}`,
     }
+
     const data = {
       appointment: client?.id,
       name: `${client?.dataValues?.salonName}`,
@@ -2218,12 +2219,16 @@ exports.reviewReply = async (req, res, next) => {
 }
 
 //* Slon custom notification
+
 exports.customPermotionalNotificaiton = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
     attributes: ['id', 'coverImage', 'salonName'],
   })
-
+  console.log(
+    '🚀 ~ exports.customPermotionalNotificaiton= ~ req.body:',
+    req.body,
+  )
   const Notification = {
     title: `${req.body.title}`,
     body: `${req.body?.body}`,
@@ -2234,13 +2239,22 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
     image: `${salon?.coverImage}`,
   }
   let customerIds = []
+  let clientList = []
+
+  if (req.body?.clientType) {
+    //TODO because Danish already uploaded app using (All clients .... ) wrong keys will change next monday
+    let { clientType } = req.body
+    if (clientType === 'All clients') req.body.clientType = 'all'
+    else if (clientType === 'Recent clients') req.body.clientType = 'recent'
+    else if (clientType === 'Frequent clients') req.body.clientType = 'frequent'
+    else if (clientType === 'Custom clients') req.body.clientType = 'custom'
+  }
   if (
     req.params?.audienceType == 'client' &&
     req.body?.clientType != 'custom' &&
     req.body.ids?.length < 1
   ) {
     let { ids, clientType } = req.body
-    let clientList
     if (clientType == 'all') {
       clientList = await booking.findAll({
         where: { salonDetailId: salon.id, customerId: { [Op.ne]: null } },
@@ -2279,8 +2293,9 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
         }),
       })
     }
+
     customerIds =
-      clientList.length > 0
+      clientList && clientList.length > 0
         ? clientList?.map((ele) => {
             return ele?.customerId
           })
@@ -2298,10 +2313,19 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
       const userTokens = await deviceToken.findAll({
         where: { userId: userIds },
       })
+      console.log(
+        '🚀 ~ exports.customPermotionalNotificaiton= ~ userIds:',
+        userIds,
+      )
       if (userTokens && userTokens.length > 0) {
         const tokens = userTokens?.map((ele) => {
           return ele?.tokenId
         })
+
+        console.log(
+          '🚀 ~ exports.customPermotionalNotificaiton= ~ tokens:',
+          tokens,
+        )
 
         const notificationInput =
           userIds.length > 0

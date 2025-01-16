@@ -209,19 +209,23 @@ exports.dashboard = async (req, res, next) => {
   const totalSalon = await salonDetail.count({
     where: { isExternalEmployee: { [Op.or]: [false, null] } },
   })
-  //appointments
+
   const upcommingConfirmAppointments = await booking.count({
     where: { status: 'book' },
   })
+
   const completeAppointments = await booking.count({
     where: { status: 'complete' },
   })
+
   const cancelAppointments = await booking.count({
     where: { status: 'cancel' },
   })
+
   const unAssignedAppointments = await booking.count({
     where: { status: 'pending' },
   })
+
   // customers
   const totalCustomers = await user.count({
     where: { userTypeId: 1, deleted: 0 },
@@ -258,7 +262,6 @@ exports.dashboard = async (req, res, next) => {
     where: { createdAt: { [Op.gte]: sixMonthsAgo } },
   })
 
-  //Graphs
   const dashboardBarChartData = {
     labels: [
       'Jan',
