@@ -2233,42 +2233,91 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
     name: `${salon?.salonName}`,
     image: `${salon?.coverImage}`,
   }
-  if (req.params?.audienceType == 'staff' || req.body?.ids?.length > 0) {
-    const staffCondition = {}
-    const staffTokens = await deviceToken.findAll({
-      where: { userId: req?.body?.ids },
-    })
-    if (staffTokens && staffTokens.length > 0) {
-      const tokens = staffTokens?.map((ele) => {
-        return ele?.tokenId
-      })
-
-      const staffIds = [...new Set(req?.body?.ids || [])]
-
-      const notificationInput =
-        staffIds.length > 0
-          ? staffIds.map((id) => ({
-              userId: id,
-              type: 'permotional',
-              at: Date.now(),
-              title: Notification.title,
-              body: Notification.body,
-            }))
-          : []
-
-      if (notificationInput.length > 0)
-        pushNotification.bulkCreate(notificationInput)
-
-      ThrowSalonPermotionalNotification(tokens, Notification, data)
-    }
-  } else if (req.params?.audienceType == 'client') {
+  let customerIds = []
+  if (
+    req.params?.audienceType == 'client' &&
+    req.body?.clientType != 'custom' &&
+    req.body.ids?.length < 1
+  ) {
     let { ids, clientType } = req.body
-    if (clientType != 'custom' && ids?.length < 1) {
-      if (clientType == 'all') {
-        const clientList = await booking.findAll({
-          where: { salonDetailId: salon.id, customerId: { [Op.ne]: null } },
-          attributes: ['customerId', 'customerStatus'],
+    let clientList
+    if (clientType == 'all') {
+      clientList = await booking.findAll({
+        where: { salonDetailId: salon.id, customerId: { [Op.ne]: null } },
+        attributes: [[fn('DISTINCT', col('customerId')), 'customerId']],
+      })
+    } else if (clientType == 'recent') {
+      const { today, last30Days } = dateManipulation.getDateRange()
+      clientList = await booking.findAll({
+        where: {
+          salonDetailId: salon.id,
+          customerId: { [Op.ne]: null },
+          customerStatus: 'new',
+          on: {
+            [Op.between]: [last30Days, today],
+          },
+        },
+        attributes: [[fn('DISTINCT', col('customerId')), 'customerId']],
+      })
+    } else if (clientType == 'frequent') {
+      const { today, last30Days } = dateManipulation.getDateRange()
+      clientList = await booking.findAll({
+        where: {
+          salonDetailId: salon.id,
+          customerId: { [Op.ne]: null },
+          on: {
+            [Op.between]: [last30Days, today],
+          },
+        },
+        attributes: [
+          'customerId',
+          [fn('COUNT', col('customerId')), 'bookingCount'],
+        ],
+        group: ['customerId'],
+        having: where(fn('COUNT', col('customerId')), {
+          [Op.gte]: 2, // At least 2 bookings
+        }),
+      })
+    }
+    customerIds =
+      clientList.length > 0
+        ? clientList?.map((ele) => {
+            return ele?.customerId
+          })
+        : []
+    req.body.ids = customerIds
+    // return res.json(req.body.ids)
+  }
+  console.log(
+    '🚀 ~ exports.customPermotionalNotificaiton= ~ req.body?.ids:',
+    req.body?.ids,
+  )
+  if (req.params?.audienceType == 'staff' || req.body?.ids?.length > 0) {
+    const userIds = [...new Set(req?.body?.ids || [])]
+    if (userIds.length > 0) {
+      const userTokens = await deviceToken.findAll({
+        where: { userId: userIds },
+      })
+      if (userTokens && userTokens.length > 0) {
+        const tokens = userTokens?.map((ele) => {
+          return ele?.tokenId
         })
+
+        const notificationInput =
+          userIds.length > 0
+            ? userIds.map((id) => ({
+                userId: id,
+                type: 'permotional',
+                at: Date.now(),
+                title: Notification.title,
+                body: Notification.body,
+              }))
+            : []
+
+        if (notificationInput.length > 0)
+          pushNotification.bulkCreate(notificationInput)
+
+        ThrowSalonPermotionalNotification(tokens, Notification, data)
       }
     }
   }
