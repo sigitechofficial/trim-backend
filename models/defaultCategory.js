@@ -1,19 +1,18 @@
 module.exports = (sequelize, DataTypes) => {
   const defaultCategory = sequelize.define('defaultCategory', {
-
     categoryName: {
       type: DataTypes.STRING(),
-      allowNull: false
+      allowNull: false,
     },
     color: {
       type: DataTypes.STRING(),
-      allowNull: true
+      allowNull: true,
     },
     description: {
       type: DataTypes.TEXT,
-      allowNull: true
-    }
-  });
- 
-  return defaultCategory;
-};
+      allowNull: true,
+    },
+  })
+
+  return defaultCategory
+}

@@ -882,10 +882,6 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
         ],
         include: [
           {
-            model: rating,
-            attributes: [],
-          },
-          {
             model: socialLink,
             attributes: [`id`, `platform`, `url`],
           },
@@ -1070,10 +1066,6 @@ exports.fetchSalonEmployees = async (req, res, next) => {
       ],
     ],
     include: [
-      {
-        model: rating,
-        attributes: [],
-      },
       {
         model: salonDetail,
         attributes: [`salonName`],
@@ -1281,7 +1273,7 @@ exports.financialPerformanceReport = async (req, res, next) => {
 
 exports.clientFileReport = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
-  let startDate = req.query.startDate || '2023-12-01'
+  let startDate = req.query.startDate || '2024-12-01'
   let endDate = req.query.endDate || currentDay.currentDateOnly
 
   const bookingCondition = { on: { [Op.between]: [startDate, endDate] } }
@@ -2030,6 +2022,7 @@ exports.addReasons = async (req, res, next) => {
     }),
   )
 }
+
 //^ 2.Fetch Reasons  ----------------------------
 
 exports.fetchReasons = async (req, res, next) => {
