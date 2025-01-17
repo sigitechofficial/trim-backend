@@ -146,8 +146,8 @@ module.exports = (sequelize, DataTypes) => {
     salonDetail.hasMany(models.subscriptions)
     models.subscriptions.belongsTo(salonDetail)
 
-    salonDetail.hasMany(models.slaonProfile)
-    models.slaonProfile.belongsTo(salonDetail)
+    salonDetail.hasMany(models.salonProfiles)
+    models.salonProfiles.belongsTo(salonDetail)
   }
 
   return salonDetail

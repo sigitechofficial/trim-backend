@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  const slaonProfile = sequelize.define('slaonProfile', {
+  const salonProfiles = sequelize.define('salonProfiles', {
     hasBusinessDetails: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
@@ -30,5 +30,5 @@ module.exports = (sequelize, DataTypes) => {
     },
   })
 
-  return slaonProfile
+  return salonProfiles
 }

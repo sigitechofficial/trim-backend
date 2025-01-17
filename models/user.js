@@ -143,8 +143,8 @@ module.exports = (sequelize) => {
     user.hasMany(models.pushNotification)
     models.pushNotification.belongsTo(user)
 
-    user.hasMany(models.slaonProfile)
-    models.slaonProfile.belongsTo(user)
+    user.hasMany(models.salonProfiles)
+    models.salonProfiles.belongsTo(user)
 
     user.hasMany(models.employeeProfile)
     models.employeeProfile.belongsTo(user)
