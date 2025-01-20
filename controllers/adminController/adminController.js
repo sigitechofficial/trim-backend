@@ -206,42 +206,97 @@ exports.updateServiceTypes = async (req, res, next) => {
 
 exports.dashboard = async (req, res, next) => {
   // salons or subscriptions
+
+  const { startDate, endDate } = req.query
+
+  // Initialize the date filter
+  let dateFilter = {}
+  let customerFilter = { userTypeId: 1, deleted: 0 }
+  let salonFilter = { isExternalEmployee: { [Op.or]: [false, null] } }
+  // Check if both startDate and endDate are provided and not empty
+  if (startDate && endDate) {
+    dateFilter = {
+      on: {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      },
+    }
+    customerFilter = {
+      createdAt: {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      },
+    }
+    salonFilter = {
+      createdAt: {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      },
+    }
+  } else if (startDate) {
+    // If only startDate is provided
+    dateFilter = {
+      on: {
+        [Op.gte]: new Date(startDate),
+      },
+    }
+  } else if (endDate) {
+    // If only endDate is provided
+    dateFilter = {
+      on: {
+        [Op.lte]: new Date(endDate),
+      },
+    }
+  }
+
   const totalSalon = await salonDetail.count({
-    where: { isExternalEmployee: { [Op.or]: [false, null] } },
+    where: salonFilter,
   })
 
-  const upcommingConfirmAppointments = await booking.count({
-    where: { status: 'book' },
-  })
+  const countAppointments = async (status) => {
+    const whereCondition = {
+      status,
+      ...dateFilter, // Spread the dateFilter if it's not empty
+    }
+    return await booking.count({ where: whereCondition })
+  }
 
-  const completeAppointments = await booking.count({
-    where: { status: 'complete' },
-  })
-
-  const cancelAppointments = await booking.count({
-    where: { status: 'cancel' },
-  })
-
-  const unAssignedAppointments = await booking.count({
-    where: { status: 'pending' },
-  })
+  const sumTotalByStatus = async (status) => {
+    const whereCondition = {
+      status,
+      ...dateFilter,
+    }
+    return await booking.sum('total', { where: whereCondition })
+  }
+  // Perform the counts
+  const upcommingConfirmAppointments = await countAppointments('book')
+  const completeAppointments = await countAppointments('complete')
+  const cancelAppointments = await countAppointments('cancel')
+  const unAssignedAppointments = await countAppointments('pending')
 
   // customers
+
   const totalCustomers = await user.count({
-    where: { userTypeId: 1, deleted: 0 },
+    where: customerFilter,
   })
 
-  //revenue
-  const revenue = await booking.sum('total', { where: { status: 'complete' } })
+  const revenue = await sumTotalByStatus('complete')
 
+  const monthlyRevenueCondition = {
+    status: 'complete',
+  }
+
+  if (req.query?.year) {
+    monthlyRevenueCondition.on = {
+      [Op.between]: [
+        new Date(`${req.query?.year}-01-01`),
+        new Date(`${req.query?.year}-12-31`),
+      ],
+    }
+  }
   const monthlyRevenue = await booking.findAll({
     attributes: [
       [fn('MONTH', col('on')), 'month'],
       [fn('SUM', col('total')), 'totalRevenue'],
     ],
-    where: {
-      status: 'complete',
-    },
+    where: monthlyRevenueCondition,
     group: [fn('MONTH', col('on'))],
     raw: true,
   })
@@ -882,10 +937,6 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
         ],
         include: [
           {
-            model: rating,
-            attributes: [],
-          },
-          {
             model: socialLink,
             attributes: [`id`, `platform`, `url`],
           },
@@ -1070,10 +1121,6 @@ exports.fetchSalonEmployees = async (req, res, next) => {
       ],
     ],
     include: [
-      {
-        model: rating,
-        attributes: [],
-      },
       {
         model: salonDetail,
         attributes: [`salonName`],
@@ -1281,7 +1328,7 @@ exports.financialPerformanceReport = async (req, res, next) => {
 
 exports.clientFileReport = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
-  let startDate = req.query.startDate || '2023-12-01'
+  let startDate = req.query.startDate || '2024-12-01'
   let endDate = req.query.endDate || currentDay.currentDateOnly
 
   const bookingCondition = { on: { [Op.between]: [startDate, endDate] } }
@@ -2030,6 +2077,7 @@ exports.addReasons = async (req, res, next) => {
     }),
   )
 }
+
 //^ 2.Fetch Reasons  ----------------------------
 
 exports.fetchReasons = async (req, res, next) => {
