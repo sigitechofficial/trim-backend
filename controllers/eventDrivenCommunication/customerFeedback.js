@@ -13,7 +13,7 @@ const ThrowNotification = require('../../utils/throwNotification')
 
 exports.feedBack = async (appointmentId, comment, employeesRating) => {
   try {
-    const inputData = await booking.findOne({
+    const result = await booking.findOne({
       where: { id: appointmentId },
       attributes: ['id', 'status', 'on', 'startTime'],
       include: [
@@ -60,12 +60,12 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
         },
         {
           model: jobs,
-          attributes: ['id', 'on', 'startTime', 'duration'],
+          attributes: ['id', 'on', 'startTime', 'duration', 'employee'],
           include: [
             { model: service, attributes: ['serviceName'] },
             {
               model: employee,
-              attributes: ['position'],
+              attributes: ['position', 'isOwner', 'userId'],
               include: [
                 {
                   model: user,
@@ -79,6 +79,8 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
       ],
     })
 
+    if (!result) return 0
+    const inputData = JSON.parse(JSON.stringify(result))
     //EMAIL --//TODO
     // EmailAppointmentConfirmToSalon(['sigidevelopers@gmail.com'],inputData);
 
@@ -99,29 +101,43 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
     }
     const employeesId = []
     if (inputData?.jobs?.length > 0) {
-      inputData.jobs.forEach((ele) => {
-        const employeesTokens = ele.employee?.user?.deviceTokens?.map((ele) => {
-          return ele?.tokenId
-        })
-        employeesId.push(ele?.employee?.user?.id)
-        const employeeNotification = {
-          title: `New Review Notification`,
-          body: `${fullName} has left a new review: ${comment}.`,
+      const uniqueJobs = Object.values(
+        inputData?.jobs.reduce((acc, job) => {
+          if (!acc[job.employeeId]) {
+            acc[job.employeeId] = job
+          }
+          return acc
+        }, {}),
+      )
+      uniqueJobs.forEach((ele) => {
+        if (!ele?.employee?.isOwner) {
+          const employeesTokens = ele.employee?.user?.deviceTokens?.map(
+            (ele) => {
+              return ele?.tokenId
+            },
+          )
+          employeesId.push(ele?.employee?.user?.id)
+          const employeeNotification = {
+            title: `New Review Notification`,
+            body: `${fullName} has left a new review: ${comment}.`,
+          }
+          const employee = employeesRating.find(
+            (emp) => emp.employeeId == ele?.employee?.userId,
+          )
+          const rating = employee?.value || 0.0
+          ThrowNotification(
+            employeesTokens,
+            employeeNotification,
+            {
+              appointment: inputData.id,
+              fullName: `${inputData?.user?.firstName} ${inputData.user?.lastName}`,
+              image: inputData?.user?.image || '',
+              rating: rating,
+              comment: '',
+            },
+            ele?.employee?.user?.id,
+          )
         }
-        const employee = employeesRating.find((emp) => emp.employeeId === 14)
-        const rating = employee?.value || 0.0
-        ThrowNotification(
-          employeesTokens,
-          employeeNotification,
-          {
-            appointment: inputData.id,
-            fullName: `${inputData?.user?.firstName} ${inputData.user?.lastName}`,
-            image: inputData?.user?.image || '',
-            rating: rating,
-            comment: '',
-          },
-          ele?.employee?.user?.id,
-        )
       })
     }
 

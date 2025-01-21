@@ -436,10 +436,6 @@ width="100%"
                     >
                       <p style="margin: 0">
                       ${copyRight}
-                        // <span
-                        //   style="color: #202053; margin-left: 5px"
-                        //   >Unsubscribe</span
-                        // >
                       </p>
                     </div>
                   </td>
@@ -648,3 +644,8 @@ width="100%"
 <!-- End -->
 </body>
 </html>`
+
+// <span
+//   style="color: #202053; margin-left: 5px"
+//   >Unsubscribe</span
+// >
