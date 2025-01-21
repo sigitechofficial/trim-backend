@@ -87,8 +87,73 @@ exports.emailtesting = async (req, res, next) => {
   const { htmlContent } = req.body
 
   const data = DEMO(htmlContent)
+  // const inputData = await booking.findOne({
+  //   where: { id: 2112 },
+  //   attributes: ['id', 'status', 'on', 'startTime'],
+  //   include: [
+  //     {
+  //       model: salonDetail,
+  //       attributes: ['id', 'salonName', 'coverImage'],
+  //       include: [
+  //         {
+  //           model: addressDBS,
+  //           attributes: [
+  //             'streetAddress',
+  //             'city',
+  //             'district',
+  //             'province',
+  //             'country',
+  //           ],
+  //         },
+  //         {
+  //           model: user,
+  //           attributes: [
+  //             'id',
+  //             'firstName',
+  //             'lastName',
+  //             'email',
+  //             'countryCode',
+  //             'phoneNum',
+  //           ],
+  //           include: { model: deviceToken, attributes: ['tokenId'] },
+  //         },
+  //       ],
+  //     },
+  //     {
+  //       model: user,
+  //       attributes: [
+  //         'id',
+  //         'firstName',
+  //         'lastName',
+  //         'email',
+  //         'countryCode',
+  //         'phoneNum',
+  //         'image',
+  //       ],
+  //       include: { model: deviceToken, attributes: ['tokenId'] },
+  //     },
+  //     {
+  //       model: jobs,
+  //       attributes: ['id', 'on', 'employeeId', 'startTime', 'duration'],
+  //       include: [
+  //         { model: service, attributes: ['serviceName'] },
+  //         {
+  //           model: employee,
+  //           attributes: ['position', 'isOwner', 'userId'],
+  //           include: [
+  //             {
+  //               model: user,
+  //               attributes: ['id', 'firstName', 'lastName'],
+  //               include: { model: deviceToken, attributes: ['tokenId'] },
+  //             },
+  //           ],
+  //         },
+  //       ],
+  //     },
+  //   ],
+  // })
 
-  return res.status(200).json(response({ data: { data } }))
+  return res.status(200).json(response({ data: {} }))
 }
 
 //* DEMO. Notification Testing ----------------------
@@ -2173,8 +2238,24 @@ exports.accountDelete = async (req, res, next) => {
       'email',
       'countryCode',
       'phoneNum',
+      [
+        literal(
+          `(SELECT COUNT(*) 
+           FROM bookings 
+           WHERE bookings.customerId = user.id 
+           AND bookings.status IN ('pending', 'book', 'saveunpaid'))`,
+        ),
+        'bookingCount',
+      ],
     ],
   })
+
+  if (!data) throw new AppError('resource not found', 200)
+  if (data?.dataValues?.bookingCount && data?.dataValues?.bookingCount > 0)
+    throw new AppError(
+      'Account deletion cannot proceed until all pending appointments are finalized.',
+      200,
+    )
 
   await deletedCustomer.create({ userId: id, ...data.get({ plain: true }) })
   await user.update(
@@ -2190,7 +2271,7 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
   deviceToken.destroy({ where: { userId: id } })
-  return res.json(response({ message: 'Account Deleted.', data: {} }))
+  return res.json(response({ message: 'Account Deleted.', data: { data } }))
 }
 
 //! Notifications
