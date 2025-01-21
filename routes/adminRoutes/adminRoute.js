@@ -202,6 +202,11 @@ router.get(
 //! 8.Dashboard -------------------------------------------------------------------------------
 
 router.get('/dashboard', protect, catchAsync(adminController.dashboard))
+router.get(
+  '/dashboard-charts',
+  protect,
+  catchAsync(adminController.dashboardCharts),
+)
 
 //! 8.earnings -------------------------------------------------------------------------------
 

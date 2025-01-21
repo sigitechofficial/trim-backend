@@ -279,6 +279,37 @@ exports.dashboard = async (req, res, next) => {
 
   const revenue = await sumTotalByStatus('complete')
 
+  // For Graph Output
+
+  return res.status(200).json({
+    status: '1',
+    mesage: 'success',
+    data: {
+      totalSalon,
+      upcommingConfirmAppointments,
+      completeAppointments,
+      unAssignedAppointments,
+      cancelAppointments,
+      totalAppointments:
+        completeAppointments +
+        unAssignedAppointments +
+        cancelAppointments +
+        upcommingConfirmAppointments,
+      totalCustomers,
+      revenue: revenue || 0,
+      currencyUnit: CURRENCY_UNIT,
+    },
+  })
+}
+
+exports.dashboardCharts = async (req, res, next) => {
+  // salons or subscriptions
+  let salonFilter = { isExternalEmployee: { [Op.or]: [false, null] } }
+
+  const totalSalon = await salonDetail.count({
+    where: salonFilter,
+  })
+
   const monthlyRevenueCondition = {
     status: 'complete',
   }
@@ -347,18 +378,6 @@ exports.dashboard = async (req, res, next) => {
     status: '1',
     mesage: 'success',
     data: {
-      totalSalon,
-      upcommingConfirmAppointments,
-      completeAppointments,
-      unAssignedAppointments,
-      cancelAppointments,
-      totalAppointments:
-        completeAppointments +
-        unAssignedAppointments +
-        cancelAppointments +
-        upcommingConfirmAppointments,
-      totalCustomers,
-      revenue: revenue || 0,
       dashboardBarChartData,
       dashboardDoughnutChartData,
       currencyUnit: CURRENCY_UNIT,
