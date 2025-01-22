@@ -6,7 +6,7 @@ const attachment = attachments()
 const { transporter } = require('./transpoter')
 const { newFooter } = require('./newFooter')
 
-module.exports = function (to, data) {
+module.exports = function (to = [], data) {
   const greetings = `Hi ${data?.name || ''}, you’re invited to join ${data?.salonName} on Trim Business!`
   let subject = `Hi ${data?.name || ''} welcome to trim, We're Glad to Have You!`
 
@@ -72,7 +72,7 @@ module.exports = function (to, data) {
               </tr>
               <tr>
                   <td align="center" style="padding: 20px;">
-                      <a href="${data?.link}" style="display: inline-block; padding: 12px 24px; background-color: black; color: white; font-size: 16px; font-family: 'Work Sans', sans-serif; font-weight: 700; text-decoration: none; border-radius: 8px;">Accept invite</a>
+                      <a href="${data?.link || 'https://trimworldwide.com/LoginScreen'}" style="display: inline-block; padding: 12px 24px; background-color: black; color: white; font-size: 16px; font-family: 'Work Sans', sans-serif; font-weight: 700; text-decoration: none; border-radius: 8px;">Accept invite</a>
                       <div style="color: black; font-size: 17px; font-family: 'Work Sans', sans-serif; font-weight: 400; margin-top: 20px;">
                          <b>Email</b> : ${data?.email}
                       </div>

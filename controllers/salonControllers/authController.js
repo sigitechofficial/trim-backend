@@ -14,6 +14,7 @@ const {
   wallet,
   employeeAccess,
   employeeAccessDefault,
+  salonProfiles,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
@@ -132,6 +133,9 @@ exports.signup = async (req, res, next) => {
     //  to return a response indicating successful social sign-up
     const token = signTocken(userData.id, dvToken)
     EmailWelcome([userData.email], `${userData.firstName} ${userData.lastName}`)
+
+    salonProfiles.create({ userid: userData?.id })
+
     return res.status(200).json({
       status: '2',
       message: 'Welcome aboard! Your account has been successfully created.',
@@ -228,7 +232,7 @@ exports.signup = async (req, res, next) => {
         userId: userExist.id,
       })
     const DT = new Date()
-    if (!userExist.otpVerification) {
+    if (!userExist?.otpVerification) {
       const otpData = await otpVerification.create({
         OTP,
         reqAt: DT,
@@ -283,7 +287,7 @@ exports.signup = async (req, res, next) => {
       stripeCustomerId,
     })
 
-    const deviceTokens = await deviceToken.create({
+    await deviceToken.create({
       tokenId: dvToken,
       status: true,
       userId: newUser.id,
@@ -306,6 +310,7 @@ exports.signup = async (req, res, next) => {
       userId: newUser.id,
     })
 
+    salonProfiles.create({ userid: userData?.id })
     return res.status(200).json({
       status: '1',
       message: `An OTP has been successfully sent to ${newUser.email}. If it’s not in your inbox, please check your spam or junk folder.`,

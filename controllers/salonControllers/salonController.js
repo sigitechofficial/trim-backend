@@ -32,6 +32,7 @@ const {
   announcement,
   deviceToken,
   cancelledSubscriptions,
+  salonProfiles,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -99,27 +100,36 @@ exports.addSalonDetail = async (req, res, next) => {
   //     salonDetailId: newEntry.id,
   //   }
   // })
-  await cancellationPolicy.create({
+  cancellationPolicy.create({
     hoursBeforeBooking: 12,
     refundPercentage: 0,
     salonDetailId: newEntry.id,
   })
 
-  // await paymentPolicy.create({
+  //  paymentPolicy.create({
   //   salonDetailId: newEntry.id,
   // });
 
-  await paymentPolicy.create({
+  paymentPolicy.create({
     salonDetailId: newEntry.id,
   })
 
-  await reschedulePolicy.create({
+  reschedulePolicy.create({
     salonDetailId: newEntry.id,
   })
 
-  await noShowPolicy.create({
+  noShowPolicy.create({
     salonDetailId: newEntry.id,
   })
+  salonProfiles.update(
+    {
+      hasTeamMembers: true,
+      hasBusinessDetails: true,
+      hasBusinessAddress: true,
+      salonDetailId: newEntry.id,
+    },
+    { where: { userId } },
+  )
   return res.json(
     returnFunction('1', 'Salon Details Added Successfully!', newEntry, ''),
   )
