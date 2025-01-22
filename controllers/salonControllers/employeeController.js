@@ -929,6 +929,7 @@ exports.activeBlockEmployee = async (req, res, next) => {
 }
 
 //*8. Delete Employee
+
 exports.deleteEmployee = async (req, res, next) => {
   const userId = req.params.employee
   const worker = await user.findByPk(userId, {
