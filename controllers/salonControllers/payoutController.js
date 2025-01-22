@@ -335,6 +335,11 @@ exports.salaryEmployeePayout = async (req, res, next) => {
   if (!isValid)
     throw new AppError('Failed to transfer salary. Employee not found', 200)
 
+  const salon = await employee.findOne({
+    where: { id: req.body?.employeeId },
+    attributes: ['salonDetailId'],
+  })
+
   if (req.body?.salary) {
     req.body.salary.employeeId = req.body.employeeId
     req.body.salary.status = 'paid'
@@ -356,7 +361,26 @@ exports.salaryEmployeePayout = async (req, res, next) => {
 
   if (!lastExpectedDate) throw new AppError('Failed to transfer salary.', 200)
 
+  const totalAmount =
+    input.length > 0
+      ? input.reduce((total, { amount }) => {
+          if (amount) {
+            const num = typeof amount === 'number' ? amount : parseFloat(amount)
+            if (!isNaN(num)) {
+              return total + num
+            }
+          }
+          return total
+        }, 0)
+      : 0
+
   await salaryPayout.bulkCreate(input)
+
+  await wallet.decrement(
+    { amount: totalAmount },
+    { where: { salonDetailId: salon?.salonDetailId } },
+  )
+
   isValid.prevSalaryDate = lastExpectedDate
   await isValid.save()
   console.log('--->', input)
@@ -522,14 +546,43 @@ exports.salaryEmployeeSummary = async (req, res, next) => {
 //* Amount-Transfer 1. To commission employees ------------------------------------------
 exports.amountTransferCommission = async (req, res, next) => {
   //TODO handle exception for amounts bigger then balance
+
+  const salon = await employee.findOne({
+    where: { id: req.body?.employeeId },
+    attributes: ['salonDetailId'],
+  })
+
+  if (!salon)
+    throw new AppError('Transfer Failed: Employee Information Not Found.', 200)
+
   await commissionPayout.create(req.body)
+
+  await wallet.decrement(
+    { amount: req.body?.amount },
+    { where: { salonDetailId: salon?.salonDetailId } },
+  )
+
   return res.json(response({ message: 'success.', data: {} }))
 }
 
 //* Amount-Transfer 2. To rent a chair employees ----------------------------------------
 exports.amountTransferRentAChair = async (req, res, next) => {
   //TODO handle exception for amounts bigger then balance
+
+  const salon = await employee.findOne({
+    where: { id: req.body?.employeeId },
+    attributes: ['salonDetailId'],
+  })
+
+  if (!salon)
+    throw new AppError('Transfer Failed: Employee Information Not Found.', 200)
+
   await rentChairPayout.create(req.body)
+
+  await wallet.decrement(
+    { amount: req.body?.amount },
+    { where: { salonDetailId: salon?.salonDetailId } },
+  )
   return res.json(response({ message: 'success.', data: {} }))
 }
 
@@ -546,6 +599,7 @@ exports.commissionTransactionHistory = async (req, res, next) => {
   const history = await commissionPayout.findAll({
     where: { employeeId: req.params.employee },
   })
+
   return res.json(
     response({
       message: 'success.',
@@ -651,7 +705,6 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
     },
     attributes: [
       'id',
-
       [
         literal(`COALESCE(
          (SELECT SUM(salaryPayouts.amount)

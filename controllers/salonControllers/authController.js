@@ -833,9 +833,9 @@ exports.forgotPassword = async (req, res, next) => {
     ),
   )
 }
-/*
-            8. Verify OTP for changing password
-*/
+
+// 8. Verify OTP for changing password
+
 exports.verifyPasswordOtp = async (req, res, next) => {
   const { otpId, OTP, dvToken } = req.body
   const otpData = await otpVerification.findByPk(otpId, {

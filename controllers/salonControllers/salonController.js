@@ -1760,6 +1760,8 @@ exports.salonWallet = async (req, res, next) => {
     where: {
       userId,
     },
+    attributes: ['id'],
+    // include: { model: employee, whe attributes: ['id'] },
   })
 
   const salonWallet = await wallet.findOne({

@@ -208,7 +208,7 @@ module.exports = function (to, data, state = 'book') {
                                               padding: 10px;
                                             "
                                           >
-                                            Manage appointment
+                                            Manage Booking
                                           </button>
                                         </div>
                                       </td>
@@ -504,7 +504,7 @@ module.exports = function (to, data, state = 'book') {
                                         padding: 10px;
                                       "
                                     >
-                                      Manage appointment
+                                      Manage Booking
                                     </button>
                                   </div>
                                 </td>
