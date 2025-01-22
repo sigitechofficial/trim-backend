@@ -26,6 +26,7 @@ const {
   employeeCommission,
   rentChairEarning,
   employeeWagesMethod,
+  salonProfiles,
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')

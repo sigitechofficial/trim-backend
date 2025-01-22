@@ -21,6 +21,7 @@ const {
   rentChairEarning,
   salaryPayout,
   tip,
+  wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const {
