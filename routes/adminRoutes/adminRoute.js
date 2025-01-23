@@ -193,6 +193,13 @@ router.get(
   protect,
   catchAsync(adminController.fecthAppointments),
 )
+
+router.get(
+  '/appointments:type',
+  protect,
+  catchAsync(adminController.fecthAppointments),
+)
+
 router.get(
   '/appointment-detail/:id',
   protect,
