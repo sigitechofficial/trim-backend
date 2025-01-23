@@ -121,7 +121,7 @@ exports.addSalonDetail = async (req, res, next) => {
   noShowPolicy.create({
     salonDetailId: newEntry.id,
   })
-  salonProfiles.update(
+  await salonProfiles.update(
     {
       hasTeamMembers: true,
       hasBusinessDetails: true,
@@ -206,6 +206,14 @@ exports.choosePlan = async (req, res, next) => {
       salonDetailId: salonData.id,
     })
   }
+
+  await salonProfiles.update(
+    {
+      hasSubscription: true,
+    },
+    { where: { salonDetailId: salonData.id } },
+  )
+
   return res.json(
     returnFunction(
       '1',
@@ -236,6 +244,7 @@ exports.createOnboardingLink = async (req, res, next) => {
   await wallet.upsert({
     salonDetailId: salonData.id,
   })
+
   const onboardingLink = await Stripe.createStripeAccountLink(account)
 
   return res.json(
@@ -256,6 +265,13 @@ exports.accountAdded = async (req, res, next) => {
   await wallet.update(
     { accountConnected: true },
     { where: { salonDetailId: salonData.id } },
+  )
+
+  await salonProfiles.update(
+    {
+      accountConnected: true,
+    },
+    { where: { userId } },
   )
 
   return res.json(
@@ -326,6 +342,12 @@ exports.salonTiming = async (req, res, next) => {
 
   // Bulk create all the times
   await time.bulkCreate(salonTimes)
+  await salonProfiles.update(
+    {
+      hasWorkingHours: true,
+    },
+    { where: { salonDetailId } },
+  )
 
   // Respond with a success message
   return res.json(
@@ -1882,6 +1904,13 @@ exports.addServices = async (req, res, next) => {
     })
   console.log('🚀 ~ exports.addServices= ~ input:', input)
   if (input.length > 0) await employeeService.bulkCreate(input)
+
+  await salonProfiles.update(
+    {
+      hasServiceList: true,
+    },
+    { where: { salonDetailId: serviceData.salonDetailId } },
+  )
 
   return res
     .status(200)

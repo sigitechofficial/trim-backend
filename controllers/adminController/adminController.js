@@ -220,16 +220,12 @@ exports.dashboard = async (req, res, next) => {
         [Op.between]: [new Date(startDate), new Date(endDate)],
       },
     }
-    customerFilter = {
-      createdAt: {
+    ;(customerFilter.createdAt = {
+      [Op.between]: [new Date(startDate), new Date(endDate)],
+    }),
+      (salonFilter.createdAt = {
         [Op.between]: [new Date(startDate), new Date(endDate)],
-      },
-    }
-    salonFilter = {
-      createdAt: {
-        [Op.between]: [new Date(startDate), new Date(endDate)],
-      },
-    }
+      })
   } else if (startDate) {
     // If only startDate is provided
     dateFilter = {
@@ -392,7 +388,7 @@ exports.dashboardCharts = async (req, res, next) => {
 exports.fecthSalons = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
-  const condition = {}
+  const condition = { isExternalEmployee: { [Op.or]: [false, null] } }
 
   if (req.params?.subscription == 'active') {
     condition.registrationExpiryDate = { [Op.gte]: currentDay.currentDateOnly }
@@ -478,11 +474,11 @@ exports.fecthSalons = async (req, res, next) => {
           `phoneNum`,
         ],
       },
-      {
-        model: addressDBS,
-        required: true,
-        attributes: ['id', 'streetAddress', 'city', 'country', 'postalCode'],
-      },
+      // {
+      //   model: addressDBS,
+      //   required: true,
+      //   attributes: ['id', 'streetAddress', 'city', 'country', 'postalCode'],
+      // },
     ],
     group: ['salonDetail.id'],
   })
@@ -670,6 +666,7 @@ exports.fecthCustomers = async (req, res, next) => {
   const results = await user.findAll({
     where: {
       userTypeId: 1, //Customer
+      deleted: 0,
     },
     attributes: [
       `id`,
@@ -876,7 +873,26 @@ exports.updateSubscriptionFeature = async (req, res, next) => {
 //* 1.fetch Appointments -----------------
 
 exports.fecthAppointments = async (req, res, next) => {
+  let bookingFilters = {}
+  // Check if both startDate and endDate are provided and not empty
+  const { startDate, endDate } = req.query
+
+  if (startDate && endDate)
+    bookingFilters.on = {
+      [Op.between]: [new Date(startDate), new Date(endDate)],
+    }
+
+  if (req.params?.type == 'cancel') bookingFilters.status = 'cancel'
+  else if (req.params?.type == 'complete') bookingFilters.status = 'complete'
+  else if (req.params?.type == 'noshow') bookingFilters.status = 'no-show'
+  else if (req.params?.type == 'unpaid') bookingFilters.status = 'save-unpaid'
+  else if (req.params?.type == 'upcoming')
+    bookingFilters.status = { [Op.or]: ['pending', 'book'] }
+
+  //TODO optimize this query
+
   const data = await booking.findAll({
+    where: bookingFilters,
     attributes: ['id', `status`, `startTime`, `on`, 'createdAt'],
     include: [
       {
@@ -1096,6 +1112,7 @@ exports.fecthSalonsEarnings = async (req, res, next) => {
     .status(200)
     .json(response({ data: { salons: results, currencyUnit: CURRENCY_UNIT } }))
 }
+
 //! 9.Help & Support ----------------------------------------------------------------------
 
 //* 3.fetch Help Support --------------------
@@ -1411,7 +1428,7 @@ exports.clientFileReport = async (req, res, next) => {
     ],
     group: ['user.id'],
   })
-  //TODO (in all reports and earnings )replace booking.total with booking.actualCapturedAmount
+  //TODO (in all reports and earnings )replace booking.total with booking.actualCapturedAmount //not needed yet
 
   return res.status(200).json(response({ data: { report } }))
 }

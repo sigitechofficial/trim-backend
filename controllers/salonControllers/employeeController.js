@@ -249,19 +249,37 @@ exports.AddEmployee = async (req, res, next) => {
         coverImage: employeeInput?.image,
       })
 
-      externalEmployeeSalonId = externalEmployeeSalon.id
+      externalEmployeeSalonId = externalEmployeeSalon?.id
 
       const externalEmployee = await employee.create({
         position: 'Me',
         userId: newEntry.id,
-        salonDetailId: externalEmployeeSalon.id,
+        salonDetailId: externalEmployeeSalon?.id,
         parentEmployeeId: workerId,
         isOwner: true,
       })
       workerId = externalEmployee.id
 
       await wallet.create({
-        salonDetailId: externalEmployeeSalon.id,
+        salonDetailId: externalEmployeeSalon?.id,
+      })
+
+      cancellationPolicy.create({
+        hoursBeforeBooking: 12,
+        refundPercentage: 0,
+        salonDetailId: externalEmployeeSalon?.id,
+      })
+
+      paymentPolicy.create({
+        salonDetailId: externalEmployeeSalon?.id,
+      })
+
+      reschedulePolicy.create({
+        salonDetailId: externalEmployeeSalon?.id,
+      })
+
+      noShowPolicy.create({
+        salonDetailId: externalEmployeeSalon?.id,
       })
 
       //Optional need more data from client side
