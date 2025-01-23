@@ -195,7 +195,7 @@ router.get(
 )
 
 router.get(
-  '/appointments:type',
+  '/appointments/:type',
   protect,
   catchAsync(adminController.fecthAppointments),
 )
