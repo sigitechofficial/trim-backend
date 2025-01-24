@@ -101,6 +101,8 @@ exports.signup = async (req, res, next) => {
     signedBy,
     dvToken,
   } = req.body
+  console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>', req.body)
+
   // check if user with same eamil and phoneNum exists
   let userExist = await user.findOne({
     where: {
@@ -117,6 +119,10 @@ exports.signup = async (req, res, next) => {
   })
 
   if (!userExist && ['google', 'apple', 'facebook'].includes(signedBy)) {
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+
     const stripeCustomerId = await Stripe.addCustomer(firstName, email)
 
     let userData = await user.create({
@@ -316,7 +322,7 @@ exports.signup = async (req, res, next) => {
       userId: newUser.id,
     })
 
-    salonProfiles.create({ userid: userData?.id })
+    salonProfiles.create({ userid: newUser?.id })
     return res.status(200).json({
       status: '1',
       message: `An OTP has been successfully sent to ${newUser.email}. If it’s not in your inbox, please check your spam or junk folder.`,

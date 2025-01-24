@@ -124,8 +124,9 @@ module.exports = function (to, data, state = 'book') {
     email: `${data.user.email || '.......@gmail.com'}`,
     contact: `${data?.user?.countryCode || 'xxx-'}${data?.user?.phoneNum || 'xxxxxxxxxx'}`,
   }
+  // style="text-decoration: none;"
   let heading = `Appointment confirmed`
-  let description = `The following appointment has been booked online`
+  let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
   let subject = `Appointment confirmed ref #${data?.id}.`
 
   if (state === 'cancel') {
@@ -135,15 +136,15 @@ module.exports = function (to, data, state = 'book') {
   } else if (state === 'reschudle') {
     subject = `Booking ref #${data.id} has been rescheduled!`
     heading = `Appointment has been update`
-    description = `An appointment ref #${data.id} is scheduled for ${date} with ${client?.name}.`
+    description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name}.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} has been completed!`
     heading = `Appointment has been completed`
-    description = `Booking reference #${data.id} is now completed successfully.`
+    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is now completed successfully.`
   } else if (state === 'noshow') {
     subject = `Booking ref #${data.id} marked as No-Show!`
     heading = `Appointment marked as No-Show`
-    description = `Booking reference #${data.id} was marked as a no-show. The client missed the scheduled appointment.`
+    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> was marked as a no-show. The client missed the scheduled appointment.`
   }
 
   transporter.sendMail(

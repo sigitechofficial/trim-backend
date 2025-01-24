@@ -71,8 +71,6 @@ width="100%"
               >
                 <p>
                   If you have any questions or need help, please check our FAQ or email <a href="mailto:${supportEmail}" style="color: black; text-decoration: none;">${supportEmail}</a>.
-                  <br /><br />
-                  Thank you for choosing our services!
                 </p>
               </div>
               <table
@@ -264,99 +262,6 @@ width="100%"
                         >Follow Us</span
                       >
                     </h1>
-                  </td>
-                </tr>
-              </table>
-              <div
-                class="spacer_block block-2"
-                style="
-                  height: 20px;
-                  line-height: 20px;
-                  font-size: 1px;
-                "
-              >
-                 
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </td>
-  </tr>
-</tbody>
-</table>
-
-<table
-align="center"
-border="0"
-cellpadding="0"
-cellspacing="0"
-class="row row-10"
-role="presentation"
-width="100%"
->
-<tbody>
-  <tr>
-    <td>
-      <table
-        align="center"
-        border="0"
-        cellpadding="0"
-        cellspacing="0"
-        class="row-content stack"
-        role="presentation"
-        style="
-          border-radius: 0;
-          color: #000;
-          width: 500px;
-          margin: 0 auto;
-        "
-        width="500"
-      >
-        <tbody>
-          <tr>
-            <td
-              class="column column-1"
-              style="
-                font-weight: 400;
-                text-align: left;
-                padding-bottom: 5px;
-                padding-top: 5px;
-                vertical-align: top;
-                border-top: 0px;
-                border-right: 0px;
-                border-bottom: 0px;
-                border-left: 0px;
-              "
-              width="100%"
-            >
-              <table
-                border="0"
-                cellpadding="0"
-                cellspacing="0"
-                class="paragraph_block block-1"
-                role="presentation"
-                style="word-break: break-word"
-                width="100%"
-              >
-                <tr>
-                  <td class="pad">
-                    <div
-                      style="
-                        color: #000000;
-                        direction: ltr;
-                        font-family: Chivo, sans-serif;
-                        font-size: 14px;
-                        font-weight: 500;
-                        letter-spacing: 0px;
-                        line-height: 120%;
-                        text-align: center;
-                      "
-                    >
-                      <p style="margin: 0">
-                        ${address}
-                      </p>
-                    </div>
                   </td>
                 </tr>
               </table>
@@ -610,14 +515,14 @@ width="100%"
                         <tr>
                           <td style="padding: 0 2px 0 2px">
                             <img
-                              alt="Facebook"
+                              alt="Trim"
                               height="80px"
                               src="cid:logo"
                               style="
                                 display: block;
                                 height: auto;
                                 border: 0;
-                                background: transparent;
+                          
                               "
                               title="Facebook"
                               width="125px"
@@ -632,7 +537,7 @@ width="100%"
             </td>
           </tr>
         </tbody>
-      </table>
+      </table> 
     </td>
   </tr>
 </tbody>
@@ -649,3 +554,90 @@ width="100%"
 //   style="color: #202053; margin-left: 5px"
 //   >Unsubscribe</span
 // >
+// background: transparent;
+
+// <table
+// align="center"
+// border="0"
+// cellpadding="0"
+// cellspacing="0"
+// class="row row-10"
+// role="presentation"
+// width="100%"
+// >
+// <tbody>
+//   <tr>
+//     <td>
+//       <table
+//         align="center"
+//         border="0"
+//         cellpadding="0"
+//         cellspacing="0"
+//         class="row-content stack"
+//         role="presentation"
+//         style="
+//           border-radius: 0;
+//           color: #000;
+//           width: 500px;
+//           margin: 0 auto;
+//         "
+//         width="500"
+//       >
+//         <tbody>
+//           <tr>
+//             <td
+//               class="column column-1"
+//               style="
+//                 font-weight: 400;
+//                 text-align: left;
+//                 padding-bottom: 5px;
+//                 padding-top: 5px;
+//                 vertical-align: top;
+//                 border-top: 0px;
+//                 border-right: 0px;
+//                 border-bottom: 0px;
+//                 border-left: 0px;
+//               "
+//               width="100%"
+//             >
+//               <table
+//                 border="0"
+//                 cellpadding="0"
+//                 cellspacing="0"
+//                 class="paragraph_block block-1"
+//                 role="presentation"
+//                 style="word-break: break-word"
+//                 width="100%"
+//               >
+//                 <tr>
+//                   <td class="pad">
+//                     <div
+//                       style="
+//                         color: #000000;
+//                         direction: ltr;
+//                         font-family: Chivo, sans-serif;
+//                         font-size: 14px;
+//                         font-weight: 500;
+//                         letter-spacing: 0px;
+//                         line-height: 120%;
+//                         text-align: center;
+//                       "
+//                     >
+//                       <p style="margin: 0">
+//                         ${address}
+//                       </p>
+//                     </div>
+//                   </td>
+//                 </tr>
+//               </table>
+//             </td>
+//           </tr>
+//         </tbody>
+//       </table>
+//     </td>
+//   </tr>
+// </tbody>
+// </table>
+
+// <br /><br />
+//                   Thank you for choosing our services!

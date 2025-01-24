@@ -890,35 +890,39 @@ exports.fecthAppointments = async (req, res, next) => {
     bookingFilters.status = { [Op.or]: ['pending', 'book'] }
 
   //TODO optimize this query
+  console.log(
+    '🚀 ~ exports.fecthAppointments= ~ bookingFilters:',
+    bookingFilters,
+  )
 
   const data = await booking.findAll({
     where: bookingFilters,
-    attributes: ['id', `status`, `startTime`, `on`, 'createdAt'],
-    include: [
-      {
-        model: salonDetail,
-        attributes: [`salonName`],
-        include: { model: addressDBS, attributes: [`streetAddress`, `city`] },
-      },
-      {
-        model: user,
-        attributes: [`id`, `firstName`, 'lastName'],
-      },
-      {
-        model: jobs,
-        attributes: [`status`],
-        include: [
-          {
-            model: employee,
-            attributes: ['id'],
-            include: {
-              model: user,
-              attributes: [`firstName`],
-            },
-          },
-          { model: service, attributes: [`serviceName`] },
-        ],
-      },
+    attributes: [
+      'id',
+      `status`,
+      `startTime`,
+      `on`,
+      'createdAt',
+      [
+        literal(
+          `(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`,
+        ),
+        'servicesCount',
+      ],
+      [
+        literal(
+          `(SELECT salonDetails.salonName FROM salonDetails WHERE salonDetails.id = booking.salonDetailId)`,
+        ),
+        'salonName',
+      ],
+      [
+        literal(
+          `(SELECT CONCAT(users.firstName, ' ', users.lastName)
+            FROM users WHERE users.id = booking.customerId
+            LIMIT 1)`,
+        ),
+        'customerName',
+      ],
     ],
   })
 
