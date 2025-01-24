@@ -113,7 +113,8 @@ module.exports = function (to, data, state = 'book') {
   const salonName = data?.salonDetail?.salonName || ''
   const total = data.total
   const address = data.salonDetail.addressDB
-  let addressString = `$${address.streetAddress}, ${address.province}, ${address.country}`
+  let addressString = `${address.streetAddress}, ${address.province}, ${address.country}`
+  console.log('🚀 ~ addressString:', addressString)
   const date = emailDateFormate(data.on, data.startTime)
 
   const client = {
@@ -122,7 +123,7 @@ module.exports = function (to, data, state = 'book') {
     contact: `${data?.user?.countryCode}${data?.user?.phoneNum}`,
   }
   console.log('🚀 ~ process.env.EMAIL_USERNAME:', process.env.EMAIL_USERNAME)
-  let badgeText = 'Confirmation'
+  let badgeText = 'Confirmed'
   let badgeColor = '#176600'
   let badgeImageSrc = 'cid:confirm'
 
@@ -193,23 +194,25 @@ module.exports = function (to, data, state = 'book') {
                                     <tr>
                                       <td>
                                         <div style="width: 75%; margin: auto">
-                                          <button
-                                            style="
-                                              cursor: pointer;
-                                              width: 100%;
-                                              color: #000000cc;
-                                              font-family: Chivo, sans-serif;
-                                              font-size: 16px;
-                                              font-weight: 500;
-                                              letter-spacing: 0px;
-                                              text-align: center;
-                                              background-color: transparent;
-                                              border: 2px solid black;
-                                              padding: 10px;
-                                            "
-                                          >
-                                            Manage Booking
-                                          </button>
+                                          <a href="" style="text-decoration: none;">
+                                            <button
+                                              style="
+                                                cursor: pointer;
+                                                width: 100%;
+                                                color: #000000cc;
+                                                font-family: Chivo, sans-serif;
+                                                font-size: 16px;
+                                                font-weight: 500;
+                                                letter-spacing: 0px;
+                                                text-align: center;
+                                                background-color: transparent;
+                                                border: 2px solid black;
+                                                padding: 10px;
+                                              "
+                                            >
+                                              Manage Booking
+                                            </button>
+                                          </a>
                                         </div>
                                       </td>
                                     </tr>
@@ -332,192 +335,194 @@ module.exports = function (to, data, state = 'book') {
     emailTitle = `Hi ${client.name}, your booking has been rescheduled!`
     description = `Your booking with ${salonName} is now on ${date}.`
     buttonSection = `   <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-6"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
+    align="center"
+    border="0"
+    cellpadding="0"
+    cellspacing="0"
+    class="row row-6"
+    role="presentation"
+    width="100%"
+  >
+    <tbody>
+      <tr>
+        <td>
+          <table
+            align="center"
+            border="0"
+            cellpadding="0"
+            cellspacing="0"
+            class="row-content stack"
+            role="presentation"
+            style="
+              border-radius: 0;
+              color: #000;
+              width: 500px;
+              margin: 0 auto;
+            "
+            width="500"
+          >
+            <tbody>
+              <tr>
+                <td
+                  class="column column-1"
+                  style="
+                    font-weight: 400;
+                    text-align: left;
+                    vertical-align: top;
+                    border-top: 0px;
+                    border-right: 0px;
+                    border-bottom: 0px;
+                    border-left: 0px;
+                  "
+                  width="100%"
+                >
+                  <table
+                    border="0"
+                    cellpadding="0"
+                    cellspacing="0"
+                    class="paragraph_block block-2"
+                    role="presentation"
+                    style="word-break: break-word"
+                    width="100%"
+                  >
+                    <div
+                      class="spacer_block block-1"
                       style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
+                        height: 30px;
+                        line-height: 80px;
+                        font-size: 1px;
                       "
-                      width="500"
                     >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
+                       
+                    </div>
+                    <tr>
+                      <td>
+                        <div style="width: 75%; margin: auto">
+                        <a href="https://www.google.com/maps/search/?api=1&query=${data?.salonDetail?.addressDB?.lat || ''},${data?.salonDetail?.addressDB?.lng || ''}" style="text-decoration: none;">
+                          <button
                             style="
-                              font-weight: 400;
-                              text-align: left;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
+                              cursor: pointer;
+                              width: 100%;
+                              color: #000000cc;
+                              font-family: Chivo, sans-serif;
+                              font-size: 16px;
+                              font-weight: 500;
+                              letter-spacing: 0px;
+                              text-align: center;
+                              background-color: transparent;
+                              border: 2px solid black;
+                              padding: 10px;
                             "
-                            width="100%"
                           >
-                            <table
-                              border="0"
-                              cellpadding="0"
-                              cellspacing="0"
-                              class="paragraph_block block-2"
-                              role="presentation"
-                              style="word-break: break-word"
-                              width="100%"
-                            >
-                              <div
-                                class="spacer_block block-1"
-                                style="
-                                  height: 30px;
-                                  line-height: 80px;
-                                  font-size: 1px;
-                                "
-                              >
-                                 
-                              </div>
-                              <tr>
-                                <td>
-                                  <div style="width: 75%; margin: auto">
-                                    <button
-                                      style="
-                                        cursor: pointer;
-                                        width: 100%;
-                                        color: #000000cc;
-                                        font-family: Chivo, sans-serif;
-                                        font-size: 16px;
-                                        font-weight: 500;
-                                        letter-spacing: 0px;
-                                        text-align: center;
-                                        background-color: transparent;
-                                        border: 2px solid black;
-                                        padding: 10px;
-                                      "
-                                    >
-                                      Get directions
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                            Get directions
+                          </button>
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-6"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
+  <table
+    align="center"
+    border="0"
+    cellpadding="0"
+    cellspacing="0"
+    class="row row-6"
+    role="presentation"
+    width="100%"
+  >
+    <tbody>
+      <tr>
+        <td>
+          <table
+            align="center"
+            border="0"
+            cellpadding="0"
+            cellspacing="0"
+            class="row-content stack"
+            role="presentation"
+            style="
+              border-radius: 0;
+              color: #000;
+              width: 500px;
+              margin: 0 auto;
+            "
+            width="500"
+          >
+            <tbody>
+              <tr>
+                <td
+                  class="column column-1"
+                  style="
+                    font-weight: 400;
+                    text-align: left;
+                    vertical-align: top;
+                    border-top: 0px;
+                    border-right: 0px;
+                    border-bottom: 0px;
+                    border-left: 0px;
+                  "
+                  width="100%"
+                >
+                  <table
+                    border="0"
+                    cellpadding="0"
+                    cellspacing="0"
+                    class="paragraph_block block-2"
+                    role="presentation"
+                    style="word-break: break-word"
+                    width="100%"
+                  >
+                    <div
+                      class="spacer_block block-1"
                       style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
+                        height: 10px;
+                        line-height: 80px;
+                        font-size: 1px;
                       "
-                      width="500"
                     >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
+                       
+                    </div>
+                    <tr>
+                      <td>
+                        <div style="width: 75%; margin: auto">
+                          <button
                             style="
-                              font-weight: 400;
-                              text-align: left;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
+                              cursor: pointer;
+                              width: 100%;
+                              color: #000000cc;
+                              font-family: Chivo, sans-serif;
+                              font-size: 16px;
+                              font-weight: 500;
+                              letter-spacing: 0px;
+                              text-align: center;
+                              background-color: transparent;
+                              border: 2px solid black;
+                              padding: 10px;
                             "
-                            width="100%"
                           >
-                            <table
-                              border="0"
-                              cellpadding="0"
-                              cellspacing="0"
-                              class="paragraph_block block-2"
-                              role="presentation"
-                              style="word-break: break-word"
-                              width="100%"
-                            >
-                              <div
-                                class="spacer_block block-1"
-                                style="
-                                  height: 10px;
-                                  line-height: 80px;
-                                  font-size: 1px;
-                                "
-                              >
-                                 
-                              </div>
-                              <tr>
-                                <td>
-                                  <div style="width: 75%; margin: auto">
-                                    <button
-                                      style="
-                                        cursor: pointer;
-                                        width: 100%;
-                                        color: #000000cc;
-                                        font-family: Chivo, sans-serif;
-                                        font-size: 16px;
-                                        font-weight: 500;
-                                        letter-spacing: 0px;
-                                        text-align: center;
-                                        background-color: transparent;
-                                        border: 2px solid black;
-                                        padding: 10px;
-                                      "
-                                    >
-                                      Manage Booking
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>`
+                            Manage appointment
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>`
   } else if (state === 'noshow') {
     subject = `You missed an booking ref #${data?.id}`
     badgeText = 'No-Show'
@@ -1562,19 +1567,28 @@ module.exports = function (to, data, state = 'book') {
                                     </div>
                                     <tr>
                                       <td>
-                                        <div
-                                          style="
-                                            font-size: 14px;
-                                            font-family: Chivo, sans-serif;
-                                            font-weight: 400;
-                                            display: flex;
-                                            justify-content: space-between;
-                                            color: #12466f;
-                                          "
-                                        >
-                                          ${addressString}
-                                        </div>
-                                      </td>
+                                      
+                                          <button
+                                            onclick="window.location.href='https://www.google.com/maps/search/?api=1&query=${data?.salonDetail?.addressDB?.lat || ''},${data?.salonDetail?.addressDB?.lng || ''}'"
+                                            style="
+                                              background: none;
+                                              border: none;
+                                              padding: 0;
+                                              margin: 0;
+                                              font: inherit;
+                                              cursor: pointer;
+                                              color: rgb(17, 56, 87);
+                                              font-size: 14px;
+                                              font-family: Chivo, sans-serif;
+                                              font-weight: 400;
+                                              display: flex;
+                                              justify-content: space-between;
+                                              text-align: left;
+                                            "
+                                          >
+                                            ${addressString}
+                                          </button>
+                                        </td>
                                     </tr>
                                   </table>
                                 </td>
@@ -1660,8 +1674,7 @@ module.exports = function (to, data, state = 'book') {
                                           "
                                         >
                                           We sent you this email because you have
-                                          booked with ${salonName}, which professional
-                                          with Trim for appointments and payments.
+                                          booked with ${salonName} through the Trim app.
                                         </div>
                                       </td>
                                     </tr>

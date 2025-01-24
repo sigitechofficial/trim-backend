@@ -10,6 +10,7 @@ module.exports = function (OTP, data, type) {
   let preOtpText = `We found a request for forgot password.
   Its okay! its happens. Use this OTP for
   reset your password.`
+
   let postOtpText = `If you didn’t request this, please ignore this email. your password won’t change until you access the link above and create a new one.`
 
   if (type && type == 'verification') {
@@ -19,7 +20,7 @@ module.exports = function (OTP, data, type) {
 
     postOtpText = `If you didn’t request this, please ignore this email.`
   }
-
+  let subject = preOtpText
   const name = `${data.firstName} ${data.lastName}`
   const to = [data.email, 'sigidevelopers@gmail.com']
   console.log(
@@ -31,7 +32,7 @@ module.exports = function (OTP, data, type) {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: to, // list of receivers
-      subject: `Reset Password Otp.`, // Subject line
+      subject: subject, // Subject line
       attachments: attachment.footer.concat(attachment.security),
       html: `<!DOCTYPE html>
 

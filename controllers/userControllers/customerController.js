@@ -86,74 +86,21 @@ const {
 exports.emailtesting = async (req, res, next) => {
   const { htmlContent } = req.body
 
-  const data = DEMO(htmlContent)
-  // const inputData = await booking.findOne({
-  //   where: { id: 2112 },
-  //   attributes: ['id', 'status', 'on', 'startTime'],
-  //   include: [
-  //     {
-  //       model: salonDetail,
-  //       attributes: ['id', 'salonName', 'coverImage'],
-  //       include: [
-  //         {
-  //           model: addressDBS,
-  //           attributes: [
-  //             'streetAddress',
-  //             'city',
-  //             'district',
-  //             'province',
-  //             'country',
-  //           ],
-  //         },
-  //         {
-  //           model: user,
-  //           attributes: [
-  //             'id',
-  //             'firstName',
-  //             'lastName',
-  //             'email',
-  //             'countryCode',
-  //             'phoneNum',
-  //           ],
-  //           include: { model: deviceToken, attributes: ['tokenId'] },
-  //         },
-  //       ],
-  //     },
-  //     {
-  //       model: user,
-  //       attributes: [
-  //         'id',
-  //         'firstName',
-  //         'lastName',
-  //         'email',
-  //         'countryCode',
-  //         'phoneNum',
-  //         'image',
-  //       ],
-  //       include: { model: deviceToken, attributes: ['tokenId'] },
-  //     },
-  //     {
-  //       model: jobs,
-  //       attributes: ['id', 'on', 'employeeId', 'startTime', 'duration'],
-  //       include: [
-  //         { model: service, attributes: ['serviceName'] },
-  //         {
-  //           model: employee,
-  //           attributes: ['position', 'isOwner', 'userId'],
-  //           include: [
-  //             {
-  //               model: user,
-  //               attributes: ['id', 'firstName', 'lastName'],
-  //               include: { model: deviceToken, attributes: ['tokenId'] },
-  //             },
-  //           ],
-  //         },
-  //       ],
-  //     },
-  //   ],
-  // })
+  // const data = DEMO(htmlContent)
+  const bookingData = await bookingDataForEmailAndNotifications('2112')
 
-  return res.status(200).json(response({ data: {} }))
+  //EMAIL
+  if (!bookingData) return false
+  const emailInput = bookingData?.appointment
+
+  EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
+
+  AppointmentEmailsToCustomer(
+    [`${bookingData?.client?.customerEmail}`],
+    emailInput,
+  )
+
+  return res.status(200).json(response({ data: { bookingData } }))
 }
 
 //* DEMO. Notification Testing ----------------------

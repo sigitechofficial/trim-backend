@@ -62,6 +62,8 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
               'district',
               'province',
               'country',
+              'lat',
+              'lng',
             ],
           },
           {
@@ -171,6 +173,8 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
     userId: data?.salonDetail?.user?.id,
     salonName: data?.salonDetail?.salonName,
     image: data?.salonDetail?.coverImage,
+    latitude: data?.salonDetail?.addressDB?.lat,
+    longitude: data?.salonDetail?.addressDB?.lng,
   }
 
   const client = {
