@@ -381,4 +381,16 @@ router.delete(
   catchAsync(adminController.customEmails),
 )
 
+router.get(
+  '/employees-list/:external',
+  protect,
+  catchAsync(adminController.fecthSalons),
+)
+
+router.get(
+  '/salon-customers-list/:salon',
+  protect,
+  catchAsync(adminController.fetchSalonCustomer),
+)
+
 module.exports = router

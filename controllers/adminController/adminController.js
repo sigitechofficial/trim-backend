@@ -382,6 +382,33 @@ exports.dashboardCharts = async (req, res, next) => {
 }
 
 //!3.SALONS ----------------------------------------------------------------------------------------
+//* 0.Fetch All salonCustomer ---------------------
+
+exports.fetchSalonCustomer = async (req, res, next) => {
+  const salonCustomers = await booking.findAll({
+    where: {
+      salonDetailId: req?.params?.salon,
+    },
+    include: [
+      {
+        model: user,
+        attributes: [
+          `id`,
+          `firstName`,
+          'lastName',
+          'email',
+          'countryCode',
+          'phoneNum',
+          'image',
+        ],
+      },
+    ],
+    attributes: ['customerId'],
+    group: ['customerId'], // Group by customerId to ensure uniqueness
+  })
+
+  return res.json(response({ data: salonCustomers }))
+}
 
 //* 1.Fetch All Salons ---------------------
 
@@ -400,6 +427,10 @@ exports.fecthSalons = async (req, res, next) => {
 
   if (req.params?.sticker == 'sticker') {
     condition.stickerSent = false
+  }
+
+  if (req.params?.external == 'external') {
+    condition.isExternalEmployee = true
   }
 
   const results = await salonDetail.findAll({
@@ -434,6 +465,12 @@ exports.fecthSalons = async (req, res, next) => {
             AND employees.deleted = false
         )`),
         'employeeCount',
+      ],
+      [
+        literal(
+          `(SELECT salonName FROM salonDetails WHERE id = salonDetail.parentSalonId)`,
+        ),
+        'ownerSalonName',
       ],
       // AND employees.isOwner = false
     ],
@@ -901,6 +938,7 @@ exports.fecthAppointments = async (req, res, next) => {
       'id',
       `status`,
       `startTime`,
+      'note',
       `on`,
       'createdAt',
       [

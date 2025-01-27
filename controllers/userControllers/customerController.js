@@ -460,6 +460,7 @@ exports.salonDetails = async (req, res, next) => {
       },
       {
         model: employee,
+        where: { isExternalEmployee: false },
         attributes: [
           'id',
           'position',

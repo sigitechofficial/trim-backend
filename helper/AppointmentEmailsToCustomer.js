@@ -1567,27 +1567,25 @@ module.exports = function (to, data, state = 'book') {
                                     </div>
                                     <tr>
                                       <td>
-                                      
-                                          <button
-                                            onclick="window.location.href='https://www.google.com/maps/search/?api=1&query=${data?.salonDetail?.addressDB?.lat || ''},${data?.salonDetail?.addressDB?.lng || ''}'"
+                                          <a
+                                            href="https://www.google.com/maps/search/?api=1&query=${data?.salonDetail?.addressDB?.lat || ''},${data?.salonDetail?.addressDB?.lng || ''}"
+                                            target="_blank"
                                             style="
-                                              background: none;
-                                              border: none;
-                                              padding: 0;
-                                              margin: 0;
-                                              font: inherit;
-                                              cursor: pointer;
-                                              color: rgb(17, 56, 87);
+                                              display: inline-block;
+                                              background-color: #f0f0f0;
+                                              border: 2px solid rgb(17, 56, 87);
+                                              color: rgb(17, 56, 87) !important;
+                                              font-family: 'Chivo', sans-serif;
                                               font-size: 14px;
-                                              font-family: Chivo, sans-serif;
-                                              font-weight: 400;
-                                              display: flex;
-                                              justify-content: space-between;
-                                              text-align: left;
+                                              font-weight: 400;  
+                                              text-decoration: none !important;
+                                              padding: 10px 20px;
+                                              border-radius: 4px;
+                                              cursor: pointer;
                                             "
                                           >
                                             ${addressString}
-                                          </button>
+                                          </a>
                                         </td>
                                     </tr>
                                   </table>

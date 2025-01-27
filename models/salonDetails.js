@@ -148,6 +148,7 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.salonProfiles)
     models.salonProfiles.belongsTo(salonDetail)
+    // In your salonDetail model
   }
 
   return salonDetail
