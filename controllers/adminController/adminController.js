@@ -1109,47 +1109,85 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
 
 exports.fecthSalonsEarnings = async (req, res, next) => {
   const bookingCondition = { status: 'complete' }
-  if (req.query.startDate && req.query.endDate) {
-    bookingCondition.on = {
-      [Op.between]: [req.query.startDate, req.query.endDate],
-    }
+  const newDate = CustomDate.currentDay()
+  const startDate = req.query?.startDate ? new Date(req.query.startDate) : null
+  const endDate = req.query?.endDate ? new Date(req.query.endDate) : null
+
+  // Function to safely format dates for SQL
+  const formatDate = (date) => {
+    if (!date) return null
+    return date.toISOString().slice(0, 19).replace('T', ' ') // Format as 'YYYY-MM-DD HH:MM:SS'
   }
-  console.log(
-    'ðŸš€ ~ file: adminController.js:629 ~ exports.fecthSalonsEarnings= ~ bookingCondition:',
-    bookingCondition,
-  )
+
+  // Format dates
+  const formattedStartDate = formatDate(startDate)
+  const formattedEndDate = formatDate(endDate)
+
+  // Build the date filter string if both dates are provided
+  const dateFilter =
+    formattedStartDate && formattedEndDate
+      ? ` AND bookings.on BETWEEN '${formattedStartDate}' AND '${formattedEndDate}'`
+      : ''
+
+  // Optionally, handle bookingCondition if it might be undefined
+  const bookingStatusCondition = bookingCondition?.status
+    ? `'${bookingCondition.status}'`
+    : ''
+
+  // Perform the query
   const results = await salonDetail.findAll({
+    where: { isExternalEmployee: false },
     attributes: [
       'salonName',
       'status',
-      [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-      [fn('COUNT', col('ratings.id')), 'ratingCount'],
-      [fn('SUM', col('bookings.total')), 'revenue'],
-      [fn('COUNT', col('bookings.id')), 'totalBookings'],
+      [
+        literal(
+          `(SELECT FORMAT(COALESCE(AVG(ratings.value), 0), 1) 
+            FROM ratings 
+            WHERE ratings.salonDetailId = salonDetail.id)`,
+        ),
+        'salonAverageRating',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(DISTINCT ratings.bookingId) 
+            FROM ratings 
+            WHERE ratings.salonDetailId = salonDetail.id)`,
+        ),
+        'ratingCount',
+      ],
+      [
+        literal(
+          `(SELECT SUM(bookings.total) 
+              FROM bookings 
+              WHERE bookings.salonDetailId = salonDetail.id 
+                AND bookings.status = 'complete' 
+                ${dateFilter})`,
+        ),
+
+        'revenue',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(bookings.salonDetailId) 
+            FROM bookings 
+            WHERE bookings.salonDetailId = salonDetail.id 
+              AND bookings.status = 'complete' 
+              ${dateFilter})`,
+        ),
+        'totalBookings',
+      ],
     ],
     include: [
       {
-        model: booking,
-        where: bookingCondition,
-        attributes: [],
-        required: false,
-      },
-      {
-        model: rating,
-        attributes: [],
-        on: { salonDetailId: col('salonDetail.id') },
-        required: false,
-      },
-      {
         model: addressDBS,
-        required: true,
+        required: false,
         attributes: ['id', 'streetAddress', 'city', 'country', 'postalCode'],
       },
     ],
     group: ['salonDetail.id'],
   })
 
-  console.log('ðŸš€ ~ ', results.averageRating)
   return res
     .status(200)
     .json(response({ data: { salons: results, currencyUnit: CURRENCY_UNIT } }))

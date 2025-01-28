@@ -726,6 +726,11 @@ exports.login = async (req, res, next) => {
           key: 'manageDeals',
           level: 'none',
         },
+        {
+          access: 'Update\nSalon profile',
+          key: 'updateProfile',
+          level: 'none',
+        },
       ]
 
     const result = {}

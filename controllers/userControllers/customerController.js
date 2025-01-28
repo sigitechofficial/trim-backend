@@ -371,11 +371,12 @@ exports.salonDetails = async (req, res, next) => {
   const results = await salonDetail.findByPk(req.params.id, {
     where: {
       // registrationExpiryDate: { [Op.gt]: currentDay.currentDateOnly },
-      approvedByAdmin: true,
+      // approvedByAdmin: true,
     },
     attributes: [
       'id',
       'salonName',
+      'metadata',
       'coverImage',
       'description',
       'onlinePayments',

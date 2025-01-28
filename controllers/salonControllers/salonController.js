@@ -323,21 +323,10 @@ exports.salonTiming = async (req, res, next) => {
       closingTime,
       day: dat.day,
       salonDetailId: salonDetailId,
+      employeeId: selfEmployee?.id,
       status: dat.status,
       workingTime,
     })
-
-    // Adding timing for employeeId if available
-    if (selfEmployee) {
-      salonTimes.push({
-        openingTime,
-        closingTime,
-        day: dat.day,
-        employeeId: selfEmployee.id,
-        status: dat.status,
-        workingTime,
-      })
-    }
   })
 
   // Bulk create all the times
