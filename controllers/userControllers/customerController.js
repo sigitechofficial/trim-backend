@@ -381,6 +381,7 @@ exports.salonDetails = async (req, res, next) => {
       'description',
       'onlinePayments',
       'isOnline',
+      'isExternalEmployee',
       [
         literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
