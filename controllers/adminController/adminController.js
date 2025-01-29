@@ -45,6 +45,7 @@ const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
 const CutomEmails = require('../../helper/CustomEmails')
+const { salonBlock } = require('../eventDrivenCommunication/salonBlock')
 
 //Global Variables
 
@@ -2100,16 +2101,12 @@ exports.changeSalonStatus = async (req, res, next) => {
 
   await salonDetail.update({ status: newStatus }, { where: { userId: id } })
 
-  if (!newStatus) {
-    await deviceToken.destroy({
-      where: { userId: req.params.id },
-    })
-  }
+  salonBlock(id, newStatus)
 
   res.status(200).json(
     response({
       message: 'Status changed successfully',
-      data: { count: updatedCount },
+      data: { count: updatedCount, newStatus },
     }),
   )
 }

@@ -87,20 +87,31 @@ exports.emailtesting = async (req, res, next) => {
   const { htmlContent } = req.body
 
   // const data = DEMO(htmlContent)
-  const bookingData = await bookingDataForEmailAndNotifications('2112')
+  // const bookingData = await bookingDataForEmailAndNotifications('2112')
 
-  //EMAIL
-  if (!bookingData) return false
-  const emailInput = bookingData?.appointment
+  // //EMAIL
+  // if (!bookingData) return false
+  // const emailInput = bookingData?.appointment
 
-  EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
+  // EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
 
-  AppointmentEmailsToCustomer(
-    [`${bookingData?.client?.customerEmail}`],
-    emailInput,
-  )
+  // AppointmentEmailsToCustomer(
+  //   [`${bookingData?.client?.customerEmail}`],
+  //   emailInput,
+  // )
 
-  return res.status(200).json(response({ data: { bookingData } }))
+  const salon = await salonDetail.findOne({
+    where: { id: 301 },
+    attributes: ['id', 'userId'],
+    include: [
+      {
+        model: employee,
+        attributes: ['id', 'userId'],
+      },
+    ],
+  })
+
+  return res.status(200).json(response({ data: { salon } }))
 }
 
 //* DEMO. Notification Testing ----------------------
@@ -905,6 +916,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       )
     }
   }
+
   const jobIds = services.map((obj) => obj.id)
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
   console.log(
