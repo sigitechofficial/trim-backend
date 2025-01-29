@@ -2398,6 +2398,27 @@ exports.addAllergies = async (req, res, next) => {
   return res.json(returnFunction('1', 'success', { newAllergy }, ''))
 }
 
+//* Get Client's allergies
+
+exports.fetchAllergies = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id', 'userId'],
+  })
+  if (!salon) {
+    return next(new appError('Salon not found!', 200))
+  }
+
+  const allergiesList = await allergies.findAll({
+    where: { userId: req.params.id, salonDetailId: salon?.id },
+    attributes: {
+      exclude: ['updatedAt', 'salonDetailId', 'userId'],
+    },
+  })
+
+  return res.json(returnFunction('1', 'success', { allergiesList }, ''))
+}
+
 //* Remove Client's allergies
 
 exports.removeAllergies = async (req, res, next) => {
