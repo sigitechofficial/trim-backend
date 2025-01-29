@@ -149,6 +149,9 @@ module.exports = (sequelize) => {
     user.hasMany(models.employeeProfile)
     models.employeeProfile.belongsTo(user)
 
+    user.hasMany(models.allergies)
+    models.allergies.belongsTo(user)
+
     // linking user to booking as customer
     // user.hasMany(models.booking, { as: "customer", foreignKey: "customerId" });
     // models.booking.belongsTo(user, {

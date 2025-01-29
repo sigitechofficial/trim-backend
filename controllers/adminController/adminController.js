@@ -45,6 +45,7 @@ const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
 const CutomEmails = require('../../helper/CustomEmails')
+const { salonBlock } = require('../eventDrivenCommunication/salonBlock')
 
 //Global Variables
 
@@ -382,6 +383,33 @@ exports.dashboardCharts = async (req, res, next) => {
 }
 
 //!3.SALONS ----------------------------------------------------------------------------------------
+//* 0.Fetch All salonCustomer ---------------------
+
+exports.fetchSalonCustomer = async (req, res, next) => {
+  const salonCustomers = await booking.findAll({
+    where: {
+      salonDetailId: req?.params?.salon,
+    },
+    include: [
+      {
+        model: user,
+        attributes: [
+          `id`,
+          `firstName`,
+          'lastName',
+          'email',
+          'countryCode',
+          'phoneNum',
+          'image',
+        ],
+      },
+    ],
+    attributes: ['customerId'],
+    group: ['customerId'], // Group by customerId to ensure uniqueness
+  })
+
+  return res.json(response({ data: salonCustomers }))
+}
 
 //* 1.Fetch All Salons ---------------------
 
@@ -400,6 +428,10 @@ exports.fecthSalons = async (req, res, next) => {
 
   if (req.params?.sticker == 'sticker') {
     condition.stickerSent = false
+  }
+
+  if (req.params?.external == 'external') {
+    condition.isExternalEmployee = true
   }
 
   const results = await salonDetail.findAll({
@@ -434,6 +466,12 @@ exports.fecthSalons = async (req, res, next) => {
             AND employees.deleted = false
         )`),
         'employeeCount',
+      ],
+      [
+        literal(
+          `(SELECT salonName FROM salonDetails WHERE id = salonDetail.parentSalonId)`,
+        ),
+        'ownerSalonName',
       ],
       // AND employees.isOwner = false
     ],
@@ -901,6 +939,7 @@ exports.fecthAppointments = async (req, res, next) => {
       'id',
       `status`,
       `startTime`,
+      'note',
       `on`,
       'createdAt',
       [
@@ -1071,47 +1110,85 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
 
 exports.fecthSalonsEarnings = async (req, res, next) => {
   const bookingCondition = { status: 'complete' }
-  if (req.query.startDate && req.query.endDate) {
-    bookingCondition.on = {
-      [Op.between]: [req.query.startDate, req.query.endDate],
-    }
+  const newDate = CustomDate.currentDay()
+  const startDate = req.query?.startDate ? new Date(req.query.startDate) : null
+  const endDate = req.query?.endDate ? new Date(req.query.endDate) : null
+
+  // Function to safely format dates for SQL
+  const formatDate = (date) => {
+    if (!date) return null
+    return date.toISOString().slice(0, 19).replace('T', ' ') // Format as 'YYYY-MM-DD HH:MM:SS'
   }
-  console.log(
-    'ðŸš€ ~ file: adminController.js:629 ~ exports.fecthSalonsEarnings= ~ bookingCondition:',
-    bookingCondition,
-  )
+
+  // Format dates
+  const formattedStartDate = formatDate(startDate)
+  const formattedEndDate = formatDate(endDate)
+
+  // Build the date filter string if both dates are provided
+  const dateFilter =
+    formattedStartDate && formattedEndDate
+      ? ` AND bookings.on BETWEEN '${formattedStartDate}' AND '${formattedEndDate}'`
+      : ''
+
+  // Optionally, handle bookingCondition if it might be undefined
+  const bookingStatusCondition = bookingCondition?.status
+    ? `'${bookingCondition.status}'`
+    : ''
+
+  // Perform the query
   const results = await salonDetail.findAll({
+    where: { isExternalEmployee: false },
     attributes: [
       'salonName',
       'status',
-      [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-      [fn('COUNT', col('ratings.id')), 'ratingCount'],
-      [fn('SUM', col('bookings.total')), 'revenue'],
-      [fn('COUNT', col('bookings.id')), 'totalBookings'],
+      [
+        literal(
+          `(SELECT FORMAT(COALESCE(AVG(ratings.value), 0), 1) 
+            FROM ratings 
+            WHERE ratings.salonDetailId = salonDetail.id)`,
+        ),
+        'salonAverageRating',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(DISTINCT ratings.bookingId) 
+            FROM ratings 
+            WHERE ratings.salonDetailId = salonDetail.id)`,
+        ),
+        'ratingCount',
+      ],
+      [
+        literal(
+          `(SELECT SUM(bookings.total) 
+              FROM bookings 
+              WHERE bookings.salonDetailId = salonDetail.id 
+                AND bookings.status = 'complete' 
+                ${dateFilter})`,
+        ),
+
+        'revenue',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(bookings.salonDetailId) 
+            FROM bookings 
+            WHERE bookings.salonDetailId = salonDetail.id 
+              AND bookings.status = 'complete' 
+              ${dateFilter})`,
+        ),
+        'totalBookings',
+      ],
     ],
     include: [
       {
-        model: booking,
-        where: bookingCondition,
-        attributes: [],
-        required: false,
-      },
-      {
-        model: rating,
-        attributes: [],
-        on: { salonDetailId: col('salonDetail.id') },
-        required: false,
-      },
-      {
         model: addressDBS,
-        required: true,
+        required: false,
         attributes: ['id', 'streetAddress', 'city', 'country', 'postalCode'],
       },
     ],
     group: ['salonDetail.id'],
   })
 
-  console.log('ðŸš€ ~ ', results.averageRating)
   return res
     .status(200)
     .json(response({ data: { salons: results, currencyUnit: CURRENCY_UNIT } }))
@@ -1973,7 +2050,9 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
   const startDate =
     req.query && req.query.startDate ? req.query.startDate : '2024-02-01'
   const endDate =
-    req.query && req.query.startDate ? req.query.startDate : '2024-03-31'
+    req.query && req.query.endDate
+      ? req.query.endDate
+      : currentDay?.currentDateOnly
   const condition = {
     on: { [Op.between]: [startDate, endDate] },
   }
@@ -2024,16 +2103,12 @@ exports.changeSalonStatus = async (req, res, next) => {
 
   await salonDetail.update({ status: newStatus }, { where: { userId: id } })
 
-  if (!newStatus) {
-    await deviceToken.destroy({
-      where: { userId: req.params.id },
-    })
-  }
+  salonBlock(id, newStatus)
 
   res.status(200).json(
     response({
       message: 'Status changed successfully',
-      data: { count: updatedCount },
+      data: { count: updatedCount, newStatus },
     }),
   )
 }

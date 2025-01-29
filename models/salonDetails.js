@@ -104,6 +104,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    deleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
   })
 
   salonDetail.associate = (models) => {
@@ -148,6 +153,11 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.salonProfiles)
     models.salonProfiles.belongsTo(salonDetail)
+
+    salonDetail.hasMany(models.allergies)
+    models.allergies.belongsTo(salonDetail)
+
+    // In your salonDetail model
   }
 
   return salonDetail

@@ -296,4 +296,11 @@ router.post(
   catchAsync(salonController.customPermotionalNotificaiton),
 )
 
+router.post('/new-allergy', catchAsync(salonController.addAllergies))
+router.get(
+  '/allergies-list-of-customer/:id',
+  catchAsync(salonController.fetchAllergies),
+)
+router.patch('/remove-allergy/:id', catchAsync(salonController.removeAllergies))
+
 module.exports = router

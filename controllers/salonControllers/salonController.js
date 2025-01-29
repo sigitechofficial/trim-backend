@@ -33,6 +33,7 @@ const {
   deviceToken,
   cancelledSubscriptions,
   salonProfiles,
+  allergies,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -323,21 +324,10 @@ exports.salonTiming = async (req, res, next) => {
       closingTime,
       day: dat.day,
       salonDetailId: salonDetailId,
+      employeeId: selfEmployee?.id,
       status: dat.status,
       workingTime,
     })
-
-    // Adding timing for employeeId if available
-    if (selfEmployee) {
-      salonTimes.push({
-        openingTime,
-        closingTime,
-        day: dat.day,
-        employeeId: selfEmployee.id,
-        status: dat.status,
-        workingTime,
-      })
-    }
   })
 
   // Bulk create all the times
@@ -2259,7 +2249,7 @@ exports.reviewReply = async (req, res, next) => {
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
 }
 
-//* Slon custom notification
+//* Salon custom notification
 
 exports.customPermotionalNotificaiton = async (req, res, next) => {
   const salon = await salonDetail.findOne({
@@ -2389,4 +2379,51 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
   // console.log('🚀 ~ exports.reviewReply= ~ client:', client)
 
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
+}
+
+//* Add Client's allergies
+
+exports.addAllergies = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id', 'userId'],
+  })
+  if (!salon) {
+    return next(new appError('Salon not found!', 200))
+  }
+  req.body.salonDetailId = salon?.id
+
+  const newAllergy = await allergies.create(req.body)
+
+  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
+}
+
+//* Get Client's allergies
+
+exports.fetchAllergies = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id', 'userId'],
+  })
+  if (!salon) {
+    return next(new appError('Salon not found!', 200))
+  }
+
+  const allergiesList = await allergies.findAll({
+    where: { userId: req.params.id, salonDetailId: salon?.id },
+    attributes: {
+      exclude: ['updatedAt', 'salonDetailId', 'userId'],
+    },
+  })
+
+  return res.json(returnFunction('1', 'success', { allergiesList }, ''))
+}
+
+//* Remove Client's allergies
+
+exports.removeAllergies = async (req, res, next) => {
+  const newAllergy = await allergies.destroy({
+    where: { id: req.params?.id },
+  })
+  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
 }

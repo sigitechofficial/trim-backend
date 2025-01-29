@@ -87,20 +87,31 @@ exports.emailtesting = async (req, res, next) => {
   const { htmlContent } = req.body
 
   // const data = DEMO(htmlContent)
-  const bookingData = await bookingDataForEmailAndNotifications('2112')
+  // const bookingData = await bookingDataForEmailAndNotifications('2112')
 
-  //EMAIL
-  if (!bookingData) return false
-  const emailInput = bookingData?.appointment
+  // //EMAIL
+  // if (!bookingData) return false
+  // const emailInput = bookingData?.appointment
 
-  EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
+  // EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
 
-  AppointmentEmailsToCustomer(
-    [`${bookingData?.client?.customerEmail}`],
-    emailInput,
-  )
+  // AppointmentEmailsToCustomer(
+  //   [`${bookingData?.client?.customerEmail}`],
+  //   emailInput,
+  // )
 
-  return res.status(200).json(response({ data: { bookingData } }))
+  const salon = await salonDetail.findOne({
+    where: { id: 301 },
+    attributes: ['id', 'userId'],
+    include: [
+      {
+        model: employee,
+        attributes: ['id', 'userId'],
+      },
+    ],
+  })
+
+  return res.status(200).json(response({ data: { salon } }))
 }
 
 //* DEMO. Notification Testing ----------------------
@@ -371,15 +382,17 @@ exports.salonDetails = async (req, res, next) => {
   const results = await salonDetail.findByPk(req.params.id, {
     where: {
       // registrationExpiryDate: { [Op.gt]: currentDay.currentDateOnly },
-      approvedByAdmin: true,
+      // approvedByAdmin: true,
     },
     attributes: [
       'id',
       'salonName',
+      'metadata',
       'coverImage',
       'description',
       'onlinePayments',
       'isOnline',
+      'isExternalEmployee',
       [
         literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
@@ -460,6 +473,7 @@ exports.salonDetails = async (req, res, next) => {
       },
       {
         model: employee,
+        where: { isExternalEmployee: false },
         attributes: [
           'id',
           'position',
@@ -902,6 +916,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       )
     }
   }
+
   const jobIds = services.map((obj) => obj.id)
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
   console.log(

@@ -21,5 +21,5 @@ router.get(
   '/employee-session/:user',
   catchAsync(authController.employeeSession),
 )
-router.get('/logout', catchAsync(authController.logout))
+router.get('/logout', catchAsync(authController.logout)) // use patch instead of get
 module.exports = router
