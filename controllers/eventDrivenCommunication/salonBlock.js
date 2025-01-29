@@ -4,27 +4,27 @@ const { sendEvent } = require('../../socket_io')
 
 exports.salonBlock = async (userId, newStatus) => {
   try {
-    await deviceToken.destroy({
-      where: { userId: userId },
-    })
     const salon = await salonDetail.findOne({
       where: { userId: userId },
       attributes: ['id', 'userId'],
       include: [
         {
           model: employee,
+          required: false,
+          where: { isOwner: false },
           attributes: ['id', 'userId'],
         },
       ],
     })
 
     const externalEmployees = await salonDetail.findAll({
-      where: { parentSalonId: userId },
+      where: { parentSalonId: salon.id },
       attributes: ['id', 'userId'],
     })
     const userIdsToblock = [userId]
     const workers = []
     const externalEmployeesSalonId = []
+
     if (externalEmployees?.length > 0) {
       externalEmployees.forEach((ele) => {
         externalEmployeesSalonId.push(ele.id)

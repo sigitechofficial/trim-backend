@@ -30,6 +30,7 @@ const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 
 const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
+const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees')
 
 //! Return Function
 let returnFunction = (status, message, data, error) => {
@@ -941,8 +942,13 @@ exports.activeBlockEmployee = async (req, res, next) => {
       booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
     }
   }
-  user.update({ status: req.body.status }, { where: { id: userId } })
-  employee.update({ status: req.body.status }, { where: { userId: userId } })
+  user.update({ status: req.body?.status || false }, { where: { id: userId } })
+  employee.update(
+    { status: req.body?.status || false },
+    { where: { userId: userId } },
+  )
+
+  blockEmployees(req.body?.status || false, worker)
   return res.json(returnFunction('1', 'success', {}, ''))
 }
 

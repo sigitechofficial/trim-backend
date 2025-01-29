@@ -30,6 +30,59 @@ const EmailWelcome = require('../../helper/WelcomeForBoth')
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
 }
+
+const defaultAccess = [
+  {
+    access: 'Reschedule\nAppointments',
+    key: 'appointments',
+    level: 'none',
+  },
+  {
+    access: 'Team\nMember',
+    key: 'teamMember',
+    level: 'none',
+  },
+  {
+    access: 'Can Book\nAppointments',
+    key: 'bookAppointments',
+    level: 'none',
+  },
+  {
+    access: 'Can Apply Discounts\nTo Appointments',
+    key: 'applyDiscount',
+    level: 'none',
+  },
+  {
+    access: 'Clients',
+    key: 'client',
+    level: 'none',
+  },
+  {
+    access: 'Services',
+    key: 'services',
+    level: 'none',
+  },
+  {
+    access: 'Client\nFeedback',
+    key: 'feedback',
+    level: 'none',
+  },
+  {
+    access: 'Manage\nDeals',
+    key: 'manageDeals',
+    level: 'none',
+  },
+  {
+    access: 'Update\nSalon profile',
+    key: 'updateProfile',
+    level: 'none',
+  },
+  {
+    access: 'Send\nNotification',
+    key: 'sendNotification',
+    level: 'none',
+  },
+]
 // [
 //   literal(
 //     `(SELECT users.email
@@ -684,54 +737,7 @@ exports.login = async (req, res, next) => {
       access = await employeeAccessDefault.findAll({
         where: { salonDetailId: employeeDetails.salonDetailId },
       })
-    if (access.length < 1)
-      access = [
-        {
-          access: 'Reschedule\nAppointments',
-          key: 'appointments',
-          level: 'none',
-        },
-        {
-          access: 'Team\nMember',
-          key: 'teamMember',
-          level: 'none',
-        },
-        {
-          access: 'Can Book\nAppointments',
-          key: 'bookAppointments',
-          level: 'none',
-        },
-        {
-          access: 'Can Apply Discounts\nTo Appointments',
-          key: 'applyDiscount',
-          level: 'none',
-        },
-        {
-          access: 'Clients',
-          key: 'client',
-          level: 'none',
-        },
-        {
-          access: 'Services',
-          key: 'services',
-          level: 'none',
-        },
-        {
-          access: 'Client\nFeedback',
-          key: 'feedback',
-          level: 'none',
-        },
-        {
-          access: 'Manage\nDeals',
-          key: 'manageDeals',
-          level: 'none',
-        },
-        {
-          access: 'Update\nSalon profile',
-          key: 'updateProfile',
-          level: 'none',
-        },
-      ]
+    if (access.length < 1) access = defaultAccess
 
     const result = {}
     access.forEach((item) => {
@@ -1035,49 +1041,7 @@ exports.loginNew = async (req, res, next) => {
       access = await employeeAccessDefault.findAll({
         where: { salonDetailId: employeeDetails.salonDetailId },
       })
-    if (access.length < 1)
-      access = [
-        {
-          access: 'Reschedule\nAppointments',
-          key: 'appointments',
-          level: 'none',
-        },
-        {
-          access: 'Team\nMember',
-          key: 'teamMember',
-          level: 'none',
-        },
-        {
-          access: 'Can Book\nAppointments',
-          key: 'bookAppointments',
-          level: 'none',
-        },
-        {
-          access: 'Can Apply Discounts\nTo Appointments',
-          key: 'applyDiscount',
-          level: 'none',
-        },
-        {
-          access: 'Clients',
-          key: 'client',
-          level: 'none',
-        },
-        {
-          access: 'Services',
-          key: 'services',
-          level: 'none',
-        },
-        {
-          access: 'Client\nFeedback',
-          key: 'feedback',
-          level: 'none',
-        },
-        {
-          access: 'Manage\nDeals',
-          key: 'manageDeals',
-          level: 'none',
-        },
-      ]
+    if (access.length < 1) access = defaultAccess
 
     const result = {}
     access.forEach((item) => {
@@ -1529,49 +1493,7 @@ exports.employeeSession = async (req, res, next) => {
     access = await employeeAccessDefault.findAll({
       where: { salonDetailId: employeeDetails.salonDetailId },
     })
-  if (access.length < 1)
-    access = [
-      {
-        access: 'Reschedule\nAppointments',
-        key: 'appointments',
-        level: 'none',
-      },
-      {
-        access: 'Team\nMember',
-        key: 'teamMember',
-        level: 'none',
-      },
-      {
-        access: 'Can Book\nAppointments',
-        key: 'bookAppointments',
-        level: 'none',
-      },
-      {
-        access: 'Can Apply Discounts\nTo Appointments',
-        key: 'applyDiscount',
-        level: 'none',
-      },
-      {
-        access: 'Clients',
-        key: 'client',
-        level: 'none',
-      },
-      {
-        access: 'Services',
-        key: 'services',
-        level: 'none',
-      },
-      {
-        access: 'Client\nFeedback',
-        key: 'feedback',
-        level: 'none',
-      },
-      {
-        access: 'Manage\nDeals',
-        key: 'manageDeals',
-        level: 'none',
-      },
-    ]
+  if (access.length < 1) access = defaultAccess
   const result = {}
   access.forEach((item) => {
     result[item.key] = item.level
