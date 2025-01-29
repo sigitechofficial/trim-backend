@@ -1890,6 +1890,14 @@ exports.roleDetails = async (req, res, next) => {
 //* 4.Service History  -----------------
 
 exports.serviceHistory = async (req, res, next) => {
+  const worker = await employee.findOne({
+    where: { userId: req.params?.employee },
+  })
+
+  if (!worker) {
+    throw new AppError('Employee Not found', 200)
+  }
+
   const history = await booking.findAll({
     where: {
       status: 'complete',
@@ -1909,14 +1917,14 @@ exports.serviceHistory = async (req, res, next) => {
       },
       {
         model: jobs,
-        where: { employeeId: req.params.employee, status: 'complete' },
+        where: { employeeId: worker?.id, status: 'complete' },
         required: true,
         attributes: [
           [
             literal(
-              '(SELECT GROUP_CONCAT(service.serviceName SEPARATOR ", ") FROM services AS service WHERE service.id = jobs.serviceId)',
+              '(SELECT serviceName  FROM services WHERE services.id = jobs.serviceId)',
             ),
-            'serviceNames',
+            'serviceName',
           ],
         ],
       },
