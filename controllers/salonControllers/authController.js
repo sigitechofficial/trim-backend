@@ -1553,7 +1553,7 @@ exports.employeeSession = async (req, res, next) => {
 
 exports.logout = async (req, res) => {
   await deviceToken.destroy({
-    where: { tokenId: req.user.dvToken, userId: req.user.id },
+    where: { tokenId: req.user?.dvToken, userId: req.user?.id },
   })
 
   return res.json({

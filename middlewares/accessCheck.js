@@ -14,24 +14,29 @@ module.exports = async function validateToken(req, res, next) {
 
     req.user = validToken
     console.log('🚀 ~ validateToken ~  req.user:', req.user?.id)
-    const check = await deviceToken.findOne({
-      where: { tokenId: req.user.dvToken },
-      attributes: ['id'],
-      include: { model: user, where: { status: true }, attributes: [] },
-      //not working for employee cause we pass salon id in employee accessToken ,userId: req.user.id
-    })
-    console.log('🚀 ~ validateToken ~ check:', check)
 
-    if (check) {
-      console.log('🚀 ~ validateToken ~ check:')
+    if (req.url == '/logout') {
       next()
     } else {
-      return res.json({
-        status: '0',
-        message: 'Access Denied',
-        data: {},
-        error: 'You are not authorized to access it',
+      const check = await deviceToken.findOne({
+        where: { tokenId: req.user.dvToken },
+        attributes: ['id'],
+        include: { model: user, where: { status: true }, attributes: [] },
+        //not working for employee cause we pass salon id in employee accessToken ,userId: req.user.id
       })
+      console.log('🚀 ~ validateToken ~ check:', check)
+
+      if (check) {
+        console.log('🚀 ~ validateToken ~ check:')
+        next()
+      } else {
+        return res.json({
+          status: '0',
+          message: 'Access Denied',
+          data: {},
+          error: 'You are not authorized to access it',
+        })
+      }
     }
   } catch (error) {
     return res.json({
