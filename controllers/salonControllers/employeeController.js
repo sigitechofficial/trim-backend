@@ -942,7 +942,10 @@ exports.activeBlockEmployee = async (req, res, next) => {
       booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
     }
   }
-  user.update({ status: req.body?.status || false }, { where: { id: userId } })
+  await user.update(
+    { status: req.body?.status || false },
+    { where: { id: userId } },
+  )
   employee.update(
     { status: req.body?.status || false },
     { where: { userId: userId } },

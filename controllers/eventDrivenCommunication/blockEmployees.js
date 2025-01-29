@@ -26,7 +26,7 @@ exports.blockEmployees = async (newStatus, worker) => {
       }
     } else if (!worker?.isExternalEmployee) {
       if (!newStatus) {
-        sendEvent(`${worker?.employee}E`, socketInputService)
+        sendEvent(`${worker?.employeeId}E`, socketInputService)
       }
     }
     console.log('🚀 ~~~~~EmployeeBLock eventDrivenCommunication ~~~~~~~ 🚀')

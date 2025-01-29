@@ -48,7 +48,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
     },
     note: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    salonNote: {
+      type: DataTypes.STRING(),
       allowNull: true,
     },
     startTime: {
@@ -89,10 +93,6 @@ module.exports = (sequelize, DataTypes) => {
     },
     upFrontPaymentPercentage: {
       type: DataTypes.INTEGER,
-      allowNull: true,
-    },
-    note: {
-      type: DataTypes.STRING(),
       allowNull: true,
     },
     paymentMethod: {

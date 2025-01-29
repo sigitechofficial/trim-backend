@@ -33,6 +33,7 @@ const {
   deviceToken,
   cancelledSubscriptions,
   salonProfiles,
+  allergies,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -2248,7 +2249,7 @@ exports.reviewReply = async (req, res, next) => {
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
 }
 
-//* Slon custom notification
+//* Salon custom notification
 
 exports.customPermotionalNotificaiton = async (req, res, next) => {
   const salon = await salonDetail.findOne({
@@ -2378,4 +2379,30 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
   // console.log('🚀 ~ exports.reviewReply= ~ client:', client)
 
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
+}
+
+//* Add Client's allergies
+
+exports.addAllergies = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id', 'userId'],
+  })
+  if (!salon) {
+    return next(new appError('Salon not found!', 200))
+  }
+  req.body.salonDetailId = salon?.id
+
+  const newAllergy = await allergies.create(req.body)
+
+  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
+}
+
+//* Remove Client's allergies
+
+exports.removeAllergies = async (req, res, next) => {
+  const newAllergy = await allergies.destroy({
+    where: { id: req.params?.id },
+  })
+  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
 }

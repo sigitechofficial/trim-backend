@@ -2050,7 +2050,9 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
   const startDate =
     req.query && req.query.startDate ? req.query.startDate : '2024-02-01'
   const endDate =
-    req.query && req.query.startDate ? req.query.startDate : '2024-03-31'
+    req.query && req.query.endDate
+      ? req.query.endDate
+      : currentDay?.currentDateOnly
   const condition = {
     on: { [Op.between]: [startDate, endDate] },
   }
