@@ -1754,6 +1754,7 @@ exports.saleDetails = async (req, res, next) => {
     refundAmount: bookingData.refundAmount,
     penaltyAmount: bookingData.penaltyAmount,
     scheduleDate: bookingData.on,
+    appointmentNote: bookingData?.note || '',
     client: `${bookingData?.user?.firstName || bookingData.clientFirstName} ${bookingData?.user?.lastName || bookingData.clientLastName}`,
     profile: bookingData?.user?.image,
     email: bookingData?.user?.email,
@@ -2441,12 +2442,12 @@ exports.addUpdateClientNote = async (req, res, next) => {
     where: { userId: req.params?.id, salonDetailId: salon.id },
   })
   if (hasNote) {
-    await user.update(
+    await clientNotes.update(
       { customerNote: customerNote },
       { where: { userId: req.params?.id, salonDetailId: salon.id } },
     )
   } else {
-    await user.create({
+    await clientNotes.create({
       customerNote: customerNote,
       userId: req.params?.id,
       salonDetailId: salon.id,
