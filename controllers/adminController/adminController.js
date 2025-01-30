@@ -250,8 +250,10 @@ exports.dashboard = async (req, res, next) => {
   const countAppointments = async (status) => {
     const whereCondition = {
       status,
-      ...dateFilter, // Spread the dateFilter if it's not empty
+      ...dateFilter,
+      salonDetailId: { [Op.ne]: null },
     }
+
     return await booking.count({ where: whereCondition })
   }
 
@@ -1194,12 +1196,38 @@ exports.fecthSalonsEarnings = async (req, res, next) => {
         attributes: ['id', 'streetAddress', 'city', 'country', 'postalCode'],
       },
     ],
-    group: ['salonDetail.id'],
   })
 
-  return res
-    .status(200)
-    .json(response({ data: { salons: results, currencyUnit: CURRENCY_UNIT } }))
+  const earnings =
+    results?.length > 0 ? JSON.parse(JSON.stringify(results)) : []
+
+  const totalEarning =
+    earnings.length > 0
+      ? earnings.reduce((accumulator, currentObject) => {
+          const revenueStr = currentObject.revenue
+
+          // Check if revenue exists
+          if (revenueStr) {
+            const revenue = parseFloat(revenueStr)
+
+            // Check if the parsed revenue is a valid number
+            if (!isNaN(revenue)) {
+              return accumulator + revenue
+            } else {
+              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
+              return accumulator
+            }
+          } else {
+            console.warn('Revenue key missing in object:', currentObject)
+            return accumulator
+          }
+        }, 0)
+      : 0
+  return res.status(200).json(
+    response({
+      data: { salons: results, currencyUnit: CURRENCY_UNIT, totalEarning },
+    }),
+  )
 }
 
 //! 9.Help & Support ----------------------------------------------------------------------

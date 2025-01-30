@@ -738,6 +738,7 @@ exports.bookingDetails = async (req, res, next) => {
     status: bookingData.status,
     discount: bookingData.discount,
     actualCapturedAmount: bookingData.actualCapturedAmount,
+    appointmentNote: bookingData?.note || '',
     client: clientName,
     profile: bookingData.user?.image ?? '',
     email: bookingData.user?.email ?? '',
