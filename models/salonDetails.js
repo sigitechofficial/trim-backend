@@ -157,6 +157,8 @@ module.exports = (sequelize, DataTypes) => {
     salonDetail.hasMany(models.allergies)
     models.allergies.belongsTo(salonDetail)
 
+    salonDetail.hasMany(models.clientNotes)
+    models.clientNotes.belongsTo(salonDetail)
     // In your salonDetail model
   }
 

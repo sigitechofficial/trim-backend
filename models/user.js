@@ -120,6 +120,10 @@ module.exports = (sequelize) => {
     // LINK to OTP Table
     user.hasOne(models.otpVerification)
     models.otpVerification.belongsTo(user)
+
+    user.hasMany(models.clientNotes)
+    models.clientNotes.belongsTo(user)
+
     // LINK to device Tokens
     user.hasMany(models.deviceToken)
     models.deviceToken.belongsTo(user)

@@ -393,4 +393,10 @@ router.get(
   catchAsync(adminController.fetchSalonCustomer),
 )
 
+router.get(
+  '/admin-earnings',
+  protect,
+  catchAsync(adminController.adminEarnings),
+)
+
 module.exports = router

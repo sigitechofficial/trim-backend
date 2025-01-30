@@ -2271,3 +2271,61 @@ exports.customEmails = async (req, res, next) => {
     }),
   )
 }
+
+exports.adminEarnings = async (req, res, next) => {
+  const currentDay = CustomDate.currentDay()
+  const { id } = req.params
+  const startDate = req.query.startDate || '2023-12-01'
+  const endDate = req.query.endDate || currentDay.currentDateOnly
+  const status = req.params.status || 'complete'
+
+  const bookingCondition = {
+    deleted: false,
+    // on: { [Op.between]: [startDate, endDate] },
+  }
+  const limit = req.params.limit * 1
+
+  const rows = await salonDetail.findAll({
+    // where: bookingCondition,
+    attributes: [
+      'id',
+      'salonName',
+      [
+        // Calculate revenue as a numeric value
+        literal(
+          `(SELECT SUM(bookings.actualCapturedAmount)
+            FROM bookings
+            WHERE bookings.salonDetailId = salonDetail.id AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}')`,
+        ),
+        'revenue',
+      ],
+      [
+        literal(
+          `(SELECT COUNT(*) FROM bookings WHERE bookings.salonDetailId = salonDetail.id AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}')`,
+        ),
+        'bookingCount',
+      ],
+      [
+        // Summing up the serviceAmount from jobs for bookings associated with each salon
+        literal(
+          `(SELECT COUNT(*)
+            FROM jobs
+            WHERE jobs.bookingId IN (
+              SELECT id FROM bookings WHERE bookings.salonDetailId = salonDetail.id 
+              AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}'
+            ))`,
+        ),
+        'totalServices',
+      ],
+    ],
+
+    order: [[literal('revenue'), 'DESC']],
+    limit: limit,
+  })
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
+    }),
+  )
+}

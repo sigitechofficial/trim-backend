@@ -297,10 +297,17 @@ router.post(
 )
 
 router.post('/new-allergy', catchAsync(salonController.addAllergies))
+
 router.get(
   '/allergies-list-of-customer/:id',
   catchAsync(salonController.fetchAllergies),
 )
+
 router.patch('/remove-allergy/:id', catchAsync(salonController.removeAllergies))
+
+router.patch(
+  '/add-update-client-note/:id',
+  catchAsync(salonController.addUpdateClientNote),
+)
 
 module.exports = router
