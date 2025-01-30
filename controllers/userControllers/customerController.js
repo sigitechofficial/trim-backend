@@ -411,6 +411,7 @@ exports.salonDetails = async (req, res, next) => {
         model: booking,
         required: false,
         where: { status: 'complete', rating: 'done' },
+        order: [['createdAt', 'DESC']],
         limit: 10,
         attributes: [
           'id',

@@ -27,6 +27,7 @@ const {
   rentChairEarning,
   employeeWagesMethod,
   salonProfiles,
+  clientNotes,
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')
@@ -676,10 +677,12 @@ exports.bookingDetails = async (req, res, next) => {
       },
     ],
   })
+
   console.log(
     '🚀 ~ exports.bookingDetails= ~ bookingData:',
     // JSON.parse(JSON.stringify(bookingData)),
   )
+
   // return res.json(bookingData)
   let cardDetails
   if (bookingData?.paymentMethod == 'card') {
@@ -691,6 +694,12 @@ exports.bookingDetails = async (req, res, next) => {
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['id'],
   })
+
+  const { customerNote } = await clientNotes.findOne({
+    where: { userId: bookingData.customerId, salonDetailId: salon.id },
+    attributes: ['customerNote'],
+  })
+
   if (isblocked) customerStatus = 'block'
 
   let services = []
@@ -722,6 +731,7 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.total) +
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount)
+
   let bookingDetail = {
     id: bookingData.id,
     scheduleDate: bookingData.on,
@@ -731,6 +741,7 @@ exports.bookingDetails = async (req, res, next) => {
     client: clientName,
     profile: bookingData.user?.image ?? '',
     email: bookingData.user?.email ?? '',
+    clientNote: customerNote || '',
     Phone: clientContact,
     salonDetailId: bookingData.salonDetailId,
     Upfront: bookingData.initialPayment,
@@ -1676,20 +1687,17 @@ exports.jobStatus = async (req, res, next) => {
       ________________________________________
   */
 exports.clientHistory = async (req, res, next) => {
-  const userId = req.user.id
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id'],
+  })
   const { customerId } = req.body
   const clientBookings = await booking.findAll({
     where: {
       customerId,
+      salonDetailId: salon?.id,
     },
     include: [
-      {
-        model: salonDetail,
-        where: {
-          userId,
-        },
-        attributes: [],
-      },
       {
         model: jobs,
         include: [
@@ -1711,10 +1719,28 @@ exports.clientHistory = async (req, res, next) => {
         attributes: ['id', 'total', 'duration'],
       },
     ],
-    attributes: ['id', 'status', 'on', 'startTime'],
+    attributes: ['id', 'status', 'on', 'startTime', 'customerId', ''],
+  })
+
+  let customerStatus = 'active'
+
+  const isblocked = await blockCustomer.findOne({
+    where: { userId: clientBookings.customerId, salonDetailId: salon.id },
+    attributes: ['id'],
+  })
+  if (isblocked) customerStatus = 'block'
+
+  const { customerNote } = await clientNotes.findOne({
+    where: { userId: bookingData.customerId, salonDetailId: salon.id },
+    attributes: ['customerNote'],
   })
   return res.json(
-    returnFunction('1', 'Client Booking History', { clientBookings }, ''),
+    returnFunction(
+      '1',
+      'Client Booking History',
+      { clientNote: customerNote, customerStatus, clientBookings },
+      '',
+    ),
   )
 }
 /*

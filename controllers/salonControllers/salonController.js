@@ -34,6 +34,7 @@ const {
   cancelledSubscriptions,
   salonProfiles,
   allergies,
+  clientNotes,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -2426,4 +2427,35 @@ exports.removeAllergies = async (req, res, next) => {
     where: { id: req.params?.id },
   })
   return res.json(returnFunction('1', 'success', { newAllergy }, ''))
+}
+
+//* Client Note
+
+exports.addUpdateClientNote = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user?.id },
+    attributes: ['id'],
+  })
+  const { customerNote } = req.body
+  const hasNote = await clientNotes.findOne({
+    where: { userId: req.params?.id, salonDetailId: salon.id },
+  })
+  if (hasNote) {
+    await user.update(
+      { customerNote: customerNote },
+      { where: { userId: req.params?.id, salonDetailId: salon.id } },
+    )
+  } else {
+    await user.create({
+      customerNote: customerNote,
+      userId: req.params?.id,
+      salonDetailId: salon.id,
+    })
+  }
+
+  const output = response({
+    message: 'Success.',
+    data: {},
+  })
+  return res.status(200).json(output)
 }

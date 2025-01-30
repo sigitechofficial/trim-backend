@@ -60,7 +60,7 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
         },
         {
           model: jobs,
-          attributes: ['id', 'on', 'startTime', 'duration', 'employee'],
+          attributes: ['id', 'on', 'startTime', 'duration', 'employeeId'],
           include: [
             { model: service, attributes: ['serviceName'] },
             {
