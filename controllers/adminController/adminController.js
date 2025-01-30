@@ -362,6 +362,7 @@ exports.dashboardCharts = async (req, res, next) => {
     ],
     datasets: [{ data }],
   }
+
   const dashboardDoughnutChartData = {
     labels: ['Old Members', 'New Subscription'],
     datasets: [
@@ -528,6 +529,7 @@ exports.fecthSalons = async (req, res, next) => {
 //* 1.Fetch All Salons ---------------------(send stickers include) sendSticker
 
 exports.updateSalonDetails = async (req, res, next) => {
+  console.log('🚀 ~ exports.updateSalonDetails= ~ req.body:', req.body)
   salonDetail.update(req.body, {
     where: { id: req.params?.salon },
   })
