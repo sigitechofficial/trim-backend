@@ -223,6 +223,12 @@ router.get(
   catchAsync(adminController.fecthSalonsEarnings),
 )
 
+router.get(
+  '/employee-earnings/:external',
+  protect,
+  catchAsync(adminController.fecthSalonsEarnings),
+)
+
 //! 8.Help Support --------------------------------------------------------------------------
 
 router.get(
@@ -230,6 +236,7 @@ router.get(
   protect,
   catchAsync(adminController.fetchHelpSupport),
 )
+
 router.put(
   '/help-support/:id',
   protect,
