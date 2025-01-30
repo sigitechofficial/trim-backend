@@ -695,7 +695,7 @@ exports.bookingDetails = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  const { customerNote } = await clientNotes.findOne({
+  const notes = await clientNotes.findOne({
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['customerNote'],
   })
@@ -741,7 +741,7 @@ exports.bookingDetails = async (req, res, next) => {
     client: clientName,
     profile: bookingData.user?.image ?? '',
     email: bookingData.user?.email ?? '',
-    clientNote: customerNote || '',
+    clientNote: notes?.customerNote || '',
     Phone: clientContact,
     salonDetailId: bookingData.salonDetailId,
     Upfront: bookingData.initialPayment,
@@ -1687,6 +1687,10 @@ exports.jobStatus = async (req, res, next) => {
       ________________________________________
   */
 exports.clientHistory = async (req, res, next) => {
+  console.log(
+    '--------------------------------req.userreq.userreq.user',
+    req.user,
+  )
   const salon = await salonDetail.findOne({
     where: { userId: req.user?.id },
     attributes: ['id'],
@@ -1694,7 +1698,7 @@ exports.clientHistory = async (req, res, next) => {
   const { customerId } = req.body
   const clientBookings = await booking.findAll({
     where: {
-      customerId,
+      customerId: customerId,
       salonDetailId: salon?.id,
     },
     include: [
@@ -1719,26 +1723,26 @@ exports.clientHistory = async (req, res, next) => {
         attributes: ['id', 'total', 'duration'],
       },
     ],
-    attributes: ['id', 'status', 'on', 'startTime', 'customerId', ''],
+    attributes: ['id', 'status', 'on', 'startTime', 'customerId'],
   })
 
   let customerStatus = 'active'
 
   const isblocked = await blockCustomer.findOne({
-    where: { userId: clientBookings.customerId, salonDetailId: salon.id },
+    where: { userId: customerId, salonDetailId: salon?.id },
     attributes: ['id'],
   })
   if (isblocked) customerStatus = 'block'
 
-  const { customerNote } = await clientNotes.findOne({
-    where: { userId: bookingData.customerId, salonDetailId: salon.id },
+  const notes = await clientNotes.findOne({
+    where: { userId: customerId, salonDetailId: salon?.id },
     attributes: ['customerNote'],
   })
   return res.json(
     returnFunction(
       '1',
       'Client Booking History',
-      { clientNote: customerNote, customerStatus, clientBookings },
+      { clientNote: '', customerStatus, clientBookings },
       '',
     ),
   )

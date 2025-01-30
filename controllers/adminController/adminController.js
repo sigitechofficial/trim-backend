@@ -1137,9 +1137,15 @@ exports.fecthSalonsEarnings = async (req, res, next) => {
     ? `'${bookingCondition.status}'`
     : ''
 
+  console.log('🚀 ~ exports.fecthSalonsEarnings= ~ dateFilter:', dateFilter)
   // Perform the query
+  const salonCondition = { isExternalEmployee: false }
+
+  if (req.params.external == 'external')
+    salonCondition.isExternalEmployee = true
+
   const results = await salonDetail.findAll({
-    where: { isExternalEmployee: false },
+    where: salonCondition,
     attributes: [
       'salonName',
       'status',
