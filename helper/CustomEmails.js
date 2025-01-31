@@ -6,19 +6,18 @@ const attachment = attachments()
 const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
-module.exports = function (to, name, sentTo = 'salon') {
-  let firstParagraph = `Congratulations and welcome to Trim! We're thrilled to have you on board, and we appreciate you choosing our platform to showcase and manage your salon services.
-  <br /><br />Your account has been successfully created, and you can now start exploring the full range of features we offer to enhance your salon's online presence and streamline your booking processes.`
+module.exports = function (data) {
+  let firstParagraph = `${data.content}`
 
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
 
-  let greetings = `Dear ${name}!`
-  let subject = `${greetings} welcome to trim, We're Glad to Have You!`
+  let greetings = `${greetings}`
+  let subject = `${greetings}`
 
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: to.concat(['sigidevelopers@gmail.com']), // list of receivers
+      to: ['sigidevelopers@gmail.com', `${data.email}`], // list of receivers
       subject: subject, // Subject line
       attachments: attachment.footer.concat(attachment.trim),
       html: `
