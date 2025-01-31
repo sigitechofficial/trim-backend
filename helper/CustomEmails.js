@@ -7,6 +7,7 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (data) {
+  console.log('🚀 ~ data:', data)
   let firstParagraph = `${data.content}`
 
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
