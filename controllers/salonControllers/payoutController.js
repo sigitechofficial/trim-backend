@@ -41,6 +41,7 @@ const {
 
 const CustomDate = require('../../utils/currentDay')
 const { response } = require('../../utils/response')
+const { calculateDueRents } = require('../../utils/dueRents')
 
 //! Functions to calculate payouts in app ------------------------
 
@@ -789,18 +790,63 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
 
 //* RENT A CHAIR EXTERNAL  employee Account
 exports.externalEmployeeSummary = async (req, res, next) => {
-  const result = await employee.findOne({
-    where: { id: req.params.employee, isExternalEmployee },
-    attributes: ['id', 'position'],
+  const result = await employee.findAll({
+    where: { salonDetailId: req.params.salon, isExternalEmployee: true },
+    attributes: [
+      'id',
+      'position',
+      [
+        literal(
+          `(SELECT users.firstName
+         FROM users WHERE users.id = employee.userId)`,
+        ),
+        'firstName',
+      ],
+      [
+        literal(
+          `(SELECT users.lastName
+         FROM users WHERE users.id = employee.userId)`,
+        ),
+        'lastName',
+      ],
+      [
+        literal(
+          `(SELECT users.image FROM users WHERE users.id = employee.userId)`,
+        ),
+        'image',
+      ],
+    ],
     include: [
       {
         model: employeeWagesMethod,
         required: true,
+        attributes: ['prevSalaryDate', 'createdAt', 'cycle', 'value'],
       },
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { result } }))
+  const workers =
+    result && result.length > 0 ? JSON.parse(JSON.stringify(result)) : []
+  if (workers.length > 0) {
+    workers.forEach((ele) => {
+      ele.rent = calculateDueRents(ele)
+      delete ele.employeeWagesMethod
+    })
+  }
+  // const rents = calculateDueRents({
+  //   id: 419,
+  //   position: 'stylish',
+  //   employeeWagesMethod: {
+  //     prevSalaryDate: null,
+  //     createdAt: '2025-01-07T09:52:01.000Z',
+  //     cycle: 'Weekly',
+  //     value: '10',
+  //   },
+  // })
+
+  return res.json(
+    response({ message: 'success.', data: { result, employees: workers } }),
+  )
 }
 // 419 employee
 // 1056 userId

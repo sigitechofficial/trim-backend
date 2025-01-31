@@ -85,7 +85,7 @@ router.get(
 )
 //! EXTERNAL EMPLOYEE
 router.get(
-  '/rent-collection/dues/:employee',
+  '/rent-collection/dues/:salon',
   protect,
   catchAsync(payoutController.externalEmployeeSummary),
 )
