@@ -833,6 +833,7 @@ exports.externalEmployeeSummary = async (req, res, next) => {
       delete ele.employeeWagesMethod
     })
   }
+
   // const rents = calculateDueRents({
   //   id: 419,
   //   position: 'stylish',

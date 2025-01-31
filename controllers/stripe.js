@@ -128,6 +128,7 @@ async function createPaymentIntendForUpFrontPayments(
   customerId,
   accountId,
 ) {
+  console.log('🚀 ~ amount:', amount)
   console.log('ðŸš€ ~ accountId:', accountId)
   try {
     const paymentIntent = await stripe.paymentIntents.create({
@@ -701,6 +702,7 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
 }
 // refund Payment
 async function refundPartialPayment(paymentIntentId, amountToRefund) {
+  console.log('🚀 ~ refundPartialPayment ~ amountToRefund:', amountToRefund)
   try {
     // Retrieve the PaymentIntent
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
