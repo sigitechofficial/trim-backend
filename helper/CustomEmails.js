@@ -11,8 +11,8 @@ module.exports = function (data) {
 
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
 
-  let greetings = `${greetings}`
-  let subject = `${greetings}`
+  let greetings = `${data.greetings}`
+  let subject = `${data.greetings}`
 
   transporter.sendMail(
     {
