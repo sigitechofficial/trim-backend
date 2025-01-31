@@ -382,11 +382,7 @@ router.delete(
   catchAsync(adminController.deleteReasons),
 )
 
-router.delete(
-  '/custom-emails',
-  protect,
-  catchAsync(adminController.customEmails),
-)
+router.post('/custom-emails', protect, catchAsync(adminController.customEmails))
 
 router.get(
   '/employees-list/:external',
