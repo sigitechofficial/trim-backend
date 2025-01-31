@@ -69,6 +69,9 @@ module.exports = (sequelize, DataTypes) => {
 
     employee.hasMany(models.employeeProfile)
     models.employeeProfile.belongsTo(employee)
+
+    employee.hasMany(models.rentCollection)
+    models.rentCollection.belongsTo(employee)
   }
 
   return employee

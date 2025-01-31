@@ -83,5 +83,11 @@ router.get(
   protect,
   catchAsync(payoutController.salaryEmployeeAccount),
 )
+//! EXTERNAL EMPLOYEE
+router.get(
+  '/rent-collection/dues/:employee',
+  protect,
+  catchAsync(payoutController.externalEmployeeSummary),
+)
 
 module.exports = router

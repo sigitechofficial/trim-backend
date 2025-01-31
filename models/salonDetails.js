@@ -159,7 +159,9 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.clientNotes)
     models.clientNotes.belongsTo(salonDetail)
-    // In your salonDetail model
+
+    salonDetail.hasMany(models.rentCollection) // only for external employee salon id
+    models.rentCollection.belongsTo(salonDetail)
   }
 
   return salonDetail

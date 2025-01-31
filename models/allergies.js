@@ -16,12 +16,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'No known allergies',
     },
     reaction: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
       defaultValue: '',
     },
     note: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
       defaultValue: '',
     },

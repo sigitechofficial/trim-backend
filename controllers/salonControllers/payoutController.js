@@ -786,3 +786,46 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
     }),
   )
 }
+
+//* RENT A CHAIR EXTERNAL  employee Account
+exports.externalEmployeeSummary = async (req, res, next) => {
+  const result = await employee.findOne({
+    where: { id: req.params.employee, isExternalEmployee },
+    attributes: ['id', 'position'],
+    include: [
+      {
+        model: employeeWagesMethod,
+        required: true,
+      },
+    ],
+  })
+
+  return res.json(response({ message: 'success.', data: { result } }))
+}
+// 419 employee
+// 1056 userId
+// salon is  = 292
+// attributes: [
+//   'id',
+//   'position',
+//   [
+//     literal(
+//       `(SELECT users.firstName
+//    FROM users WHERE users.id = employee.userId)`,
+//     ),
+//     'firstName',
+//   ],
+//   [
+//     literal(
+//       `(SELECT users.lastName
+//    FROM users WHERE users.id = employee.userId)`,
+//     ),
+//     'lastName',
+//   ],
+//   [
+//     literal(
+//       `(SELECT users.image FROM users WHERE users.id = employee.userId)`,
+//     ),
+//     'image',
+//   ],
+// ],
