@@ -845,7 +845,10 @@ exports.externalEmployeeSummary = async (req, res, next) => {
   // })
 
   return res.json(
-    response({ message: 'success.', data: { result, employees: workers } }),
+    response({
+      message: 'success.',
+      data: { employees: workers, currencyUnit: CURRENCY_UNIT },
+    }),
   )
 }
 // 419 employee
