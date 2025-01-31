@@ -1300,9 +1300,10 @@ exports.bookAppointment = async (req, res, next) => {
   )
 
   appointment.actualCapturedAmount =
-    appointment?.actualCapturedAmount - appointment?.tip
+    parseFloat(appointment?.actualCapturedAmount) - parseFloat(appointment?.tip)
 
-  appointment.initialPayment = appointment?.initialPayment - appointment?.tip
+  appointment.initialPayment =
+    parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
 
   const hasAppointments = await booking.count({
     where: {
