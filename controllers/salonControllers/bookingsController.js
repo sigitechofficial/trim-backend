@@ -2827,25 +2827,35 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     })
 
     finePercentage = refundPercentage
+    console.log(
+      '🚀 ~ exports.markAppointmentAsNoShow= ~ refundPercentage:',
+      refundPercentage,
+    )
+    console.log(
+      '🚀 ~ exports.markAppointmentAsNoShow= ~ finePercentage:',
+      finePercentage,
+    )
 
     const paid =
       parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
 
     const noshowCharges = appointment.total * (refundPercentage / 100)
     console.log(
-      'ðŸš€ ~ exports.cancelAppointment= ~ refundPercentage:',
-      appointment.noshowPolicyVersion,
-      refundPercentage,
+      'ðŸš€ ~ exports.as= ~ appointment.actualCapturedAmount:',
+      appointment.actualCapturedAmount,
     )
 
-    console.log(
-      'ðŸš€ ~ exports.cancelAppointment= ~ paid:',
-      paid,
-      refundPercentage,
-    )
+    console.log('ðŸš€ ~ exports.as= ~ appointment.tip:', appointment.tip)
+
+    console.log('ðŸš€ ~ exports.as= ~ paid:', paid)
     console.log('ðŸš€ ~ ~ noshowCharges:', noshowCharges)
 
+    console.log('🚀 ~ exports.markAppointmentAsNoShow= ~ paid:', paid)
     if (paid > noshowCharges) {
+      console.log(
+        '🚀 ~ exports.markAppointmentAsNoShow= ~ noshowCharges:',
+        noshowCharges,
+      )
       console.log('-----> ~CASE~ intialPayment Greater (penalty) ')
 
       const refundAmount = paid - noshowCharges
@@ -3019,3 +3029,14 @@ exports.markAppointmentAscancel = async (req, res, next) => {
   })
   return res.status(200).json(output)
 }
+
+// id: 'pi_3QnJFRIUi1Nn55FG29YeL2sK',
+// object: 'payment_intent',
+// amount: 2.25
+
+// 🚀 ~ amount: 6.25
+// ðŸš€ ~ accountId: acct_1QetyVIOTz68gwkY
+// {
+//   id: 'pi_3QnJGaIUi1Nn55FG2OXJUQp5',
+//   object: 'payment_intent',
+//   amount: 625,

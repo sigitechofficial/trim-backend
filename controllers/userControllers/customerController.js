@@ -1299,6 +1299,12 @@ exports.bookAppointment = async (req, res, next) => {
     JSON.stringify(req.body),
   )
 
+  appointment.actualCapturedAmount =
+    parseFloat(appointment?.actualCapturedAmount) - parseFloat(appointment?.tip)
+
+  appointment.initialPayment =
+    parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
+
   const hasAppointments = await booking.count({
     where: {
       salonDetailId: appointment.salonDetailId,

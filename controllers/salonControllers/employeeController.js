@@ -17,6 +17,10 @@ const {
   jobs,
   booking,
   category,
+  cancellationPolicy,
+  paymentPolicy,
+  reschedulePolicy,
+  noShowPolicy,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')

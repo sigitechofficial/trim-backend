@@ -833,6 +833,7 @@ exports.externalEmployeeSummary = async (req, res, next) => {
       delete ele.employeeWagesMethod
     })
   }
+
   // const rents = calculateDueRents({
   //   id: 419,
   //   position: 'stylish',
@@ -845,7 +846,10 @@ exports.externalEmployeeSummary = async (req, res, next) => {
   // })
 
   return res.json(
-    response({ message: 'success.', data: { result, employees: workers } }),
+    response({
+      message: 'success.',
+      data: { employees: workers, currencyUnit: CURRENCY_UNIT },
+    }),
   )
 }
 // 419 employee
