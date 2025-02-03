@@ -855,6 +855,7 @@ exports.externalEmployeeSummary = async (req, res, next) => {
 }
 
 //* RENT A CHAIR EXTERNAL  employee Account
+
 exports.collectRent = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
@@ -869,6 +870,11 @@ exports.collectRent = async (req, res, next) => {
 
   await rentCollection.create(req.body)
 
+  await employeeWagesMethod.update(
+    { prevSalaryDate: req.body.paymentTillDate },
+    { where: { employeeId: req.params?.employee } },
+  )
+
   await wallet.increment(
     { amount: req.body.amount },
     { where: { salonDetailId: salon?.id } },
@@ -881,6 +887,28 @@ exports.collectRent = async (req, res, next) => {
     }),
   )
 }
+
+//* RENT A CHAIR EXTERNAL Transaction History
+
+exports.collectedRentTransactionHistory = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  const history = await rentCollection.findAll({
+    where: { employeeId: req.params.employee },
+    attributes: { exclude: ['updatedAt', 'employeeId', 'salonDetailId'] },
+  })
+
+  return res.json(
+    response({
+      message: 'The rent payment has been successfully received.',
+      data: { history, currencyUnit: CURRENCY_UNIT },
+    }),
+  )
+}
+
 // 419 employee
 // 1056 userId
 // salon is  = 292
