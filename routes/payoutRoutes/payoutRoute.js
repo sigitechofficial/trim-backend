@@ -90,8 +90,14 @@ router.get(
   catchAsync(payoutController.externalEmployeeSummary),
 )
 
-router.get(
+router.post(
   '/collect-rent/external-employee/:employee',
+  protect,
+  catchAsync(payoutController.collectRent),
+)
+
+router.post(
+  '/rent-collection/transaction-history/:employee',
   protect,
   catchAsync(payoutController.collectRent),
 )
