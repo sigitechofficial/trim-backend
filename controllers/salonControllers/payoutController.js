@@ -891,11 +891,6 @@ exports.collectRent = async (req, res, next) => {
 //* RENT A CHAIR EXTERNAL Transaction History
 
 exports.collectedRentTransactionHistory = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
   const history = await rentCollection.findAll({
     where: { employeeId: req.params.employee },
     attributes: { exclude: ['updatedAt', 'employeeId', 'salonDetailId'] },

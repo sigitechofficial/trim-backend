@@ -70,6 +70,7 @@ exports.AllEmployees = async (req, res, next) => {
       'status',
       'salonDetailId',
       'isOwner',
+      'isExternalEmployee',
       'deleted',
       [
         literal(
@@ -492,6 +493,7 @@ exports.employeeDetail = async (req, res, next) => {
     attributes: [
       'id',
       'position',
+      'isExternalEmployee',
       'isOwner',
       'status',
       'description',
