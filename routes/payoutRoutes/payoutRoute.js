@@ -90,4 +90,10 @@ router.get(
   catchAsync(payoutController.externalEmployeeSummary),
 )
 
+router.get(
+  '/collect-rent/external-employee/:employee',
+  protect,
+  catchAsync(payoutController.collectRent),
+)
+
 module.exports = router

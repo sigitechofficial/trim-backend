@@ -22,6 +22,7 @@ const {
   salaryPayout,
   tip,
   wallet,
+  rentCollection,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const {
@@ -849,6 +850,34 @@ exports.externalEmployeeSummary = async (req, res, next) => {
     response({
       message: 'success.',
       data: { employees: workers, currencyUnit: CURRENCY_UNIT },
+    }),
+  )
+}
+
+//* RENT A CHAIR EXTERNAL  employee Account
+exports.collectRent = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon)
+    throw new AppError('The rent payment could not be processed.', 404)
+
+  req.body.employeeId = req.params?.employee
+  req.body.salonDetailId = salon?.id
+
+  await rentCollection.create(req.body)
+
+  await wallet.increment(
+    { amount: req.body.amount },
+    { where: { salonDetailId: salon?.id } },
+  )
+
+  return res.json(
+    response({
+      message: 'The rent payment has been successfully received.',
+      data: {},
     }),
   )
 }
