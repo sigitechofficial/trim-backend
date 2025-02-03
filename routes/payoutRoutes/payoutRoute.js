@@ -96,10 +96,10 @@ router.post(
   catchAsync(payoutController.collectRent),
 )
 
-router.post(
+router.get(
   '/rent-collection/transaction-history/:employee',
   protect,
-  catchAsync(payoutController.collectRent),
+  catchAsync(payoutController.collectedRentTransactionHistory),
 )
 
 module.exports = router
