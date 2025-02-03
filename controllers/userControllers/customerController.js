@@ -1268,6 +1268,11 @@ exports.cancelAppointment = async (req, res, next) => {
 
   await booking.update(updatedBooking, { where: { id: bookingId } })
 
+  await wallet.increment(
+    { amount: updatedBooking.total },
+    { where: { salonDetailId: appointment.salonDetailId } },
+  )
+
   if (updatedBooking.status == 'cancel') {
     await jobs.update({ status: 'cancel' }, { where: { bookingId } })
     calculatePayoutsOnBooking(appointment, finePercentage, 'cancel')

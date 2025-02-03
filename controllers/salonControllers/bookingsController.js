@@ -847,11 +847,6 @@ exports.cancelBooking = async (req, res, next) => {
 
   await booking.update(updatedBooking, { where: { id: bookingId } })
 
-  await wallet.increment(
-    { amount: updatedBooking.total },
-    { where: { salonDetailId: appointment.salonDetailId } },
-  )
-
   await jobs.update({ status: 'cancel' }, { where: { bookingId } })
 
   const Reason = await reason.findByPk(reasonId, {
