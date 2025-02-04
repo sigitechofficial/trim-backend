@@ -669,7 +669,7 @@ exports.login = async (req, res, next) => {
         salon.services.length !== 0 &&
         salon.times.length !== 0 &&
         salon.approvedByAdmin &&
-        salon?.wallet?.accountConnected &&
+        // salon?.wallet?.accountConnected && // change require
         salon.approvedByAdmin
 
       const hasEmployee = salon.employees.length !== 0
@@ -677,10 +677,10 @@ exports.login = async (req, res, next) => {
         '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
         salon.approvedByAdmin,
       )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.connectAccountId :',
-        salon.connectAccountId,
-      )
+      // console.log(
+      //   '🚀 ~ exports.login= ~ salon.connectAccountId :',
+      //   salon.connectAccountId,
+      // )
       console.log(
         '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
         salon.approvedByAdmin,
@@ -1415,7 +1415,7 @@ exports.session = async (req, res, next) => {
     isServiceDataAvailable &&
     isTimeDataAvailable &&
     isSubscription &&
-    isaccountConnected &&
+    // isaccountConnected &&
     isAddressDataAvailable
 
   console.log('🚀 ~ exports.session= ~ isAllDataAvailable:', isAllDataAvailable)
