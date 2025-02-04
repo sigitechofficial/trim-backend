@@ -92,7 +92,7 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
-    attributes: ['id', 'parentSalonId'],
+    attributes: ['id', 'parentSalonId', 'onlinePayments'],
   })
 
   let parentSalonName = ''
@@ -330,7 +330,12 @@ exports.calendarAppointments = async (req, res, next) => {
 
   const output = response({
     message: 'Success.',
-    data: { salonTimes, employees: results || [], parentSalonName },
+    data: {
+      salonTimes,
+      employees: results || [],
+      parentSalonName,
+      onlinePayments: salon?.onlinePayments || false,
+    },
   })
 
   return res.status(200).json(output)
