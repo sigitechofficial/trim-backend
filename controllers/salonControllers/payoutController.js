@@ -206,6 +206,7 @@ exports.rentalChairEmployees = async (req, res, next) => {
   const employees = await employee.findAll({
     where: {
       salonDetailId: salon.id,
+      isExternalEmployee: false,
       id: {
         [Op.in]: literal(`(
         SELECT employeeId

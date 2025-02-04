@@ -92,9 +92,19 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
-    attributes: ['id'],
+    attributes: ['id', 'parentSalonId'],
   })
 
+  let parentSalonName = ''
+
+  if (salon?.parentSalonId) {
+    const parentSalon = await salonDetail.findOne({
+      where: { id: salon?.parentSalonId },
+      attributes: ['id', 'salonName'],
+    })
+
+    parentSalonName = parentSalon?.salonName
+  }
   if (!salon) {
     throw new AppError('Resource not found', 404)
   }
@@ -320,7 +330,7 @@ exports.calendarAppointments = async (req, res, next) => {
 
   const output = response({
     message: 'Success.',
-    data: { salonTimes, employees: results || [] },
+    data: { salonTimes, employees: results || [], parentSalonName },
   })
 
   return res.status(200).json(output)

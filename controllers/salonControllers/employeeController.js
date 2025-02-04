@@ -464,7 +464,7 @@ exports.employeeDetail = async (req, res, next) => {
           'image',
         ],
       },
-      { model: salonDetail, attributes: ['coverImage'] },
+      // { model: salonDetail, attributes: ['coverImage'] },
       {
         model: employeeWagesMethod,
         include: { model: wagesMethod, attributes: ['methodName'] },
@@ -496,6 +496,7 @@ exports.employeeDetail = async (req, res, next) => {
       'isExternalEmployee',
       'isOwner',
       'status',
+      'userId',
       'description',
       [
         literal(
@@ -598,6 +599,21 @@ exports.employeeDetail = async (req, res, next) => {
 
       if (earning > 0) paymentPending = true
     }
+  }
+
+  if (employeeData?.isExternalEmployee) {
+    const workinghour = await employee.findOne({
+      where: { userId: employeeData.userId, isOwner: true },
+      attributes: ['id'],
+      include: [
+        {
+          model: time,
+          attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'],
+        },
+      ],
+    })
+
+    employeeData.times = workinghour?.times
   }
   // Convert opening and closing times to 12-hour format
   employeeData?.times?.forEach((timeSlot) => {

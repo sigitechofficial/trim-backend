@@ -31,6 +31,7 @@ const {
   paymentPolicy,
   reschedulePolicy,
   reason,
+  subscriptions,
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -48,6 +49,10 @@ const CutomEmails = require('../../helper/CustomEmails')
 const { salonBlock } = require('../eventDrivenCommunication/salonBlock')
 
 //Global Variables
+const formatDate = (date) => {
+  if (!date) return null
+  return date.toISOString().slice(0, 19).replace('T', ' ') // Format as 'YYYY-MM-DD HH:MM:SS'
+}
 
 const { salonDetails } = require('../userControllers/customerController')
 
@@ -1119,10 +1124,6 @@ exports.fecthSalonsEarnings = async (req, res, next) => {
   const endDate = req.query?.endDate ? new Date(req.query.endDate) : null
 
   // Function to safely format dates for SQL
-  const formatDate = (date) => {
-    if (!date) return null
-    return date.toISOString().slice(0, 19).replace('T', ' ') // Format as 'YYYY-MM-DD HH:MM:SS'
-  }
 
   // Format dates
   const formattedStartDate = formatDate(startDate)
@@ -2308,58 +2309,54 @@ exports.customEmails = async (req, res, next) => {
 
 exports.adminEarnings = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
-  const { id } = req.params
-  const startDate = req.query.startDate || '2023-12-01'
-  const endDate = req.query.endDate || currentDay.currentDateOnly
-  const status = req.params.status || 'complete'
 
-  const bookingCondition = {
-    deleted: false,
-    // on: { [Op.between]: [startDate, endDate] },
+  const startDate = req.query.startDate || '2024-01-01'
+  const endDate = req.query.endDate || currentDay.currentDateOnly
+
+  const salonCondition = {
+    isExternalEmployee: false,
   }
+
   const limit = req.params.limit * 1
 
+  const formattedStartDate = formatDate(new Date(startDate))
+  const formattedEndDate = formatDate(new Date(endDate))
+
+  // Build the date filter string if both dates are provided
+  const dateFilter =
+    formattedStartDate && formattedEndDate
+      ? ` AND subscriptions.createdAt BETWEEN '${formattedStartDate}' AND '${formattedEndDate}'`
+      : ''
+
   const rows = await salonDetail.findAll({
-    // where: bookingCondition,
+    where: salonCondition,
     attributes: [
       'id',
       'salonName',
       [
         // Calculate revenue as a numeric value
         literal(
-          `(SELECT SUM(bookings.actualCapturedAmount)
-            FROM bookings
-            WHERE bookings.salonDetailId = salonDetail.id AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}')`,
+          `(SELECT COALESCE(SUM(subscriptions.amountPaid), 0) 
+            FROM subscriptions 
+            WHERE subscriptions.salonDetailId = salonDetail.id ${dateFilter})`,
         ),
         'revenue',
       ],
-      [
-        literal(
-          `(SELECT COUNT(*) FROM bookings WHERE bookings.salonDetailId = salonDetail.id AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}')`,
-        ),
-        'bookingCount',
-      ],
-      [
-        // Summing up the serviceAmount from jobs for bookings associated with each salon
-        literal(
-          `(SELECT COUNT(*)
-            FROM jobs
-            WHERE jobs.bookingId IN (
-              SELECT id FROM bookings WHERE bookings.salonDetailId = salonDetail.id 
-              AND bookings.status = '${status}' AND bookings.on BETWEEN '${startDate}' AND '${endDate}'
-            ))`,
-        ),
-        'totalServices',
-      ],
     ],
-
-    order: [[literal('revenue'), 'DESC']],
-    limit: limit,
   })
+
+  const totalRevenue = await subscriptions.sum('amountPaid', {
+    where: {
+      createdAt: {
+        [Op.between]: [formattedStartDate, formattedEndDate],
+      },
+    },
+  })
+
   return res.status(200).json(
     response({
       message: 'success',
-      data: {},
+      data: { totalRevenue, data: rows },
     }),
   )
 }

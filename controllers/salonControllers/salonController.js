@@ -262,23 +262,30 @@ exports.accountAdded = async (req, res, next) => {
 
   let salonData = await salonDetail.findOne({
     where: { userId: userId },
+    atrributes: ['connectAccountId', 'id'],
   })
 
-  await wallet.update(
-    { accountConnected: true },
-    { where: { salonDetailId: salonData.id } },
-  )
+  let msg = 'Information Incomplete account not added.'
+  const isConnectAccountComplete = salonData?.connectAccountId
+    ? Stripe.isConnectAccountComplete(salonData?.connectAccountId)
+    : false
 
-  await salonProfiles.update(
-    {
-      accountConnected: true,
-    },
-    { where: { userId } },
-  )
+  if (isConnectAccountComplete) {
+    await wallet.update(
+      { accountConnected: true },
+      { where: { salonDetailId: salonData.id } },
+    )
 
-  return res.json(
-    returnFunction('1', 'Account Connected Successfully!', {}, ''),
-  )
+    await salonProfiles.update(
+      {
+        accountConnected: true,
+      },
+      { where: { userId } },
+    )
+    msg = `Account Connected Successfully!`
+  }
+
+  return res.json(returnFunction('1', msg, {}, ''))
 }
 /*
             4.Salon Timing 
@@ -408,7 +415,9 @@ exports.addImages = async (req, res, next) => {
 */
 exports.Types = async (req, res, next) => {
   const { salonDetailId } = req.body
-  const serviceTypes = await serviceType.findAll({ where: {} })
+  const serviceTypes = await serviceType.findAll({
+    where: { deleted: 0, status: true },
+  })
   const categories = await category.findAll({
     where: {
       salonDetailId,
