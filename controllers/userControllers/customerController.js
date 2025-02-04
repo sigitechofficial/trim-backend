@@ -1493,6 +1493,7 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     where: { id: req.body.salonId },
     attributes: ['connectAccountId'],
   })
+
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
     advanceAmount > 0
