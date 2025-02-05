@@ -2345,13 +2345,28 @@ exports.adminEarnings = async (req, res, next) => {
     ],
   })
 
-  const totalRevenue = await subscriptions.sum('amountPaid', {
-    where: {
-      createdAt: {
-        [Op.between]: [formattedStartDate, formattedEndDate],
-      },
-    },
-  })
+  const totalRevenue =
+    rows.length > 0
+      ? rows.reduce((accumulator, currentObject) => {
+          const revenueStr = currentObject.revenue
+
+          // Check if revenue exists
+          if (revenueStr) {
+            const revenue = parseFloat(revenueStr)
+
+            // Check if the parsed revenue is a valid number
+            if (!isNaN(revenue)) {
+              return accumulator + revenue
+            } else {
+              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
+              return accumulator
+            }
+          } else {
+            console.warn('Revenue key missing in object:', currentObject)
+            return accumulator
+          }
+        }, 0)
+      : 0
 
   return res.status(200).json(
     response({
@@ -2361,51 +2376,65 @@ exports.adminEarnings = async (req, res, next) => {
   )
 }
 
-exports.adminEarnings = async (req, res, next) => {
+exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
   const startDate = req.query.startDate || '2024-01-01'
   const endDate = req.query.endDate || currentDay.currentDateOnly
-
-  const salonCondition = {
-    isExternalEmployee: false,
-  }
-
   const limit = req.params.limit * 1
 
   const formattedStartDate = formatDate(new Date(startDate))
   const formattedEndDate = formatDate(new Date(endDate))
 
-  // Build the date filter string if both dates are provided
-  const dateFilter =
-    formattedStartDate && formattedEndDate
-      ? ` AND subscriptions.createdAt BETWEEN '${formattedStartDate}' AND '${formattedEndDate}'`
-      : ''
+  const salonCondition = {
+    salonDetailId: req.params?.salon,
+    createdAt: {
+      [Op.between]: [formattedStartDate, formattedEndDate],
+    },
+  }
 
-  const rows = await salonDetail.findAll({
+  const rows = await subscriptions.findAll({
     where: salonCondition,
     attributes: [
-      'id',
-      'salonName',
-      [
-        // Calculate revenue as a numeric value
-        literal(
-          `(SELECT COALESCE(SUM(subscriptions.amountPaid), 0) 
-            FROM subscriptions 
-            WHERE subscriptions.salonDetailId = salonDetail.id ${dateFilter})`,
-        ),
-        'revenue',
-      ],
+      `id`,
+      `subscriptionId`,
+      `name`,
+      `amountPaid`,
+      `customerId`,
+      `currency`,
+      `priceId`,
+      `status`,
+      `createdAt`,
+      `salonDetailId`,
+      `invoice`,
+      `periodEnd`,
+      `periodStart`,
+      `invoiceId`,
     ],
   })
 
-  const totalRevenue = await subscriptions.sum('amountPaid', {
-    where: {
-      createdAt: {
-        [Op.between]: [formattedStartDate, formattedEndDate],
-      },
-    },
-  })
+  const totalRevenue =
+    rows.length > 0
+      ? rows.reduce((accumulator, currentObject) => {
+          const revenueStr = currentObject.amountPaid
+
+          // Check if revenue exists
+          if (revenueStr) {
+            const revenue = parseFloat(revenueStr)
+
+            // Check if the parsed revenue is a valid number
+            if (!isNaN(revenue)) {
+              return accumulator + revenue
+            } else {
+              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
+              return accumulator
+            }
+          } else {
+            console.warn('Revenue key missing in object:', currentObject)
+            return accumulator
+          }
+        }, 0)
+      : 0
 
   return res.status(200).json(
     response({
