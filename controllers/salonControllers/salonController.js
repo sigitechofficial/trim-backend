@@ -2469,3 +2469,19 @@ exports.addUpdateClientNote = async (req, res, next) => {
   })
   return res.status(200).json(output)
 }
+
+//* Online Payments
+
+exports.onlinePayments = async (req, res, next) => {
+  const userId = req.user.id
+  const { onlinePayments } = req.body
+  const salonData = await salonDetail.findOne({
+    where: {
+      userId,
+    },
+    attributes: ['id', 'onlinePayments'],
+  })
+  salonData.onlinePayments = onlinePayments
+  await salonData.save()
+  return res.json(returnFunction('1', 'success', {}, ''))
+}

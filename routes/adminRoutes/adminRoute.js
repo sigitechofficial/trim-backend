@@ -402,4 +402,10 @@ router.get(
   catchAsync(adminController.adminEarnings),
 )
 
+router.get(
+  '/admin-earnings-from-specific-salon/:salon',
+  protect,
+  catchAsync(adminController.adminEarningsFromSpecificSalon),
+)
+
 module.exports = router
