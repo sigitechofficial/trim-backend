@@ -310,4 +310,6 @@ router.patch(
   catchAsync(salonController.addUpdateClientNote),
 )
 
+router.patch('/online-payments', catchAsync(salonController.onlinePayments))
+
 module.exports = router

@@ -2472,7 +2472,7 @@ exports.addUpdateClientNote = async (req, res, next) => {
 
 //* Online Payments
 
-exports.nlinePayments = async (req, res, next) => {
+exports.onlinePayments = async (req, res, next) => {
   const userId = req.user.id
   const { onlinePayments } = req.body
   const salonData = await salonDetail.findOne({
@@ -2483,7 +2483,5 @@ exports.nlinePayments = async (req, res, next) => {
   })
   salonData.onlinePayments = onlinePayments
   await salonData.save()
-  return res.json(
-    returnFunction('1', 'Salon Details Updated Successfully!', {}, ''),
-  )
+  return res.json(returnFunction('1', 'success', {}, ''))
 }
