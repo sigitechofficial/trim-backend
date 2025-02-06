@@ -279,7 +279,6 @@ exports.accountAdded = async (req, res, next) => {
     await salonProfiles.update(
       {
         accountConnected: true,
-        onlinePayments: true,
       },
       { where: { userId } },
     )
@@ -956,14 +955,14 @@ exports.fecthCoupons = async (req, res, next) => {
 exports.addCoupons = async (req, res, next) => {
   const input = req.body
   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  if (!salon) {
+    return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
+  }
   const exist = await coupon.findOne({ where: { promoCode: input.promoCode } })
   if (exist) {
     return res
       .status(200)
       .json(returnFunction('0', 'Promo code already taken.', {}, ''))
-  }
-  if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
   }
 
   input.salonDetailId = salon.id

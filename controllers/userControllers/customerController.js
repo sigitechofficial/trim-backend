@@ -1868,12 +1868,36 @@ exports.applyCoupon = async (req, res, next) => {
     },
   )
   const { salonId, promoCode } = req.body
-  const data = await coupon.findOne({
-    where: { promoCode, salonDetailId: salonId },
+  let data = await coupon.findOne({
+    where: {
+      promoCode,
+      salonDetailId: salonId,
+      till: { [Op.lte]: currentDay.currentDateOnly },
+      from: { [Op.gte]: currentDay.currentDateOnly },
+    },
     attributes: [`id`, `promoCode`, `type`, `status`, `value`],
   })
+
   if (!data) throw new AppError('Invalid promo code', 200)
   if (data.status === 'expire') throw new AppError('Promo code Exprie.', 200)
+  data = JSON.parse(JSON.stringify(data))
+  if (data?.limit == null || data?.limit < 1) {
+    const exist = await booking.findOne({
+      where: {
+        userId: req.user?.id,
+        couponId: data?.id,
+        salonDetailId: salonId,
+      },
+    })
+    if (exist) {
+      throw new AppError(
+        `You've already redeemed this one-time coupon, so it can't be used again.`,
+        200,
+      )
+    }
+    data.limit = 1
+    data.applied = 0
+  }
   const output = response({ message: 'success', data: { promoCode: data } })
   return res.status(200).json(output)
 }
