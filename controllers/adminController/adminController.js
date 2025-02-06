@@ -2445,6 +2445,7 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
 //^ 1.Add FAQs  ----------------------------
 
 exports.addFAQs = async (req, res, next) => {
+  req.body.status = true
   const data = await faqs.create(req.body)
 
   return res.status(200).json(
@@ -2459,15 +2460,18 @@ exports.addFAQs = async (req, res, next) => {
 exports.fetchFAQs = async (req, res, next) => {
   const faqFor = req.params?.type
 
-  const condition = { status: true }
+  const condition = {}
   if (faqFor) condition.faqFor = faqFor
-  if (req.params.accesFrom == 'mobile' && faqFor != 'general') {
+  if (faqFor) condition.faqFor = faqFor
+
+  if (req.params.accessFrom == 'mobile' && faqFor != 'general') {
     condition.faqFor = { [Op.or]: ['general', faqFor] }
     condition.status = true
   }
 
+  console.log('🚀 ~ exports.fetchFAQs= ~ condition:', condition)
   const data = await faqs.findAll({
-    where: { faqFor },
+    where: condition,
     attributes: { exclude: ['updatedAt'] },
   })
 
@@ -2481,7 +2485,7 @@ exports.fetchFAQs = async (req, res, next) => {
 //^ 2.Update FAQs  ----------------------------
 
 exports.updateFAQs = async (req, res, next) => {
-  await faqs.findAll({ reason: req.body }, { where: { type: req.params?.id } })
+  await faqs.update({ reason: req.body }, { where: { type: req.params?.id } })
 
   return res.status(200).json(
     response({

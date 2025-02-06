@@ -315,9 +315,6 @@ router.patch(
 
 router.patch('/online-payments', catchAsync(salonController.onlinePayments))
 
-router.get(
-  '/fetch-faqs/:accessFrom/:type?',
-  catchAsync(salonController.getNoShowPolicies),
-)
+router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 
 module.exports = router
