@@ -32,6 +32,7 @@ const {
   reschedulePolicy,
   reason,
   subscriptions,
+  faqs,
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -2242,7 +2243,7 @@ exports.addReasons = async (req, res, next) => {
 
 exports.fetchReasons = async (req, res, next) => {
   const data = await reason.findAll({
-    where: { type: req.params?.type, status: true },
+    where: { type: req.params?.type },
   })
 
   return res.status(200).json(
@@ -2348,7 +2349,7 @@ exports.adminEarnings = async (req, res, next) => {
   const totalRevenue =
     rows.length > 0
       ? rows.reduce((accumulator, currentObject) => {
-          const revenueStr = currentObject.revenue
+          const revenueStr = currentObject.dataValues.revenue
 
           // Check if revenue exists
           if (revenueStr) {
@@ -2397,26 +2398,21 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
     where: salonCondition,
     attributes: [
       `id`,
-      `subscriptionId`,
       `name`,
       `amountPaid`,
-      `customerId`,
       `currency`,
       `priceId`,
       `status`,
       `createdAt`,
-      `salonDetailId`,
-      `invoice`,
       `periodEnd`,
       `periodStart`,
-      `invoiceId`,
     ],
   })
 
   const totalRevenue =
     rows.length > 0
       ? rows.reduce((accumulator, currentObject) => {
-          const revenueStr = currentObject.amountPaid
+          const revenueStr = currentObject.dataValues.amountPaid
 
           // Check if revenue exists
           if (revenueStr) {
@@ -2440,6 +2436,70 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
     response({
       message: 'success',
       data: { totalRevenue, data: rows },
+    }),
+  )
+}
+
+//! .Reason Fro subscriptions and appointments -------------------------------------------------------------------------------
+
+//^ 1.Add FAQs  ----------------------------
+
+exports.addFAQs = async (req, res, next) => {
+  const data = await faqs.create(req.body)
+
+  return res.status(200).json(
+    response({
+      data: { reason: data },
+    }),
+  )
+}
+
+//^ 2.Fetch FAQs  ----------------------------
+
+exports.fetchFAQs = async (req, res, next) => {
+  const faqFor = req.params?.type
+
+  const condition = { status: true }
+  if (faqFor) condition.faqFor = faqFor
+  if (req.params.accesFrom == 'mobile' && faqFor != 'general') {
+    condition.faqFor = { [Op.or]: ['general', faqFor] }
+    condition.status = true
+  }
+
+  const data = await faqs.findAll({
+    where: { faqFor },
+    attributes: { exclude: ['updatedAt'] },
+  })
+
+  return res.status(200).json(
+    response({
+      data: { reasons: data.reverse() },
+    }),
+  )
+}
+
+//^ 2.Update FAQs  ----------------------------
+
+exports.updateFAQs = async (req, res, next) => {
+  await faqs.findAll({ reason: req.body }, { where: { type: req.params?.id } })
+
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
+    }),
+  )
+}
+
+//^ 4.Delete FAQs  ----------------------------
+
+exports.deleteFAQs = async (req, res, next) => {
+  await faqs.destroy({ where: { id: req.params?.id } })
+
+  return res.status(200).json(
+    response({
+      message: 'success',
+      data: {},
     }),
   )
 }

@@ -408,4 +408,15 @@ router.get(
   catchAsync(adminController.adminEarningsFromSpecificSalon),
 )
 
+//! FAQS
+router.post('/add-new-faq', catchAsync(adminController.addFAQs))
+
+router.get(
+  '/fetch-faqs/:accessFrom/:type?',
+  catchAsync(adminController.fetchFAQs),
+)
+router.put('/edit-faq/:id', catchAsync(adminController.updateFAQs))
+router.put('/change-faq-status/:id', catchAsync(adminController.updateFAQs))
+router.delete('/delete-faq/:id', catchAsync(adminController.deleteFAQs))
+
 module.exports = router

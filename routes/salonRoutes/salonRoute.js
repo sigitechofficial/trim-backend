@@ -11,6 +11,9 @@ const {
 const salonController = require('../../controllers/salonControllers/salonController')
 const customerController = require('../../controllers/userControllers/customerController')
 const {
+  fetchFAQs,
+} = require('../../controllers/adminController/adminController')
+const {
   fetchReasons,
 } = require('../../controllers/adminController/adminController')
 const factory = require('../../controllers/handlerFactory')
@@ -311,5 +314,10 @@ router.patch(
 )
 
 router.patch('/online-payments', catchAsync(salonController.onlinePayments))
+
+router.get(
+  '/fetch-faqs/:accessFrom/:type?',
+  catchAsync(salonController.getNoShowPolicies),
+)
 
 module.exports = router

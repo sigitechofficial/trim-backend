@@ -279,6 +279,7 @@ exports.accountAdded = async (req, res, next) => {
     await salonProfiles.update(
       {
         accountConnected: true,
+        onlinePayments: true,
       },
       { where: { userId } },
     )
