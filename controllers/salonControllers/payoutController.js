@@ -338,9 +338,7 @@ exports.salaryEmployees = async (req, res, next) => {
   const input = JSON.parse(JSON.stringify(employees))
   const data = await calculateDueSalaries(input)
 
-  return res.json(
-    response({ message: 'success.', data: { employees: data, input } }),
-  )
+  return res.json(response({ message: 'success.', data: { employees: data } }))
 }
 
 //* Payout 4. Get Salary Employees ---------------------------------------------------
