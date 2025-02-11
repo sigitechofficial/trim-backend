@@ -6,6 +6,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(14, 2),
         defaultValue: 0,
       },
+      tip: {
+        type: DataTypes.DECIMAL(14, 2),
+        defaultValue: 0,
+      },
+      totalTransfer: {
+        type: DataTypes.DECIMAL(14, 2),
+        defaultValue: 0,
+      },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,

@@ -164,6 +164,13 @@ exports.commissionEmployees = async (req, res, next) => {
       ],
       [
         literal(`COALESCE(
+         (SELECT SUM(commissionPayouts.tip)
+          FROM commissionPayouts
+          WHERE commissionPayouts.employeeId = employee.id ), 0)`),
+        'paidTip',
+      ],
+      [
+        literal(`COALESCE(
         (SELECT SUM(tips.amount)
          FROM tips
          WHERE tips.employeeId = employee.id), 0)`),
@@ -230,6 +237,13 @@ exports.rentalChairEmployees = async (req, res, next) => {
          FROM tips
          WHERE tips.employeeId = employee.id), 0)`),
         'totalTip',
+      ],
+      [
+        literal(`COALESCE(
+         (SELECT SUM(commissionPayouts.tip)
+          FROM commissionPayouts
+          WHERE commissionPayouts.employeeId = employee.id ), 0)`),
+        'paidTip',
       ],
       [
         literal(`COALESCE(
@@ -322,7 +336,7 @@ exports.salaryEmployees = async (req, res, next) => {
     ],
   })
   const input = JSON.parse(JSON.stringify(employees))
-  const data = calculateDueSalaries(input)
+  const data = await calculateDueSalaries(input)
 
   return res.json(
     response({ message: 'success.', data: { employees: data, input } }),

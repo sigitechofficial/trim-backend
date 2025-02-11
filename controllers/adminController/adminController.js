@@ -112,6 +112,10 @@ exports.login = async (req, res, next) => {
     return next(new AppError('Please provide Email or Password', 200))
   }
 
+  if (!dvToken) {
+    return next(new AppError('Please provide Device Token', 200))
+  }
+
   const User = await user.findOne({
     where: {
       email,
