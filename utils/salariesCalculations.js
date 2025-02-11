@@ -7,6 +7,18 @@ function formatDate(date) {
   return new Date(date).toLocaleDateString('en-CA', options) // Format: YYYY-MM-DD
 }
 
+function addTwoNumbers(numStr1, numStr2) {
+  // Convert the string inputs to floating-point numbers
+  const num1 = parseFloat(numStr1)
+  const num2 = parseFloat(numStr2)
+
+  // Calculate the sum
+  const sum = num1 + num2
+
+  // Return the sum as a string with exactly two digits after the decimal point
+  return sum.toFixed(2)
+}
+
 function getDayOfWeek(date) {
   const days = [
     'Sunday',
@@ -26,7 +38,7 @@ function createEmployeeResponse(employee, dueSalaries) {
     lastName: employee?.lastName || '',
     image: employee?.image || '',
     totalSalary: dueSalaries
-      .reduce((acc, salary) => acc + parseFloat(salary.amount || 0), 0)
+      .reduce((acc, salary) => acc + parseFloat(salary.totalTransfer || 0), 0)
       .toFixed(2),
     dueSalaries,
   }
@@ -108,6 +120,10 @@ async function calculateWeeklyDueSalaries(
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
         tips: partialTips ? partialTips.toFixed(2) : '0.00',
+        totalTransfer: addTwoNumbers(
+          partialSalary || '0.00',
+          partialTips || '0.00',
+        ),
         salaryType: `Partial (${Math.round(daysUntilNextPayDay)} days)`,
         cycle: 'Weekly',
         expectedDate: formatDate(partialCycleEnd),
@@ -142,6 +158,10 @@ async function calculateWeeklyDueSalaries(
     dueSalaries.push({
       amount: fullSalary.toFixed(2),
       tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(
+        fullSalary || '0.00',
+        fullCycleTips || '0.00',
+      ),
       salaryType: 'Complete',
       cycle: 'Weekly',
       expectedDate: formatDate(fullCycleEnd),
@@ -206,6 +226,10 @@ async function calculateMonthlyDueSalaries(
     dueSalaries.push({
       amount: partialSalary.toFixed(2),
       tips: partialTips ? partialTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(
+        partialTips || '0.00',
+        partialSalary || '0.00',
+      ),
       salaryType: `Partial (${daysWorked} days)`,
       cycle: `Monthly`,
       expectedDate: formatDate(nextPayDate), // Expected payment on nextPayDate
@@ -236,6 +260,7 @@ async function calculateMonthlyDueSalaries(
     dueSalaries.push({
       amount: `${amount}`,
       tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(amount || '0.00', partialSalary || '0.00'),
       salaryType: `Complete`,
       cycle: 'Monthly',
       expectedDate: formatDate(currentPayDate),
@@ -320,6 +345,10 @@ async function calculateBiWeeklyDueSalaries(
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
         tips: partialTips ? partialTips.toFixed(2) : '0.00',
+        totalTransfer: addTwoNumbers(
+          partialSalary || '0.00',
+          partialTips || '0.00',
+        ),
         salaryType: `Partial (${Math.round(daysWorkedBeforeFirstPayDay)} days)`,
         cycle: 'Bi-Weekly',
         expectedDate: formatDate(firstPayDay),
@@ -347,6 +376,7 @@ async function calculateBiWeeklyDueSalaries(
     dueSalaries.push({
       amount: `${amount}`,
       tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(amount || '0.00', fullCycleTips || '0.00'),
       salaryType: `Complete (14 days)`,
       cycle: 'Bi-Weekly',
       expectedDate: formatDate(nextPayDay),
