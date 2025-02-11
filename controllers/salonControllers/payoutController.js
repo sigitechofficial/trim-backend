@@ -760,8 +760,9 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
   if (!result) throw new AppError('Employee not found', 404)
 
   const input = JSON.parse(JSON.stringify(result))
+  console.log('🚀 ~ exports.salaryEmployeeAccount= ~ input:', input)
 
-  const [data] = calculateDueSalaries([input])
+  const [data] = await calculateDueSalaries([input])
   const amount = parseFloat(input?.employeeWagesMethod?.value || 0)
   const cycle = input?.employeeWagesMethod?.cycle || 'Weekly' // Payment cycle type
   let lastExpectedDate =
@@ -784,7 +785,7 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
     '🚀 ~ exports.salaryEmployeeAccount= ~ lastExpectedDate:',
     lastExpectedDate,
   )
-  const remainings = calculateSalaryFromLastDateToToday(
+  const remainings = await calculateSalaryFromLastDateToToday(
     amount,
     lastExpectedDate,
     cycle,

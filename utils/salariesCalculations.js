@@ -119,7 +119,7 @@ async function calculateWeeklyDueSalaries(
 
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
-        tips: partialTips ? partialTips.toFixed(2) : '0.00',
+        tip: partialTips ? partialTips.toFixed(2) : '0.00',
         totalTransfer: addTwoNumbers(
           partialSalary || '0.00',
           partialTips || '0.00',
@@ -157,7 +157,7 @@ async function calculateWeeklyDueSalaries(
 
     dueSalaries.push({
       amount: fullSalary.toFixed(2),
-      tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
       totalTransfer: addTwoNumbers(
         fullSalary || '0.00',
         fullCycleTips || '0.00',
@@ -225,7 +225,7 @@ async function calculateMonthlyDueSalaries(
 
     dueSalaries.push({
       amount: partialSalary.toFixed(2),
-      tips: partialTips ? partialTips.toFixed(2) : '0.00',
+      tip: partialTips ? partialTips.toFixed(2) : '0.00',
       totalTransfer: addTwoNumbers(
         partialTips || '0.00',
         partialSalary || '0.00',
@@ -259,8 +259,8 @@ async function calculateMonthlyDueSalaries(
 
     dueSalaries.push({
       amount: `${amount}`,
-      tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
-      totalTransfer: addTwoNumbers(amount || '0.00', partialSalary || '0.00'),
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(amount || '0.00', fullCycleTips || '0.00'),
       salaryType: `Complete`,
       cycle: 'Monthly',
       expectedDate: formatDate(currentPayDate),
@@ -344,7 +344,7 @@ async function calculateBiWeeklyDueSalaries(
 
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
-        tips: partialTips ? partialTips.toFixed(2) : '0.00',
+        tip: partialTips ? partialTips.toFixed(2) : '0.00',
         totalTransfer: addTwoNumbers(
           partialSalary || '0.00',
           partialTips || '0.00',
@@ -375,7 +375,7 @@ async function calculateBiWeeklyDueSalaries(
 
     dueSalaries.push({
       amount: `${amount}`,
-      tips: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
       totalTransfer: addTwoNumbers(amount || '0.00', fullCycleTips || '0.00'),
       salaryType: `Complete (14 days)`,
       cycle: 'Bi-Weekly',
@@ -460,16 +460,18 @@ exports.calculateDueSalaries = async (employees) => {
 
 //*  3. Salaries till date .. required when change wagesmethod  ----------------------------------------
 
-exports.calculateSalaryFromLastDateToToday = (
+exports.calculateSalaryFromLastDateToToday = async (
   amount,
   lastPaymentDate,
   cycle,
 ) => {
-  lastPaymentDate = getNextDate(lastPaymentDate) /// for avoiding the issue that when we convert new Date() time in umt is on previous day
+  // Adjust lastPaymentDate to avoid issues with UTC conversion
+  lastPaymentDate = getNextDate(lastPaymentDate)
   console.log(
-    'ðŸš€ ~ calculateWeeklyDueSalaries ~ lastPaymentDate:',
+    '🚀 ~ calculateSalaryFromLastDateToToday ~ lastPaymentDate:',
     lastPaymentDate,
   )
+
   let cycleDays = 1
   if (cycle === 'Weekly') {
     cycleDays = 7
@@ -478,6 +480,7 @@ exports.calculateSalaryFromLastDateToToday = (
   } else if (cycle === 'Monthly') {
     cycleDays = 30
   }
+
   const today = new Date()
 
   const dailySalary = amount / cycleDays // Calculate daily salary based on the cycle
@@ -488,12 +491,24 @@ exports.calculateSalaryFromLastDateToToday = (
   // Total salary for the period from lastPaymentDate to today
   const totalSalary = dailySalary * daysWorked
 
+  // Query total tips earned between lastPaymentDate and today
+  const tipSum = await tip.sum('amount', {
+    where: {
+      on: {
+        [Op.between]: [lastPaymentDate, today],
+      },
+    },
+  })
+
   const output = {
     amount: totalSalary.toFixed(2),
-    salaryType: `Final pay before wage method change: Partial (${daysWorked} days).`,
+    tip: tipSum ? tipSum.toFixed(2) : '0.00',
+    totalTransfer: addTwoNumbers(totalSalary || '0.00', tipSum || '0.00'),
+    salaryType: `Payment of salary covering ${daysWorked} days of work.`,
     cycle: cycle,
     expectedDate: formatDate(today),
     expectedDay: getDayOfWeek(today),
   }
+
   return output
 }
