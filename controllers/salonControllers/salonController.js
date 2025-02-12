@@ -1638,9 +1638,14 @@ exports.updatereschedulePolicy = async (req, res) => {
 */
 exports.salonHistory = async (req, res) => {
   const userId = req.user.id
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
   const { startDate, endDate, filter } = req.body
 
   const condition = {
+    salonDetailId: salon?.id,
     status: {
       [Op.in]: ['complete', 'cancel', 'no-show', 'save-unpaid'],
     },
@@ -1669,15 +1674,6 @@ exports.salonHistory = async (req, res) => {
 
   const salonHistory = await booking.findAll({
     where: condition,
-    include: [
-      {
-        model: salonDetail,
-        where: {
-          userId,
-        },
-        attributes: [],
-      },
-    ],
     attributes: ['id', 'createdAt', 'total', 'status', 'on', 'startTime'],
   })
 
