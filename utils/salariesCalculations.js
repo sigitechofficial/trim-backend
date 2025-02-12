@@ -1,7 +1,22 @@
+const { tip } = require('../models')
+const { literal, Op } = require('sequelize')
 const daysOfWeek = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
+
 function formatDate(date) {
   const options = { year: 'numeric', month: '2-digit', day: '2-digit' }
   return new Date(date).toLocaleDateString('en-CA', options) // Format: YYYY-MM-DD
+}
+
+function addTwoNumbers(numStr1, numStr2) {
+  // Convert the string inputs to floating-point numbers
+  const num1 = parseFloat(numStr1)
+  const num2 = parseFloat(numStr2)
+
+  // Calculate the sum
+  const sum = num1 + num2
+
+  // Return the sum as a string with exactly two digits after the decimal point
+  return sum.toFixed(2)
 }
 
 function getDayOfWeek(date) {
@@ -23,7 +38,7 @@ function createEmployeeResponse(employee, dueSalaries) {
     lastName: employee?.lastName || '',
     image: employee?.image || '',
     totalSalary: dueSalaries
-      .reduce((acc, salary) => acc + parseFloat(salary.amount || 0), 0)
+      .reduce((acc, salary) => acc + parseFloat(salary.totalTransfer || 0), 0)
       .toFixed(2),
     dueSalaries,
   }
@@ -54,101 +69,125 @@ function getNextDate(date = new Date()) {
 //* Calculate Salaries Weekly
 //----------------
 
-function calculateWeeklyDueSalaries(amount, lastPaymentDate, today, payDay) {
-  console.log(
-    '🚀 ~ calculateWeeklyDueSalaries ~ amount, lastPaymentDate, today, payDay:',
-    amount,
-    lastPaymentDate,
-    today,
-    payDay,
-  )
+async function calculateWeeklyDueSalaries(
+  amount,
+  lastPaymentDate,
+  today,
+  payDay,
+) {
   console.log('Starting calculateWeeklyDueSalaries...')
 
-  // Parse the input dates
-  let prelastPaymentDate = new Date(lastPaymentDate)
-  // lastPaymentDate.setDate(lastPaymentDate.getDate() + 1)
+  // Parse input dates
+  const startDate = new Date(lastPaymentDate)
   today = new Date(today)
-  // date.setUTCHours(0, 0, 0, 0);
+  // (Optional) Adjust today if needed – for example, if you want to include the current day:
   today.setDate(today.getDate() + 1)
-  console.log('🚀 ~  ~ today:', today)
 
   const dueSalaries = []
   const daysInWeek = 7
-  // Step 1: Find the first payday (Monday, payDay = 0)
-  const currentDay = prelastPaymentDate.getUTCDay()
-  // console.log('🚀 ~ calculateWeeklyDueSalaries ~ currentDay:', currentDay)
-  let daysUntilNextPayDay = (payDay - currentDay + 7) % 7
-  // console.log('🚀 ~  ~ daysUntilNextPayDay:', daysUntilNextPayDay)
 
-  // If the start date is on a Monday (payDay), calculate full salary for next bi-weekly period
-
-  let firstPayDay = lastPaymentDate
-  // console.log('🚀 ~  ~ lastPaymentDate:', lastPaymentDate)
+  // -------------------------------
+  // 1. Determine the first payday.
+  // -------------------------------
+  const currentDay = startDate.getUTCDay()
+  const daysUntilNextPayDay = (payDay - currentDay + 7) % 7
+  let firstPayDay = new Date(lastPaymentDate)
   firstPayDay.setUTCDate(firstPayDay.getUTCDate() + daysUntilNextPayDay)
+  // Adjust if you need the next day after that date
   firstPayDay = getNextDate(firstPayDay)
-  // console.log('🚀 ~  ~ firstPayDay:', firstPayDay)
 
-  // Step 1: Calculate partial salary if applicable
-  const startOfPartialPeriod = new Date(lastPaymentDate)
-  // console.log('🚀 ~  ~ startOfPartialPeriod:', startOfPartialPeriod)
-  // startOfPartialPeriod.setDate(startOfPartialPeriod.getDate() + 1) // Start from the next day//?
+  // ------------------------------------------
+  // 2. Calculate the partial cycle (if needed)
+  // Period: from lastPaymentDate to firstPayDay.
+  // ------------------------------------------
+  const partialCycleStart = new Date(lastPaymentDate)
+  const partialCycleEnd = new Date(firstPayDay)
 
-  // console.log('🚀 ~  ~ firstPayDay:', firstPayDay)
-  // Calculate the end of the partial period, which is the first payday
-  const endOfPartialPeriod = new Date(firstPayDay)
-  // console.log('🚀 ~  ~ endOfPartialPeriod:', endOfPartialPeriod)
-
-  // console.log('🚀 ~  ~ startOfPartialPeriod:', startOfPartialPeriod)
-  let nextPayDay = new Date(firstPayDay)
-
-  console.log('🚀 ~  ~ today:', today)
-  if (
-    startOfPartialPeriod < endOfPartialPeriod &&
-    startOfPartialPeriod <= today
-    // && startOfPartialPeriod <= today
-  ) {
-    console.log('🚀 TRUE:')
-
-    console.log('🚀 ~  ~ daysWorked:', daysUntilNextPayDay)
+  if (partialCycleStart < partialCycleEnd && partialCycleStart <= today) {
     if (daysUntilNextPayDay > 0) {
+      // Calculate salary for the partial period
       const partialSalary = (amount / daysInWeek) * daysUntilNextPayDay
+
+      // Query the total tips for this partial period using Sequelize.
+      const partialTips = await tip.sum('amount', {
+        where: {
+          on: {
+            [Op.between]: [partialCycleStart, partialCycleEnd],
+          },
+        },
+      })
+
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
+        tip: partialTips ? partialTips.toFixed(2) : '0.00',
+        totalTransfer: addTwoNumbers(
+          partialSalary || '0.00',
+          partialTips || '0.00',
+        ),
         salaryType: `Partial (${Math.round(daysUntilNextPayDay)} days)`,
         cycle: 'Weekly',
-        expectedDate: formatDate(endOfPartialPeriod),
-        // expectedDay: getDayOfWeek(endOfPartialPeriod),
+        expectedDate: formatDate(partialCycleEnd),
       })
     }
   }
-  nextPayDay.setDate(nextPayDay.getDate() + daysInWeek)
 
-  // Step 2: Calculate full salaries for each week from the first payday onward
-  console.log('🚀 ~ calculateWeeklyDueSalaries ~ today:', today)
-  console.log('🚀 ~ calculateWeeklyDueSalaries ~ nextPayDay:', nextPayDay)
-  while (nextPayDay <= today) {
-    // console.log('🚀 ~ calculateWeeklyDueSalaries ~ nextPayDay:', nextPayDay)
-    dueSalaries.push({
-      amount: amount.toFixed(2),
-      salaryType: 'Complete',
-      cycle: 'Weekly',
-      expectedDate: formatDate(nextPayDay),
-      // expectedDay: getDayOfWeek(nextPayDay),
+  // -------------------------------------------------------
+  // 3. Calculate full weekly cycles starting from firstPayDay.
+  // Each full cycle is defined as one week:
+  //   cycleStart: previous payday (or firstPayDay for the first full cycle)
+  //   cycleEnd: cycleStart + 7 days.
+  // -------------------------------------------------------
+  let fullCycleStart = new Date(firstPayDay)
+  let fullCycleEnd = new Date(fullCycleStart)
+  fullCycleEnd.setDate(fullCycleEnd.getDate() + daysInWeek)
+
+  // Process full cycles as long as the cycle end is on or before today.
+  while (fullCycleEnd <= today) {
+    // For each full cycle, the complete weekly salary is paid.
+    const fullSalary = amount
+
+    // Query total tips for the full cycle period.
+    const fullCycleTips = await tip.sum('amount', {
+      where: {
+        on: {
+          [Op.between]: [fullCycleStart, fullCycleEnd],
+        },
+      },
     })
 
-    // Move to the next Monday
-    nextPayDay.setDate(nextPayDay.getDate() + daysInWeek)
-    console.log('🚀 ~ calculateWeeklyDueSalaries ~ nextPayDay:', nextPayDay)
+    dueSalaries.push({
+      amount: fullSalary.toFixed(2),
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(
+        fullSalary || '0.00',
+        fullCycleTips || '0.00',
+      ),
+      salaryType: 'Complete',
+      cycle: 'Weekly',
+      expectedDate: formatDate(fullCycleEnd),
+    })
+
+    // Move to the next week cycle.
+    fullCycleStart = new Date(fullCycleEnd)
+    fullCycleEnd = new Date(fullCycleStart)
+    fullCycleEnd.setDate(fullCycleEnd.getDate() + daysInWeek)
   }
 
   return dueSalaries
 }
+
 //----------------
 //* Calculate Salaries Monthly
 //----------------
 
-function calculateMonthlyDueSalaries(amount, lastPaymentDate, today, payDate) {
-  lastPaymentDate = getNextDate(lastPaymentDate) /// for avoiding the issue that when we convert new Date() time in umt is on previous day
+async function calculateMonthlyDueSalaries(
+  amount,
+  lastPaymentDate,
+  today,
+  payDate,
+) {
+  // Do not disturb existing functionality:
+  lastPaymentDate = getNextDate(lastPaymentDate) /// for avoiding the issue that when we convert new Date() time in UTC is on previous day
   today = new Date(today)
   const dueSalaries = []
   const daysInMonth = 30 // Average month days for salary calculation
@@ -163,7 +202,7 @@ function calculateMonthlyDueSalaries(amount, lastPaymentDate, today, payDate) {
   console.log('🚀 ~ calculateMonthlyDueSalaries ~ endOfMonth:', endOfMonth)
   console.log('🚀 ~ calculateMonthlyDueSalaries ~ today:', today)
 
-  // Step 1: Calculate and push the partial salary for the days from the last payment date till the end of June
+  // Step 1: Calculate and push the partial salary for the days from the last payment date till the end of the current month
   console.log('🚀 ~ nextPayDate < today:', nextPayDate < today)
   console.log(
     '🚀 ~ lastPaymentDate.getDate() < endOfMonth.getDate():',
@@ -175,12 +214,25 @@ function calculateMonthlyDueSalaries(amount, lastPaymentDate, today, payDate) {
     )
     const partialSalary = (amount / daysInMonth) * daysWorked
 
+    // Query tips for the partial period (from lastPaymentDate to endOfMonth)
+    const partialTips = await tip.sum('amount', {
+      where: {
+        on: {
+          [Op.between]: [lastPaymentDate, endOfMonth],
+        },
+      },
+    })
+
     dueSalaries.push({
       amount: partialSalary.toFixed(2),
-      salaryType: `Partial (${daysWorked * 1} days)`,
+      tip: partialTips ? partialTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(
+        partialTips || '0.00',
+        partialSalary || '0.00',
+      ),
+      salaryType: `Partial (${daysWorked} days)`,
       cycle: `Monthly`,
-      expectedDate: formatDate(nextPayDate), // Expected payment on July 2
-      // expectedDay: getDayOfWeek(nextPayDate),
+      expectedDate: formatDate(nextPayDate), // Expected payment on nextPayDate
     })
   }
 
@@ -189,19 +241,35 @@ function calculateMonthlyDueSalaries(amount, lastPaymentDate, today, payDate) {
     nextPayDate.getFullYear(),
     nextPayDate.getMonth() + 1,
     payDate,
-  ) // August 2
+  ) // For example, if nextPayDate was July 2, then currentPayDate is August 2
+
+  // For full monthly cycles, we set the cycleStart date as the first pay date (i.e., nextPayDate)
+  let cycleStart = new Date(nextPayDate)
 
   // Step 3: Loop through full months from the next pay date until today
   while (currentPayDate <= today) {
-    dueSalaries.push({
-      amount: `${amount}`,
-      salaryType: `Complete`,
-      cycle: 'Monthly',
-      expectedDate: formatDate(currentPayDate), // Full salary from the next month
-      // expectedDay: getDayOfWeek(currentPayDate),
+    // Query tips for this full cycle (from cycleStart to currentPayDate)
+    const fullCycleTips = await tip.sum('amount', {
+      where: {
+        on: {
+          [Op.between]: [cycleStart, currentPayDate],
+        },
+      },
     })
 
-    // Move to the next month's pay date
+    dueSalaries.push({
+      amount: `${amount}`,
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(amount || '0.00', fullCycleTips || '0.00'),
+      salaryType: `Complete`,
+      cycle: 'Monthly',
+      expectedDate: formatDate(currentPayDate),
+    })
+
+    // Prepare for the next cycle:
+    // The next cycle starts at the current pay date.
+    cycleStart = new Date(currentPayDate)
+    // And move to the next month's pay date.
     currentPayDate.setMonth(currentPayDate.getMonth() + 1)
   }
 
@@ -212,7 +280,12 @@ function calculateMonthlyDueSalaries(amount, lastPaymentDate, today, payDate) {
 //* Calculate Salaries Bi-Weekly
 //----------------
 
-function calculateBiWeeklyDueSalaries(amount, lastPaymentDate, today, payDay) {
+async function calculateBiWeeklyDueSalaries(
+  amount,
+  lastPaymentDate,
+  today,
+  payDay,
+) {
   // Ensure dates are Date objects
   lastPaymentDate = new Date(lastPaymentDate)
   today = new Date(today)
@@ -228,7 +301,6 @@ function calculateBiWeeklyDueSalaries(amount, lastPaymentDate, today, payDay) {
   let daysUntilNextPayDay = (payDay - currentDay + 7) % 7
 
   // If the start date is on a Monday (payDay), calculate full salary for next bi-weekly period
-
   const firstPayDay = new Date(lastPaymentDate)
   firstPayDay.setUTCDate(firstPayDay.getUTCDate() + daysUntilNextPayDay)
 
@@ -255,13 +327,28 @@ function calculateBiWeeklyDueSalaries(amount, lastPaymentDate, today, payDay) {
     if (
       daysWorkedBeforeFirstPayDay >= 8 &&
       daysWorkedBeforeFirstPayDay <= 13 &&
-      firstPayDay <= today // Just to avoid the case when partial salary case runs and first pay date exceed the today
+      firstPayDay <= today // Just to avoid the case when partial salary runs and first pay date exceeds today
     ) {
       // Calculate the partial salary for 8 to 13 days worked
       const partialSalary =
         (amount / daysInBiWeek) * daysWorkedBeforeFirstPayDay
+
+      // Query tips for the partial period (from lastPaymentDate to firstPayDay)
+      const partialTips = await tip.sum('amount', {
+        where: {
+          on: {
+            [Op.between]: [lastPaymentDate, firstPayDay],
+          },
+        },
+      })
+
       dueSalaries.push({
         amount: partialSalary.toFixed(2),
+        tip: partialTips ? partialTips.toFixed(2) : '0.00',
+        totalTransfer: addTwoNumbers(
+          partialSalary || '0.00',
+          partialTips || '0.00',
+        ),
         salaryType: `Partial (${Math.round(daysWorkedBeforeFirstPayDay)} days)`,
         cycle: 'Bi-Weekly',
         expectedDate: formatDate(firstPayDay),
@@ -269,98 +356,122 @@ function calculateBiWeeklyDueSalaries(amount, lastPaymentDate, today, payDay) {
       })
     }
   }
+
   // Step 3: Calculate full salaries for all periods after the first payday
+  // We'll track the start of each cycle for tip calculation.
+  let cycleStart = new Date(firstPayDay)
   let nextPayDay = new Date(firstPayDay)
   nextPayDay.setUTCDate(nextPayDay.getUTCDate() + daysInBiWeek) // Move to the next bi-weekly payday
 
   while (nextPayDay <= today) {
+    // Query tips for the full cycle period (from cycleStart to nextPayDay)
+    const fullCycleTips = await tip.sum('amount', {
+      where: {
+        on: {
+          [Op.between]: [cycleStart, nextPayDay],
+        },
+      },
+    })
+
     dueSalaries.push({
       amount: `${amount}`,
+      tip: fullCycleTips ? fullCycleTips.toFixed(2) : '0.00',
+      totalTransfer: addTwoNumbers(amount || '0.00', fullCycleTips || '0.00'),
       salaryType: `Complete (14 days)`,
       cycle: 'Bi-Weekly',
       expectedDate: formatDate(nextPayDay),
       // expectedDay: getDayOfWeek(nextPayDay),
     })
 
-    // Move to the next bi-weekly period
+    // Move to the next bi-weekly period and update cycleStart for the next cycle
+    cycleStart = new Date(nextPayDay)
     nextPayDay.setUTCDate(nextPayDay.getUTCDate() + daysInBiWeek)
   }
 
   return dueSalaries
 }
+
 //----------------
 
 //* Calculate Salaries
 
 //----------------
 
-exports.calculateDueSalaries = (employees) => {
+exports.calculateDueSalaries = async (employees) => {
   const today = new Date() // Current date
   today.setHours(0, 0, 0, 0) // Reset time part to start of the day
 
-  return employees.map((employee) => {
-    const { employeeWagesMethod } = employee || {}
-    const amount = parseFloat(employeeWagesMethod?.value || 0)
-    const cycle = employeeWagesMethod?.cycle || 'Weekly' // Payment cycle type
-    const createdAt = employeeWagesMethod?.createdAt
-      ? new Date(employeeWagesMethod.createdAt)
-      : null // Creation date
-    const payDay = daysOfWeek[employeeWagesMethod?.payDay] || daysOfWeek['sun'] // Pay day is always Sunday (0)
+  // Use Promise.all to await asynchronous operations in the map callback
+  const responses = await Promise.all(
+    employees.map(async (employee) => {
+      const { employeeWagesMethod } = employee || {}
+      const amount = parseFloat(employeeWagesMethod?.value || 0)
+      const cycle = employeeWagesMethod?.cycle || 'Weekly' // Payment cycle type
+      const createdAt = employeeWagesMethod?.createdAt
+        ? new Date(employeeWagesMethod.createdAt)
+        : null // Creation date
+      const payDay =
+        daysOfWeek[employeeWagesMethod?.payDay] || daysOfWeek['sun'] // Pay day is always Sunday (0)
 
-    // Determine last payment date
-    let lastPaymentDate = employeeWagesMethod?.prevSalaryDate
-      ? new Date(employeeWagesMethod.prevSalaryDate)
-      : createdAt || today // Default to today if both are null
+      // Determine last payment date
+      let lastPaymentDate = employeeWagesMethod?.prevSalaryDate
+        ? new Date(employeeWagesMethod.prevSalaryDate)
+        : createdAt || today // Default to today if both are null
 
-    lastPaymentDate.setHours(0, 0, 0, 0) // Reset time part to start of the day
+      lastPaymentDate.setHours(0, 0, 0, 0) // Reset time part to start of the day
 
-    // If the last payment date is invalid, assume no due salaries
-    if (isNaN(lastPaymentDate)) {
-      return createEmployeeResponse(employee, [], 0)
-    }
+      // If the last payment date is invalid, assume no due salaries
+      if (isNaN(lastPaymentDate)) {
+        return createEmployeeResponse(employee, [], 0)
+      }
 
-    // Calculate due salaries based on the payment cycle
-    let dueSalaries = []
-    if (cycle === 'Weekly') {
-      dueSalaries = calculateWeeklyDueSalaries(
-        amount,
-        lastPaymentDate,
-        today,
-        payDay,
-      )
-    } else if (cycle === 'Bi-weekly') {
-      dueSalaries = calculateBiWeeklyDueSalaries(
-        amount,
-        lastPaymentDate,
-        today,
-        payDay,
-      )
-    } else if (cycle === 'Monthly') {
-      dueSalaries = calculateMonthlyDueSalaries(
-        amount,
-        lastPaymentDate,
-        today,
-        employeeWagesMethod.payDate,
-      )
-    }
+      // Calculate due salaries based on the payment cycle
+      let dueSalaries = []
+      if (cycle === 'Weekly') {
+        dueSalaries = await calculateWeeklyDueSalaries(
+          amount,
+          lastPaymentDate,
+          today,
+          payDay,
+        )
+      } else if (cycle === 'Bi-weekly') {
+        dueSalaries = await calculateBiWeeklyDueSalaries(
+          amount,
+          lastPaymentDate,
+          today,
+          payDay,
+        )
+      } else if (cycle === 'Monthly') {
+        dueSalaries = await calculateMonthlyDueSalaries(
+          amount,
+          lastPaymentDate,
+          today,
+          employeeWagesMethod.payDate,
+        )
+      }
 
-    // Return employee details with the due salaries list
-    return createEmployeeResponse(employee, dueSalaries)
-  })
+      // Return employee details with the due salaries list
+      return createEmployeeResponse(employee, dueSalaries)
+    }),
+  )
+
+  return responses
 }
 
 //*  3. Salaries till date .. required when change wagesmethod  ----------------------------------------
 
-exports.calculateSalaryFromLastDateToToday = (
+exports.calculateSalaryFromLastDateToToday = async (
   amount,
   lastPaymentDate,
   cycle,
 ) => {
-  lastPaymentDate = getNextDate(lastPaymentDate) /// for avoiding the issue that when we convert new Date() time in umt is on previous day
+  // Adjust lastPaymentDate to avoid issues with UTC conversion
+  lastPaymentDate = getNextDate(lastPaymentDate)
   console.log(
-    'ðŸš€ ~ calculateWeeklyDueSalaries ~ lastPaymentDate:',
+    '🚀 ~ calculateSalaryFromLastDateToToday ~ lastPaymentDate:',
     lastPaymentDate,
   )
+
   let cycleDays = 1
   if (cycle === 'Weekly') {
     cycleDays = 7
@@ -369,6 +480,7 @@ exports.calculateSalaryFromLastDateToToday = (
   } else if (cycle === 'Monthly') {
     cycleDays = 30
   }
+
   const today = new Date()
 
   const dailySalary = amount / cycleDays // Calculate daily salary based on the cycle
@@ -379,12 +491,24 @@ exports.calculateSalaryFromLastDateToToday = (
   // Total salary for the period from lastPaymentDate to today
   const totalSalary = dailySalary * daysWorked
 
+  // Query total tips earned between lastPaymentDate and today
+  const tipSum = await tip.sum('amount', {
+    where: {
+      on: {
+        [Op.between]: [lastPaymentDate, today],
+      },
+    },
+  })
+
   const output = {
     amount: totalSalary.toFixed(2),
-    salaryType: `Final pay before wage method change: Partial (${daysWorked} days).`,
-    cycle: 'Weekly',
+    tip: tipSum ? tipSum.toFixed(2) : '0.00',
+    totalTransfer: addTwoNumbers(totalSalary || '0.00', tipSum || '0.00'),
+    salaryType: `Payment of salary covering ${daysWorked} days of work.`,
+    cycle: cycle,
     expectedDate: formatDate(today),
     expectedDay: getDayOfWeek(today),
   }
+
   return output
 }

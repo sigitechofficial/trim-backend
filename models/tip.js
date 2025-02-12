@@ -7,11 +7,11 @@ module.exports = (sequelize, DataTypes) => {
     },
     on: {
       type: DataTypes.DATEONLY,
-      defaultValue: sequelize.NOW,
+      defaultValue: DataTypes.NOW,
     },
     time: {
       type: DataTypes.TIME,
-      defaultValue: sequelize.NOW,
+      defaultValue: DataTypes.NOW,
     },
     at: {
       type: DataTypes.ENUM('checkout', 'feedback'),

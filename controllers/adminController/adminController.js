@@ -48,6 +48,9 @@ const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
 const CutomEmails = require('../../helper/CustomEmails')
 const { salonBlock } = require('../eventDrivenCommunication/salonBlock')
+const {
+  customerBlockEvent,
+} = require('../eventDrivenCommunication/customerBlockEvent')
 
 //Global Variables
 const formatDate = (date) => {
@@ -110,6 +113,10 @@ exports.login = async (req, res, next) => {
 
   if (!email || !password) {
     return next(new AppError('Please provide Email or Password', 200))
+  }
+
+  if (!dvToken) {
+    return next(new AppError('Please provide Device Token', 200))
   }
 
   const User = await user.findOne({
@@ -2132,7 +2139,7 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
 
 //^ Status-Change And Delete --------------------------------------------------------------
 
-//*1 Client Status Distribution Graph
+//*1 Salon status
 exports.changeSalonStatus = async (req, res, next) => {
   const id = req.params.id
 
@@ -2150,6 +2157,33 @@ exports.changeSalonStatus = async (req, res, next) => {
   await salonDetail.update({ status: newStatus }, { where: { userId: id } })
 
   salonBlock(id, newStatus)
+
+  res.status(200).json(
+    response({
+      message: 'Status changed successfully',
+      data: { count: updatedCount, newStatus },
+    }),
+  )
+}
+
+//*1 Client Status Change
+exports.changeCustomerStatus = async (req, res, next) => {
+  const id = req.params.id
+
+  const existingRecord = await user.findByPk(id, { attributes: ['status'] })
+
+  if (!existingRecord) {
+    throw new AppError('No record found with that ID', 200)
+  }
+  const newStatus = existingRecord.status === true ? 0 : 1
+  const [updatedCount] = await user.update(
+    { status: newStatus },
+    { where: { id } },
+  )
+
+  if (!newStatus) {
+    customerBlockEvent(id, newStatus)
+  }
 
   res.status(200).json(
     response({

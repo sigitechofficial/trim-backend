@@ -74,9 +74,9 @@ const sendEvent = async (userId, eventData) => {
           // Event was not acknowledged, store it in the database
           await unAcknowledgedEvents.create({
             to: userId,
-            event: eventData.event,
-            data: JSON.stringify(eventData.data),
-            bookingId: eventData.bookingId,
+            event: eventData?.event,
+            data: JSON.stringify(eventData?.data),
+            bookingId: eventData?.bookingId,
           })
           // console.log(
           //   `ðŸš€ðŸš€ðŸš€Unacknowledged event stored for u90ser ${userId}`,

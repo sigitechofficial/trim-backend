@@ -47,7 +47,21 @@ const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+function formatDateTime(date) {
+  // Format the date portion as 'YYYY-MM-DD'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const formattedDate = `${year}-${month}-${day}`
 
+  // Format the time portion as 'HH:mm:ss'
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  const formattedTime = `${hours}:${minutes}:${seconds}`
+
+  return { date: formattedDate, time: formattedTime }
+}
 //! Return Function
 let returnFunction = (status, message, data, error) => {
   return {
@@ -1624,31 +1638,57 @@ exports.updatereschedulePolicy = async (req, res) => {
 */
 exports.salonHistory = async (req, res) => {
   const userId = req.user.id
-  const { time } = req.body
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+  const { startDate, endDate, filter } = req.body
 
-  // Calculate the date one week ago
-  const timeAgo = new Date()
-  timeAgo.setDate(timeAgo.getDate() - time)
+  const condition = {
+    salonDetailId: salon?.id,
+    status: {
+      [Op.in]: ['complete', 'cancel', 'no-show', 'save-unpaid'],
+    },
+  }
+
+  if (filter == 'Last 24 hours') {
+    // Calculate the timestamp for 24 hours ago
+    const last24 = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const now = new Date()
+
+    const { date: last24Date, time: last24Time } = formatDateTime(last24)
+    const { date: nowDate, time: nowTime } = formatDateTime(now)
+
+    // Create combined ISO‑formatted datetime strings
+    const last24Combined = `${last24Date} ${last24Time}`
+    const nowCombined = `${nowDate} ${nowTime}`
+
+    // Add an AND condition: the concatenated "on" and "startTime" must be between last24Combined and nowCombined.
+    condition[Op.and] = [
+      // Lower bound: greater than or equal to last24Combined
+      where(fn('CONCAT', col('on'), ' ', col('startTime')), {
+        [Op.gte]: last24Combined,
+      }),
+      // Upper bound: less than or equal to nowCombined
+      where(fn('CONCAT', col('on'), ' ', col('startTime')), {
+        [Op.lte]: nowCombined,
+      }),
+    ]
+  } else if (filter == 'Daily') {
+    condition.on = startDate
+  } else if (filter == 'Upcomming') {
+    const now = new Date()
+    const { date: nowDate, time: nowTime } = formatDateTime(now)
+    condition.on = { [Op.gte]: nowDate }
+  } else {
+    condition.on = {
+      [Op.between]: [startDate, endDate],
+    }
+  }
 
   const salonHistory = await booking.findAll({
-    where: {
-      createdAt: {
-        [Op.gte]: timeAgo,
-      },
-      status: {
-        [Op.in]: ['complete', 'cancel', 'no-show', 'save-unpaid'],
-      },
-    },
-    include: [
-      {
-        model: salonDetail,
-        where: {
-          userId,
-        },
-        attributes: [],
-      },
-    ],
-    attributes: ['id', 'createdAt', 'total', 'status', 'on'],
+    where: condition,
+    attributes: ['id', 'createdAt', 'total', 'status', 'on', 'startTime'],
   })
 
   return res

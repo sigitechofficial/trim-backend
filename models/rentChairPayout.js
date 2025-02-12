@@ -3,6 +3,16 @@ module.exports = (sequelize, DataTypes) => {
     'rentChairPayout',
     {
       amount: {
+        //actual amount earned
+        type: DataTypes.DECIMAL(14, 2),
+        defaultValue: 0,
+      },
+      tip: {
+        type: DataTypes.DECIMAL(14, 2),
+        defaultValue: 0,
+      },
+      totalTransfer: {
+        //actual amount earned + tip
         type: DataTypes.DECIMAL(14, 2),
         defaultValue: 0,
       },

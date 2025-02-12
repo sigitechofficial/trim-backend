@@ -131,7 +131,7 @@ router.get(
 router.put(
   '/customer-change-status/:id',
   protect,
-  catchAsync(adminController.changeStatus(user)),
+  catchAsync(adminController.changeCustomerStatus),
 )
 router.delete(
   '/customer-delete/:id',
