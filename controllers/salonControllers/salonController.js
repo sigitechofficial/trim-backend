@@ -47,7 +47,21 @@ const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+function formatDateTime(date) {
+  // Format the date portion as 'YYYY-MM-DD'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const formattedDate = `${year}-${month}-${day}`
 
+  // Format the time portion as 'HH:mm:ss'
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  const formattedTime = `${hours}:${minutes}:${seconds}`
+
+  return { date: formattedDate, time: formattedTime }
+}
 //! Return Function
 let returnFunction = (status, message, data, error) => {
   return {
@@ -1624,21 +1638,37 @@ exports.updatereschedulePolicy = async (req, res) => {
 */
 exports.salonHistory = async (req, res) => {
   const userId = req.user.id
-  const { time } = req.body
+  const { startDate, endDate, filter } = req.body
 
-  // Calculate the date one week ago
-  const timeAgo = new Date()
-  timeAgo.setDate(timeAgo.getDate() - time)
+  const condition = {
+    status: {
+      [Op.in]: ['complete', 'cancel', 'no-show', 'save-unpaid'],
+    },
+  }
+
+  if (filter == 'Last 24 hours') {
+    // Calculate the timestamp for 24 hours ago
+    const last24 = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    const { date: last24Date, time: last24Time } = formatDateTime(last24)
+
+    condition[Op.and] = [
+      { on: { [Op.gt]: last24Date } },
+      {
+        on: last24Date,
+        startTime: { [Op.gte]: last24Time },
+      },
+    ]
+  } else if (filter == 'Daily ') {
+    condition.on = startDate
+  } else {
+    condition.on = {
+      [Op.between]: [startDate, endDate],
+    }
+  }
 
   const salonHistory = await booking.findAll({
-    where: {
-      createdAt: {
-        [Op.gte]: timeAgo,
-      },
-      status: {
-        [Op.in]: ['complete', 'cancel', 'no-show', 'save-unpaid'],
-      },
-    },
+    where: condition,
     include: [
       {
         model: salonDetail,
@@ -1648,7 +1678,7 @@ exports.salonHistory = async (req, res) => {
         attributes: [],
       },
     ],
-    attributes: ['id', 'createdAt', 'total', 'status', 'on'],
+    attributes: ['id', 'createdAt', 'total', 'status', 'on', 'startTime'],
   })
 
   return res

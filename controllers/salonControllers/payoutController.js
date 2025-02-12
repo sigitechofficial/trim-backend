@@ -791,7 +791,7 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
     cycle,
   )
   if (parseFloat(remainings.amount) > 0) {
-    data.totalSalary = `${parseFloat(data.totalSalary) + parseFloat(remainings.amount)}`
+    data.totalSalary = `${parseFloat(data.totalSalary) + parseFloat(remainings.totalTransfer)}`
     data.dueSalaries?.push(remainings)
   }
 
