@@ -606,6 +606,9 @@ exports.login = async (req, res, next) => {
       firstName: User.firstName,
       lastName: User.lastName,
       email: User.email,
+      businessEmail: '',
+      businessCountryCode: '',
+      businessPhoneNum: '',
       accessToken: token,
       phoneNum: `${User.countryCode} ${User.phoneNum}`,
     },
@@ -644,6 +647,9 @@ exports.login = async (req, res, next) => {
         { model: wallet, required: false },
       ],
     })
+    response.data.businessEmail = salon.businessEmail
+    response.data.businessCountryCode = salon.businessCountryCode
+    response.data.businessPhoneNum = salon.businessPhoneNum
     // return res.json(salon)
     if (!salon || User.verifiedAt === null) {
       response.status = User.verifiedAt === null ? '3' : '2'
@@ -1335,6 +1341,9 @@ exports.session = async (req, res, next) => {
         accessToken: req.header('accessToken'),
         phoneNum: `${User.countryCode} ${User.phoneNum}`,
         isExternalEmployee: User.isExternalEmployee,
+        businessEmail: '',
+        businessCountryCode: '',
+        businessPhoneNum: '',
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
@@ -1364,6 +1373,9 @@ exports.session = async (req, res, next) => {
         accessToken: req.header('accessToken'),
         phoneNum: `${User.countryCode} ${User.phoneNum}`,
         isExternalEmployee: User.isExternalEmployee,
+        businessEmail: '',
+        businessCountryCode: '',
+        businessPhoneNum: '',
         profileCompletion: {
           salonDetailId: '',
           salonName: '',
@@ -1434,6 +1446,9 @@ exports.session = async (req, res, next) => {
       accessToken: req.header('accessToken'),
       phoneNum: `${User.countryCode} ${User.phoneNum}`,
       isExternalEmployee: User.isExternalEmployee,
+      businessEmail: User?.salonDetails[0]?.businessEmail,
+      businessCountryCode: User?.salonDetails[0]?.businessCountryCode,
+      businessPhoneNum: User?.salonDetails[0]?.businessPhoneNum,
       profileCompletion: {
         salonDetailId: User.salonDetails[0].id ?? '',
         salonName: User.salonDetails[0].salonName,
