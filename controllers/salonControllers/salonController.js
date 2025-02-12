@@ -83,16 +83,30 @@ exports.addSalonDetail = async (req, res, next) => {
     teamSize,
     userId,
     addressDetail,
+    businessEmail,
+    businessCountryCode,
+    businessPhoneNum,
   } = req.body
-  const addressData = await addressDBS.create(addressDetail)
   const salon = await salonDetail.findOne({ where: { userId } })
   if (salon) {
-    addressDBS.destroy({ where: { id: addressData.id } })
     console.log('---------------------> 2nd Attempt')
     return res.json(
       returnFunction('1', 'Salon Details Successfully Added!', salon, ''),
     )
   }
+  const exist = await salonDetail.findOne({
+    where: {
+      [Op.or]: [{ businessEmail }, { businessCountryCode, businessPhoneNum }],
+    },
+  })
+  if (exist) {
+    let message = `It appears this phone number is already associated with an account. Please use a different number.`
+    if (businessEmail == exist?.businessEmail) {
+      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+    }
+    throw new appError(message, 200)
+  }
+  const addressData = await addressDBS.create(addressDetail)
   const newEntry = await salonDetail.create({
     salonName,
     description,
@@ -100,6 +114,9 @@ exports.addSalonDetail = async (req, res, next) => {
     addressDBId: addressData.id,
     userId,
     onlinePayments,
+    businessEmail,
+    businessCountryCode,
+    businessPhoneNum,
   })
 
   await employee.create({

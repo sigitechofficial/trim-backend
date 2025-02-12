@@ -24,6 +24,20 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: '',
     },
+    businessEmail: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+      defaultValue: '',
+    },
+    businessCountryCode: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    businessPhoneNum: {
+      type: DataTypes.STRING(72),
+      allowNull: true,
+      defaultValue: '',
+    },
     description: {
       type: DataTypes.TEXT('long'),
       allowNull: true,

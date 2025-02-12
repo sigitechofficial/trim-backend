@@ -637,14 +637,27 @@ exports.employeeDetail = async (req, res, next) => {
     ________________________________________
 */
 exports.updateEmployee = async (req, res, next) => {
-  const { firstName, lastName, position, employeeId } = req.body
+  const { firstName, lastName, position, employeeId, countryCode, phoneNum } =
+    req.body
+
   let employeeData = await employee.findByPk(employeeId, {
     include: {
       model: user,
       attributes: ['id', 'firstName', 'lastName', 'image'],
     },
-    attributes: ['id', 'position'],
+    attributes: ['id', 'position', 'userId'],
   })
+  const exist = user.findOne({
+    where: { countryCode, phoneNum, id: { [Op.ne]: employeeData?.user.id } },
+  })
+  if (exist) {
+    return next(
+      new appError(
+        'It appears this phone number is already associated with an account. Please use a different number.',
+        200,
+      ),
+    )
+  }
   if (req.file) {
     if (employeeData.user.image == '') {
       let tmpprofileImage = req.file.path
@@ -656,7 +669,7 @@ exports.updateEmployee = async (req, res, next) => {
     } else {
       let tmpprofileImage = req.file.path
       let profileImageName = tmpprofileImage.replace(/\\/g, '/')
-      fs.unlink(employeeData.user.image, async (err) => {
+      fs.unlink(employeeData?.user?.image, async (err) => {
         if (err) {
           console.error(`Error deleting file: ${err.message}`)
         } else {
