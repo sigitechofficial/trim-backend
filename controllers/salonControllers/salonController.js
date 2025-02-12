@@ -1654,18 +1654,32 @@ exports.salonHistory = async (req, res) => {
   if (filter == 'Last 24 hours') {
     // Calculate the timestamp for 24 hours ago
     const last24 = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const now = new Date()
 
     const { date: last24Date, time: last24Time } = formatDateTime(last24)
+    const { date: nowDate, time: nowTime } = formatDateTime(now)
 
+    // Create combined ISO‑formatted datetime strings
+    const last24Combined = `${last24Date} ${last24Time}`
+    const nowCombined = `${nowDate} ${nowTime}`
+
+    // Add an AND condition: the concatenated "on" and "startTime" must be between last24Combined and nowCombined.
     condition[Op.and] = [
-      { on: { [Op.gt]: last24Date } },
-      {
-        on: last24Date,
-        startTime: { [Op.gte]: last24Time },
-      },
+      // Lower bound: greater than or equal to last24Combined
+      where(fn('CONCAT', col('on'), ' ', col('startTime')), {
+        [Op.gte]: last24Combined,
+      }),
+      // Upper bound: less than or equal to nowCombined
+      where(fn('CONCAT', col('on'), ' ', col('startTime')), {
+        [Op.lte]: nowCombined,
+      }),
     ]
-  } else if (filter == 'Daily ') {
+  } else if (filter == 'Daily') {
     condition.on = startDate
+  } else if (filter == 'Upcomming') {
+    const now = new Date()
+    const { date: nowDate, time: nowTime } = formatDateTime(now)
+    condition.on = { [Op.gte]: nowDate }
   } else {
     condition.on = {
       [Op.between]: [startDate, endDate],
