@@ -1871,7 +1871,7 @@ exports.saleDetails = async (req, res, next) => {
     initialPaymentIntend: bookingData.initialPaymentIntend,
     finalPaymentIntend: bookingData.finalPaymentIntend,
     customerId: bookingData.customerId,
-    cardLast4digits,
+    cardLast4digits: cardLast4digits,
     employees,
   }
   return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''))
