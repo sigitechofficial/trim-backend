@@ -1,7 +1,7 @@
 const { tip } = require('../models')
 
 exports.distributeTip = (appointmentData, extraTip = 0, at = 'checkout') => {
-  const appointment = JSON.parse(JSON.stringify(appointment))
+  const appointment = JSON.parse(JSON.stringify(appointmentData))
   // Parse appointment total and tip to float
   const appointmentTotal = parseFloat(appointment.total)
   const appointmentTip = parseFloat(appointment.tip) + parseFloat(extraTip)

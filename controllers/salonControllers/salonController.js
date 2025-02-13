@@ -538,12 +538,32 @@ exports.getAllServices = async (req, res, next) => {
 */
 exports.updateSalonDetail = async (req, res, next) => {
   const userId = req.user.id
-  const { salonName, description } = req.body
+  const {
+    salonName,
+    description,
+    businessEmail,
+    businessCountryCode,
+    businessPhoneNum,
+  } = req.body
   const salonData = await salonDetail.findOne({
     where: {
       userId,
     },
   })
+
+  const exist = await salonDetail.findOne({
+    where: {
+      [Op.or]: [{ businessEmail }, { businessCountryCode, businessPhoneNum }],
+      userId: { [Op.ne]: userId },
+    },
+  })
+  if (exist) {
+    let message = `It appears this phone number is already associated with an account. Please use a different number.`
+    if (businessEmail == exist?.businessEmail) {
+      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+    }
+    throw new appError(message, 200)
+  }
   if (req.file) {
     let tmpprofileImage = req.file.path
     let profileImageName = tmpprofileImage.replace(/\\/g, '/')
@@ -563,6 +583,9 @@ exports.updateSalonDetail = async (req, res, next) => {
     {
       salonName,
       description,
+      businessEmail,
+      businessCountryCode,
+      businessPhoneNum,
     },
     {
       where: {
@@ -1740,7 +1763,11 @@ exports.saleDetails = async (req, res, next) => {
       {
         model: jobs,
         include: [
-          { model: service, attributes: ['serviceName', 'price'] },
+          {
+            model: service,
+            required: false,
+            attributes: ['serviceName', 'price'],
+          },
           {
             model: employee,
             required: false,
@@ -1771,6 +1798,7 @@ exports.saleDetails = async (req, res, next) => {
       },
     ],
   })
+  // return res.json(bookingData)
 
   const employeeMap = bookingData.jobs.reduce((acc, ele) => {
     const employeeId = ele.employee ? ele.employee.id : 'AnyOne'
@@ -1811,6 +1839,12 @@ exports.saleDetails = async (req, res, next) => {
       : 0.0
 
   const employees = await Promise.all(promises)
+
+  let cardLast4digits
+  if (bookingData.stripeCardId) {
+    const card = await Stripe.fetchSingleCard(bookingData.stripeCardId)
+    cardLast4digits = card?.card?.last4
+  }
   let bookingDetail = {
     id: bookingData.id,
     status: bookingData.status,
@@ -1834,7 +1868,10 @@ exports.saleDetails = async (req, res, next) => {
     initialPayment: bookingData.initialPayment,
     subTotal: bookingData.subTotal,
     total: bookingData.total,
+    initialPaymentIntend: bookingData.initialPaymentIntend,
+    finalPaymentIntend: bookingData.finalPaymentIntend,
     customerId: bookingData.customerId,
+    cardLast4digits: cardLast4digits,
     employees,
   }
   return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''))
@@ -2242,6 +2279,7 @@ exports.clientFeedBackSalon = async (req, res, next) => {
       model: user,
       attributes: ['firstName', 'lastName', 'image'],
     },
+    order: [['id', 'DESC']],
   })
 
   const feedbackCount = await rating.count({

@@ -82,10 +82,87 @@ const {
 
 //! Return Function
 //* DEMO. Eamil Testing ----------------------
+const axios = require('axios')
+
+function formatTime(totalMinutes) {
+  let hours = Math.floor(totalMinutes / 60)
+  let minutes = totalMinutes % 60
+  const period = hours >= 12 ? 'PM' : 'AM'
+  let displayHour = hours % 12
+  if (displayHour === 0) displayHour = 12
+  return `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`
+}
+
+/**
+ * Return a random integer between min and max (inclusive).
+ */
+function getRandomIntInclusive(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+async function sendSequentialRequests(
+  endpoint,
+  accessToken,
+  baseRequestBody,
+  baseDate,
+) {
+  const totalRequests = 20
+
+  const initialDate = new Date(baseDate)
+  // Appointment duration in minutes (e.g., 415 minutes).
+  const appointmentDuration = baseRequestBody.appointment.duration
+  // Earliest start time is 7:00 AM (7*60 = 420 minutes).
+  const startMinutesMin = 7 * 60
+  // Latest start time so that end time <= 7:00 PM (7:00 PM is 19*60 = 1140 minutes).
+  const startMinutesMax = 19 * 60 - appointmentDuration
+
+  for (let i = 0; i < totalRequests; i++) {
+    // Calculate the appointment date.
+    // Every 5 requests, the date increments by one day.
+    const daysToAdd = Math.floor(i / 5)
+    const currentDate = new Date(initialDate)
+    currentDate.setDate(currentDate.getDate() + daysToAdd)
+    // Format date as "YYYY-MM-DD"
+    const formattedDate = currentDate.toISOString().split('T')[0]
+
+    // Generate a random start time in minutes (ensuring the appointment fits before 7:00 PM).
+    const randomStartMinutes = getRandomIntInclusive(
+      startMinutesMin,
+      startMinutesMax,
+    )
+    const randomEndMinutes = randomStartMinutes + appointmentDuration
+
+    const formattedStartTime = formatTime(randomStartMinutes)
+    const formattedEndTime = formatTime(randomEndMinutes)
+
+    // Clone the base request body so we don't modify the original object.
+    const requestBody = JSON.parse(JSON.stringify(baseRequestBody))
+    // Update the appointment object.
+    requestBody.appointment.startTime = formattedStartTime
+    requestBody.appointment.endTime = formattedEndTime
+    requestBody.appointment.on = formattedDate
+
+    try {
+      const response = await axios.post(endpoint, requestBody, {
+        headers: {
+          accesstoken: accessToken,
+        },
+      })
+      console.log(`Request ${i + 1} succeeded:`, response.data)
+    } catch (error) {
+      console.error(`Request ${i + 1} failed:`, error.message)
+    }
+  }
+}
+
+// Starting date for the "on" field.
 
 exports.emailtesting = async (req, res, next) => {
-  const { htmlContent } = req.body
+  const { accessToken, baseRequestBody } = req.body
 
+  const endpoint = `https://backend.trimworldwide.com/customer/book-appointment`
+  const baseDate = '2025-03-14'
+  sendSequentialRequests(endpoint, accessToken, baseRequestBody, baseDate)
   // const data = DEMO(htmlContent)
   // const bookingData = await bookingDataForEmailAndNotifications('2112')
 
@@ -100,18 +177,18 @@ exports.emailtesting = async (req, res, next) => {
   //   emailInput,
   // )
 
-  const salon = await salonDetail.findOne({
-    where: { id: 301 },
-    attributes: ['id', 'userId'],
-    include: [
-      {
-        model: employee,
-        attributes: ['id', 'userId'],
-      },
-    ],
-  })
+  // const salon = await salonDetail.findOne({
+  //   where: { id: 301 },
+  //   attributes: ['id', 'userId'],
+  //   include: [
+  //     {
+  //       model: employee,
+  //       attributes: ['id', 'userId'],
+  //     },
+  //   ],
+  // })
 
-  return res.status(200).json(response({ data: { salon } }))
+  return res.status(200).json(response({ data: { endpoint } }))
 }
 
 //* DEMO. Notification Testing ----------------------
@@ -609,7 +686,6 @@ exports.employeeTimes = async (req, res, next) => {
     where: { employeeId: employee },
     attributes: ['status', 'day', 'openingTime', 'closingTime'],
   })
-
   return res.status(200).json(response({ data: { times: data } }))
 }
 
@@ -2429,6 +2505,20 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
 //* 2. Check Subcription Feedback  -----------------
 
 exports.checkSubscription = async (req, res, next) => {
+  const subscription = await Stripe.subscriptionsRetrieve(
+    req.body.subscriptionId,
+  )
+
+  const data = {
+    subscription,
+  }
+
+  const output = response({ status: '1', message: 'subscription.', data })
+
+  return res.status(200).json(output)
+}
+
+exports.testing = async (req, res, next) => {
   const subscription = await Stripe.subscriptionsRetrieve(
     req.body.subscriptionId,
   )

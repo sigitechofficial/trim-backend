@@ -30,7 +30,8 @@ const uploadImage = multer({
   storage: uploadSalonImgs,
 })
 //2. Register Employe
-router.get('/AllEmployees', catchAsync(employeeController.AllEmployees))
+router.get('/employees', catchAsync(employeeController.fetchEmployees))
+router.get('/employees/:type', catchAsync(employeeController.fetchEmployees))
 //2. Register Employe
 router.post(
   '/AddEmployee',

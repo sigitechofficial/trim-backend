@@ -105,6 +105,17 @@ async function cards(customerId) {
     throw new AppError(`${error.message} `, 200)
   }
 }
+
+//* 2 :  Get All Card ________________________
+
+async function fetchSingleCard(paymentMethodId) {
+  try {
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId)
+    return paymentMethod
+  } catch (error) {
+    throw new AppError(`${error.message}`, 200)
+  }
+}
 /*
  * 3 :  Detach Card ________________________
  */
@@ -994,6 +1005,7 @@ module.exports = {
   createTieredPrice,
   setupIntent,
   expireManually,
+  fetchSingleCard,
 }
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
