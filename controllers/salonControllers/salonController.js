@@ -1763,7 +1763,11 @@ exports.saleDetails = async (req, res, next) => {
       {
         model: jobs,
         include: [
-          { model: service, attributes: ['serviceName', 'price'] },
+          {
+            model: service,
+            required: false,
+            attributes: ['serviceName', 'price'],
+          },
           {
             model: employee,
             required: false,
@@ -1794,6 +1798,7 @@ exports.saleDetails = async (req, res, next) => {
       },
     ],
   })
+  // return res.json(bookingData)
 
   const employeeMap = bookingData.jobs.reduce((acc, ele) => {
     const employeeId = ele.employee ? ele.employee.id : 'AnyOne'
@@ -1834,6 +1839,12 @@ exports.saleDetails = async (req, res, next) => {
       : 0.0
 
   const employees = await Promise.all(promises)
+
+  let cardLast4digits
+  if (bookingData.stripeCardId) {
+    const card = await Stripe.fetchSingleCard(bookingData.stripeCardId)
+    cardLast4digits = card?.card?.last4
+  }
   let bookingDetail = {
     id: bookingData.id,
     status: bookingData.status,
@@ -1857,7 +1868,10 @@ exports.saleDetails = async (req, res, next) => {
     initialPayment: bookingData.initialPayment,
     subTotal: bookingData.subTotal,
     total: bookingData.total,
+    initialPaymentIntend: bookingData.initialPaymentIntend,
+    finalPaymentIntend: bookingData.finalPaymentIntend,
     customerId: bookingData.customerId,
+    cardLast4digits,
     employees,
   }
   return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''))
