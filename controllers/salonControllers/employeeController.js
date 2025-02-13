@@ -49,7 +49,7 @@ let returnFunction = (status, message, data, error) => {
             1. All Employees of Salon
     ________________________________________
 */
-exports.AllEmployees = async (req, res, next) => {
+exports.fetchEmployees = async (req, res, next) => {
   const userId = req.user.id
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
@@ -59,11 +59,10 @@ exports.AllEmployees = async (req, res, next) => {
     attributes: ['id', 'teamSize'],
   })
   const salonDetailId = salonDetails.id
+  const condition = { salonDetailId, deleted: false }
+  if (req?.params?.type == 'external') condition.isExternalEmployee = true
   const AllEmployess = await employee.findAll({
-    where: {
-      salonDetailId,
-      deleted: false,
-    },
+    where: condition,
     attributes: [
       'id',
       'position',
