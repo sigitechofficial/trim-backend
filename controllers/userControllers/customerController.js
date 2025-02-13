@@ -609,7 +609,6 @@ exports.employeeTimes = async (req, res, next) => {
     where: { employeeId: employee },
     attributes: ['status', 'day', 'openingTime', 'closingTime'],
   })
-
   return res.status(200).json(response({ data: { times: data } }))
 }
 

@@ -61,6 +61,7 @@ exports.fetchEmployees = async (req, res, next) => {
   const salonDetailId = salonDetails.id
   const condition = { salonDetailId, deleted: false }
   if (req?.params?.type == 'external') condition.isExternalEmployee = true
+
   const AllEmployess = await employee.findAll({
     where: condition,
     attributes: [
@@ -84,13 +85,11 @@ exports.fetchEmployees = async (req, res, next) => {
       attributes: ['id', 'firstName', 'lastName', 'image', 'status'],
     },
   })
-  const activeMembers =
-    AllEmployess.length > 0
-      ? AllEmployess.filter(
-          (employee) =>
-            !employee.isOwner && employee.status && !employee.deleted,
-        ).length
-      : 0
+
+  const activeMembers = await employee.count({
+    where: { salonDetailId, deleted: false, isOwner: false, status: true },
+  })
+
   return res.json(
     returnFunction(
       '1',
