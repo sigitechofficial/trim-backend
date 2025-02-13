@@ -538,12 +538,32 @@ exports.getAllServices = async (req, res, next) => {
 */
 exports.updateSalonDetail = async (req, res, next) => {
   const userId = req.user.id
-  const { salonName, description } = req.body
+  const {
+    salonName,
+    description,
+    businessEmail,
+    businessCountryCode,
+    businessPhoneNum,
+  } = req.body
   const salonData = await salonDetail.findOne({
     where: {
       userId,
     },
   })
+
+  const exist = await salonDetail.findOne({
+    where: {
+      [Op.or]: [{ businessEmail }, { businessCountryCode, businessPhoneNum }],
+      userId: { [Op.ne]: userId },
+    },
+  })
+  if (exist) {
+    let message = `It appears this phone number is already associated with an account. Please use a different number.`
+    if (businessEmail == exist?.businessEmail) {
+      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+    }
+    throw new appError(message, 200)
+  }
   if (req.file) {
     let tmpprofileImage = req.file.path
     let profileImageName = tmpprofileImage.replace(/\\/g, '/')
@@ -563,6 +583,9 @@ exports.updateSalonDetail = async (req, res, next) => {
     {
       salonName,
       description,
+      businessEmail,
+      businessCountryCode,
+      businessPhoneNum,
     },
     {
       where: {
@@ -2242,6 +2265,7 @@ exports.clientFeedBackSalon = async (req, res, next) => {
       model: user,
       attributes: ['firstName', 'lastName', 'image'],
     },
+    order: [['id', 'DESC']],
   })
 
   const feedbackCount = await rating.count({
