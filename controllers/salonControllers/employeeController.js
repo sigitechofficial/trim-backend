@@ -646,7 +646,7 @@ exports.updateEmployee = async (req, res, next) => {
     attributes: ['id', 'position', 'userId'],
   })
   const exist = await user.findOne({
-    where: { countryCode, phoneNum, id: { [Op.ne]: employeeId } },
+    where: { countryCode, phoneNum, id: { [Op.ne]: employeeData?.userId } },
   })
   if (exist) {
     return next(

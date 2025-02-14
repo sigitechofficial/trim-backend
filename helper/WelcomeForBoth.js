@@ -15,7 +15,7 @@ module.exports = function (to, name, sentTo = 'salon') {
   let greetings = `Dear ${name}!`
   let subject = `${greetings} welcome to trim, We're Glad to Have You!`
   if (sentTo == 'customer') {
-    firstParagraph = `Welcome to Trim– your go-to destination for hassle-free salon bookings! We're excited to have you join us and make scheduling your next salon appointment a breeze.
+    firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!.
     <br /><br />Your account has been successfully created, and you're now ready to explore the world of beauty and wellness at your fingertips.`
 
     secondParagraph = `Thank you for choosing Trim! We're here to make your salon experience enjoyable and effortless.`
@@ -527,96 +527,6 @@ module.exports = function (to, name, sentTo = 'salon') {
                 </tr>
               </tbody>
             </table>
-
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-6"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
-                      style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
-                      "
-                      width="500"
-                    >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
-                            style="
-                              font-weight: 400;
-                              text-align: left;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
-                            "
-                            width="100%"
-                          >
-                            <div
-                              class="spacer_block block-1"
-                              style="
-                                height: 20px;
-                                line-height: 30px;
-                                font-size: 1px;
-                              "
-                            >
-                               
-                            </div>
-                            <table
-                              border="0"
-                              cellpadding="10"
-                              cellspacing="0"
-                              class="paragraph_block block-1"
-                              role="presentation"
-                              style="word-break: break-word"
-                              width="100%"
-                            >
-                              <tr>
-                                <td>
-                                  <div
-                                    style="
-                                      color: #000000cc;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 20px;
-                                      font-weight: 500;
-                                      letter-spacing: 0px;
-                                      text-align: left;
-                                    "
-                                  >
-                                    <p style="margin: 0">
-                                      ${secondParagraph}
-                                    </p>
-                                  </div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
        ${footer}
       `,
     },
@@ -629,3 +539,93 @@ module.exports = function (to, name, sentTo = 'salon') {
     },
   )
 }
+
+//  <table
+//             align="center"
+//             border="0"
+//             cellpadding="0"
+//             cellspacing="0"
+//             class="row row-6"
+//             role="presentation"
+//             width="100%"
+//           >
+//             <tbody>
+//               <tr>
+//                 <td>
+//                   <table
+//                     align="center"
+//                     border="0"
+//                     cellpadding="0"
+//                     cellspacing="0"
+//                     class="row-content stack"
+//                     role="presentation"
+//                     style="
+//                       border-radius: 0;
+//                       color: #000;
+//                       width: 500px;
+//                       margin: 0 auto;
+//                     "
+//                     width="500"
+//                   >
+//                     <tbody>
+//                       <tr>
+//                         <td
+//                           class="column column-1"
+//                           style="
+//                             font-weight: 400;
+//                             text-align: left;
+//                             vertical-align: top;
+//                             border-top: 0px;
+//                             border-right: 0px;
+//                             border-bottom: 0px;
+//                             border-left: 0px;
+//                           "
+//                           width="100%"
+//                         >
+//                           <div
+//                             class="spacer_block block-1"
+//                             style="
+//                               height: 20px;
+//                               line-height: 30px;
+//                               font-size: 1px;
+//                             "
+//                           >
+//
+//                           </div>
+//                           <table
+//                             border="0"
+//                             cellpadding="10"
+//                             cellspacing="0"
+//                             class="paragraph_block block-1"
+//                             role="presentation"
+//                             style="word-break: break-word"
+//                             width="100%"
+//                           >
+//                             <tr>
+//                               <td>
+//                                 <div
+//                                   style="
+//                                     color: #000000cc;
+//                                     direction: ltr;
+//                                     font-family: Chivo, sans-serif;
+//                                     font-size: 20px;
+//                                     font-weight: 500;
+//                                     letter-spacing: 0px;
+//                                     text-align: left;
+//                                   "
+//                                 >
+//                                   <p style="margin: 0">
+//                                     ${secondParagraph}
+//                                   </p>
+//                                 </div>
+//                               </td>
+//                             </tr>
+//                           </table>
+//                         </td>
+//                       </tr>
+//                     </tbody>
+//                   </table>
+//                 </td>
+//               </tr>
+//             </tbody>
+//           </table>
