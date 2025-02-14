@@ -647,9 +647,9 @@ exports.login = async (req, res, next) => {
         { model: wallet, required: false },
       ],
     })
-    response.data.businessEmail = salon.businessEmail
-    response.data.businessCountryCode = salon.businessCountryCode
-    response.data.businessPhoneNum = salon.businessPhoneNum
+    response.data.businessEmail = salon?.businessEmail
+    response.data.businessCountryCode = salon?.businessCountryCode
+    response.data.businessPhoneNum = salon?.businessPhoneNum
     // return res.json(salon)
     if (!salon || User.verifiedAt === null) {
       response.status = User.verifiedAt === null ? '3' : '2'

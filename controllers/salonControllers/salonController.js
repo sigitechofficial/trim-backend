@@ -1,4 +1,5 @@
 const { Op, literal, col, fn, where } = require('sequelize')
+const { CURRENCY_UNIT } = process.env
 const fs = require('fs').promises
 const {
   salonDetail,
@@ -273,10 +274,10 @@ exports.createOnboardingLink = async (req, res, next) => {
     await salonData.save()
     account = connectAccount
   }
-
-  await wallet.upsert({
-    salonDetailId: salonData.id,
-  })
+  //! Cusing mutiple wallets of sigle employee
+  // await wallet.upsert({
+  //   salonDetailId: salonData.id,
+  // })
 
   const onboardingLink = await Stripe.createStripeAccountLink(account)
 
@@ -1888,16 +1889,29 @@ exports.salonWallet = async (req, res, next) => {
       userId,
     },
     attributes: ['id'],
-    // include: { model: employee, whe attributes: ['id'] },
   })
 
-  const salonWallet = await wallet.findOne({
+  const result = await wallet.findOne({
     where: {
       salonDetailId: salonData.id,
     },
   })
+  let salonWallet = result ? JSON.parse(JSON.stringify(result)) : null
+  if (salonWallet) {
+    salonWallet.totalAmount =
+      parseFloat(salonWallet.onlineAmount || 0) +
+      parseFloat(salonWallet.cashAmount || 0) +
+      parseFloat(salonWallet.tipAmount || 0)
+  }
 
-  return res.json(returnFunction('1', 'Salon Wallet', { salonWallet }, ''))
+  return res.json(
+    returnFunction(
+      '1',
+      'Salon Wallet',
+      { currencyUnit: CURRENCY_UNIT, salonWallet, salonWallet },
+      '',
+    ),
+  )
 }
 
 function getSalonTimesArray(salonTimes, salonId, startDate) {

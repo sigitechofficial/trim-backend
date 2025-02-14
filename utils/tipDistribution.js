@@ -1,4 +1,4 @@
-const { tip } = require('../models')
+const { tip, wallet } = require('../models')
 
 exports.distributeTip = (appointmentData, extraTip = 0, at = 'checkout') => {
   const appointment = JSON.parse(JSON.stringify(appointmentData))
@@ -8,12 +8,19 @@ exports.distributeTip = (appointmentData, extraTip = 0, at = 'checkout') => {
 
   // Validate appointment total and tip
   if (isNaN(appointmentTotal) || appointmentTotal < 0) {
-    throw new Error('Invalid appointment total.')
-  }
-  if (isNaN(appointmentTip) || appointmentTip < 0) {
-    throw new Error('Invalid appointment tip.')
+    console.log('🚀 ~ appointmentTotal:', appointmentTotal)
+    return false
   }
 
+  if (isNaN(appointmentTip) || appointmentTip <= 0) {
+    console.log('🚀 ~ appointmentTip:', appointmentTip)
+    return false
+  }
+
+  wallet.increment(
+    { tipAmount: appointmentTip },
+    { where: { salonDetailId: appointment.salonDetailId } },
+  )
   // If there's no tip, set all completed jobs' tips to "0.00"
   if (appointmentTip < 1) {
     return appointment.jobs

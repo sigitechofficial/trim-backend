@@ -59,7 +59,7 @@ exports.fetchEmployees = async (req, res, next) => {
     attributes: ['id', 'teamSize'],
   })
   const salonDetailId = salonDetails.id
-  const condition = { salonDetailId, deleted: false }
+  const condition = { salonDetailId, deleted: false, isExternalEmployee: false }
   if (req?.params?.type == 'external') condition.isExternalEmployee = true
 
   const AllEmployess = await employee.findAll({
@@ -645,8 +645,8 @@ exports.updateEmployee = async (req, res, next) => {
     },
     attributes: ['id', 'position', 'userId'],
   })
-  const exist = user.findOne({
-    where: { countryCode, phoneNum, id: { [Op.ne]: employeeData?.user.id } },
+  const exist = await user.findOne({
+    where: { countryCode, phoneNum, id: { [Op.ne]: employeeId } },
   })
   if (exist) {
     return next(
@@ -684,6 +684,8 @@ exports.updateEmployee = async (req, res, next) => {
     {
       firstName,
       lastName,
+      countryCode,
+      phoneNum,
     },
     {
       where: { id: employeeData.user.id },

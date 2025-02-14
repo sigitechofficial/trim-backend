@@ -1345,7 +1345,7 @@ exports.cancelAppointment = async (req, res, next) => {
   await booking.update(updatedBooking, { where: { id: bookingId } })
 
   await wallet.increment(
-    { amount: updatedBooking.total },
+    { onlineAmount: updatedBooking.total },
     { where: { salonDetailId: appointment.salonDetailId } },
   )
 

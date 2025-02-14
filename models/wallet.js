@@ -1,19 +1,19 @@
 module.exports = (sequelize, DataTypes) => {
   const wallet = sequelize.define('wallet', {
-    amount: {
+    onlineAmount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
       defaultValue: '0.00',
     },
-    due: {
+    cashAmount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
       defaultValue: '0.00',
     },
-    currency: {
-      type: DataTypes.STRING,
+    tipAmount: {
+      type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
-      defaultValue: '£',
+      defaultValue: '0.00',
     },
     description: {
       type: DataTypes.STRING,
