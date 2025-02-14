@@ -680,7 +680,7 @@ module.exports = function (to, data, state = 'book') {
 
   transporter.sendMail(
     {
-      from: `"${salonName}" ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`, // sender address
+      from: `${salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`, // sender address
       to: ['sigidevelopers@gmail.com'],
       subject: subject, // Subject line
       attachments: attachments,
@@ -1160,7 +1160,7 @@ module.exports = function (to, data, state = 'book') {
                                             font-weight: 700;
                                           "
                                         >
-                                          Appointment details
+                                          Booking details
                                         </h4>
                                       </td>
                                     </tr>

@@ -472,6 +472,12 @@ exports.salonDetails = async (req, res, next) => {
       'isExternalEmployee',
       [
         literal(
+          '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
+        ),
+        'stripeAccountConnected',
+      ],
+      [
+        literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
         ),
         'salonAverageRating',
