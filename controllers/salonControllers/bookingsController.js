@@ -1841,7 +1841,7 @@ exports.checkOutBooking = async (req, res, next) => {
 
   if (payments.status === 'succeeded') {
     await wallet.increment(
-      { amount: salonEarning },
+      { onlineAmount: salonEarning },
       { where: { salonDetailId: bookingData?.salonDetail?.id } },
     )
 
@@ -1934,7 +1934,7 @@ exports.checkoutCash = async (req, res, next) => {
   const amount = parseFloat(req.body.amount) + tip
 
   await wallet.increment(
-    { amount: salonEarning },
+    { cashAmount: salonEarning },
     { where: { salonDetailId: bookingData.salonDetailId } },
   )
 
@@ -2927,7 +2927,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
   await booking.update(updatedBooking, { where: { id: bookingId } })
 
   await wallet.increment(
-    { amount: updatedBooking.total },
+    { onlineAmount: updatedBooking.total },
     { where: { salonDetailId: appointment.salonDetailId } },
   )
 
