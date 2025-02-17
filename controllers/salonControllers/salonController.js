@@ -2599,14 +2599,11 @@ exports.onlinePayments = async (req, res, next) => {
 exports.attachPaymentMethodsForSubscription = async (req, res, next) => {
   const salon = await user.findOne({
     where: { id: req.user.id },
-    attributes: [
-      'id',
-      'stripeCustomerId',
-      'firstName',
-      'lastName',
-      'email',
-      'subscriptionPlan',
-    ],
+    attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email'],
+    include: {
+      model: salonDetail,
+      attributes: ['subscriptionPlan'],
+    },
   })
   if (!salon) throw new appError('resource not found', 200)
 
@@ -2614,13 +2611,13 @@ exports.attachPaymentMethodsForSubscription = async (req, res, next) => {
   await Stripe.updateSubscriptionPaymentMethod(
     salon?.stripeCustomerId,
     req.body?.paymentMethodId,
-    salon.subscriptionPlan,
+    salon.salonDetails[0].subscriptionPlan,
   )
 
   return res.json(
     response({
       message: 'Subscription.',
-      data: { price: output },
+      data: {},
     }),
   )
 }

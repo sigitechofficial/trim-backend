@@ -323,7 +323,7 @@ router.get(
 )
 
 router.patch(
-  '/attch-payment-method-for-subscription',
+  '/attach-payment-method-for-subscription',
   catchAsync(salonController.attachPaymentMethodsForSubscription),
 )
 
