@@ -2594,3 +2594,39 @@ exports.onlinePayments = async (req, res, next) => {
   await salonData.save()
   return res.json(returnFunction('1', 'success', {}, ''))
 }
+
+// TO change PaymentMethods
+exports.changePaymentMethodsForSubscription = async (req, res, next) => {
+  const salon = await user.findOne({
+    where: { id: req.user.id },
+    attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email'],
+  })
+  if (!salon) throw new appError('resource not found', 200)
+
+  console.log('ðŸš€ ~ exports.forSubcription= ~ salonsalonsalona:', salon)
+  let stripeCustomer = salon?.stripeCustomerId
+  if (!salon?.stripeCustomerId) {
+    const stripeCustomerId = await Stripe.addCustomer(
+      salon.fullName,
+      salon.email,
+    )
+    stripeCustomer = stripeCustomerId
+    await user.update({ stripeCustomerId }, { where: { id: salon.id } })
+  }
+
+  const setupIntent = await Stripe.setupIntent(stripeCustomer)
+  const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
+
+  const output = {}
+
+  output.stripeCustomer = stripeCustomer
+  output.clientSecret = setupIntent.client_secret
+  output.ephemeralKeySecret = ephemeralKey.secret
+
+  return res.json(
+    response({
+      message: 'Subscription.',
+      data: { price: output },
+    }),
+  )
+}

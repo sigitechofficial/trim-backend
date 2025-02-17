@@ -15,6 +15,36 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: '0.00',
     },
+    tipPayout: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
+    commissionPayout: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
+    salaryPayout: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
+    rentalPayout: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
+    accruedRent: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
+    totalPayout: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: '0.00',
+    },
     description: {
       type: DataTypes.STRING,
       allowNull: true,
