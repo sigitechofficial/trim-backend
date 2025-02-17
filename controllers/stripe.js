@@ -346,6 +346,7 @@ async function createSubscription(
 async function getSubscription(subscriptionPlan) {
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionPlan)
+    console.log('🚀 ~ getSubscription ~ subscription:', subscription)
 
     const product = await stripe.products.retrieve(subscription.plan.product)
     const prices = await stripe.prices.list({ product: product.id })
@@ -961,11 +962,50 @@ async function expireManually(subscription_id) {
       `Error retrieving Stripe subscription ${subscription_id}:`,
       error,
     )
-    throw error
+    throw new AppError(`${error.message}`, 200)
   }
 }
 
+async function updateSubscriptionPaymentMethod(
+  customerId,
+  newPaymentMethodId,
+  subscriptionId,
+) {
+  try {
+    // // Step 1: Attach the new payment method to the customer
+    // await stripe.paymentMethods.attach(newPaymentMethodId, {
+    //   customer: customerId,
+    // })
+
+    // Step 2: Set the new payment method as the default for the customer
+    await stripe.customers.update(customerId, {
+      invoice_settings: {
+        default_payment_method: newPaymentMethodId,
+      },
+    })
+
+    // Step 3: Update the subscription to use the new payment method
+    const updatedSubscription = await stripe.subscriptions.update(
+      subscriptionId,
+      {
+        default_payment_method: newPaymentMethodId,
+      },
+    )
+
+    // Optional: If you want to ensure the payment goes through immediately
+    await stripe.subscriptions.update(subscriptionId, {
+      billing_cycle_anchor: 'now',
+      proration_behavior: 'create_prorations',
+    })
+
+    return updatedSubscription
+  } catch (error) {
+    console.error('Error updating subscription:', error)
+    throw new AppError(`${error.message}`, 200)
+  }
+}
 module.exports = {
+  updateSubscriptionPaymentMethod,
   sessionCheckoutPaymnet,
   // customer
   addCustomer,

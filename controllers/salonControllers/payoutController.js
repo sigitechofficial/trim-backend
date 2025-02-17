@@ -392,8 +392,8 @@ exports.salaryEmployeePayout = async (req, res, next) => {
 
   await salaryPayout.bulkCreate(input)
 
-  await wallet.decrement(
-    { amount: totalAmount },
+  await wallet.increment(
+    { salaryPayout: totalAmount, totalPayout: totalAmount },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
 
@@ -573,8 +573,8 @@ exports.amountTransferCommission = async (req, res, next) => {
 
   await commissionPayout.create(req.body)
 
-  await wallet.decrement(
-    { amount: req.body?.amount },
+  await wallet.increment(
+    { commissionPayout: req.body?.amount, totalPayout: req.body?.amount },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
 
@@ -595,8 +595,8 @@ exports.amountTransferRentAChair = async (req, res, next) => {
 
   await rentChairPayout.create(req.body)
 
-  await wallet.decrement(
-    { amount: req.body?.amount },
+  await wallet.increment(
+    { rentalPayout: req.body?.amount, totalPayout: req.body?.amount },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
   return res.json(response({ message: 'success.', data: {} }))
@@ -890,7 +890,7 @@ exports.collectRent = async (req, res, next) => {
   )
 
   await wallet.increment(
-    { amount: req.body.amount },
+    { accruedRent: req.body.amount },
     { where: { salonDetailId: salon?.id } },
   )
 

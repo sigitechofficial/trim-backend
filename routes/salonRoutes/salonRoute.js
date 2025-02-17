@@ -317,4 +317,14 @@ router.patch('/online-payments', catchAsync(salonController.onlinePayments))
 
 router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 
+router.get(
+  '/change-payment-method-for-subscription',
+  catchAsync(salonController.changePaymentMethodsForSubscription),
+)
+
+router.patch(
+  '/attach-payment-method-for-subscription',
+  catchAsync(salonController.attachPaymentMethodsForSubscription),
+)
+
 module.exports = router
