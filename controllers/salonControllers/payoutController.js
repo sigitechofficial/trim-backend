@@ -390,10 +390,27 @@ exports.salaryEmployeePayout = async (req, res, next) => {
         }, 0)
       : 0
 
+  const totalTip =
+    input.length > 0
+      ? input.reduce((total, { tip }) => {
+          if (tip) {
+            const num = typeof tip === 'number' ? tip : parseFloat(tip)
+            if (!isNaN(num)) {
+              return total + num
+            }
+          }
+          return total
+        }, 0)
+      : 0
+
   await salaryPayout.bulkCreate(input)
 
   await wallet.increment(
-    { salaryPayout: totalAmount, totalPayout: totalAmount },
+    {
+      salaryPayout: totalAmount,
+      totalPayout: totalAmount,
+      tipPayout: totalTip,
+    },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
 
@@ -574,7 +591,11 @@ exports.amountTransferCommission = async (req, res, next) => {
   await commissionPayout.create(req.body)
 
   await wallet.increment(
-    { commissionPayout: req.body?.amount, totalPayout: req.body?.amount },
+    {
+      commissionPayout: req.body?.amount,
+      totalPayout: req.body?.amount,
+      tipPayout: req.body?.tip,
+    },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
 
@@ -596,7 +617,11 @@ exports.amountTransferRentAChair = async (req, res, next) => {
   await rentChairPayout.create(req.body)
 
   await wallet.increment(
-    { rentalPayout: req.body?.amount, totalPayout: req.body?.amount },
+    {
+      rentalPayout: req.body?.amount,
+      totalPayout: req.body?.amount,
+      tipPayout: req.body?.tip,
+    },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
   return res.json(response({ message: 'success.', data: {} }))
@@ -707,6 +732,7 @@ exports.comissionEmployeeAccount = async (req, res, next) => {
   )
 }
 //* Salary employee Account
+
 exports.salaryEmployeeAccount = async (req, res, next) => {
   const result = await employee.findOne({
     where: {
@@ -804,6 +830,7 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
 }
 
 //* RENT A CHAIR EXTERNAL  employee Account
+
 exports.externalEmployeeSummary = async (req, res, next) => {
   const result = await employee.findAll({
     where: { salonDetailId: req.params.salon, isExternalEmployee: true },

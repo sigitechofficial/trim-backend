@@ -1904,13 +1904,25 @@ exports.salonWallet = async (req, res, next) => {
     where: {
       salonDetailId: salonData.id,
     },
+    attributes: [],
   })
+
   let salonWallet = result ? JSON.parse(JSON.stringify(result)) : null
+
   if (salonWallet) {
     salonWallet.totalAmount =
       parseFloat(salonWallet.onlineAmount || 0) +
       parseFloat(salonWallet.cashAmount || 0) +
-      parseFloat(salonWallet.tipAmount || 0)
+      parseFloat(salonWallet.tipAmount || 0) +
+      parseFloat(salonWallet.accruedRent || 0)
+
+    salonWallet.totalAmount =
+      parseFloat(salonWallet.totalAmount) -
+      parseFloat(salonWallet.totalPayout || 0)
+
+    salonWallet.totalAmount =
+      parseFloat(salonWallet.totalAmount) -
+      parseFloat(salonWallet.tipPayout || 0)
   }
 
   return res.json(
