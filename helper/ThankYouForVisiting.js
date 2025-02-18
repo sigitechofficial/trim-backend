@@ -116,7 +116,7 @@ module.exports = function (to, input) {
   const total = data.total
   transporter.sendMail(
     {
-      from: process.env.EMAIL_USERNAME,
+      from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
       to: ['sigidevelopers@gmail.com'],
       subject: ` Thank you for visiting ${input?.salon?.salonName}.`,
       attachments: attachment.footer.concat(attachment.star),

@@ -127,6 +127,8 @@ module.exports = function (to, data, state = 'book') {
   let badgeColor = '#176600'
   let badgeImageSrc = 'cid:confirm'
 
+  const deeplink = `https://backend.trimworldwide.com/appointmentDetail?id=${data.id}`
+
   let emailTitle = `Hi ${client.name}, your booking is confirmed!`
   let subject = `Your booking ref #${data.id} is confirmed!.`
 
@@ -194,7 +196,7 @@ module.exports = function (to, data, state = 'book') {
                                     <tr>
                                       <td>
                                         <div style="width: 75%; margin: auto">
-                                          <a href="" style="text-decoration: none;">
+                                          <a href="${deeplink}" style="text-decoration: none;">
                                             <button
                                               style="
                                                 cursor: pointer;
@@ -494,23 +496,25 @@ module.exports = function (to, data, state = 'book') {
                     <tr>
                       <td>
                         <div style="width: 75%; margin: auto">
-                          <button
-                            style="
-                              cursor: pointer;
-                              width: 100%;
-                              color: #000000cc;
-                              font-family: Chivo, sans-serif;
-                              font-size: 16px;
-                              font-weight: 500;
-                              letter-spacing: 0px;
-                              text-align: center;
-                              background-color: transparent;
-                              border: 2px solid black;
-                              padding: 10px;
-                            "
-                          >
-                            Manage appointment
-                          </button>
+                        <a href="${deeplink}" style="text-decoration: none;">
+                              <button 
+                                style="
+                                  cursor: pointer;
+                                  width: 100%;
+                                  color: #000000cc;
+                                  font-family: Chivo, sans-serif;
+                                  font-size: 16px;
+                                  font-weight: 500;
+                                  letter-spacing: 0px;
+                                  text-align: center;
+                                  background-color: transparent;
+                                  border: 2px solid black;
+                                  padding: 10px;
+                                "
+                              >
+                                Manage Booking
+                              </button>
+                            </a>
                         </div>
                       </td>
                     </tr>
@@ -1569,18 +1573,15 @@ module.exports = function (to, data, state = 'book') {
                                       <td>
                                           <a
                                             href="https://www.google.com/maps/search/?api=1&query=${data?.salonDetail?.addressDB?.lat || ''},${data?.salonDetail?.addressDB?.lng || ''}"
-                                            target="_blank"
+                                         
                                             style="
-                                              display: inline-block;
-                                              background-color: #f0f0f0;
-                                              border: 2px solid rgb(17, 56, 87);
-                                              color: rgb(17, 56, 87) !important;
-                                              font-family: 'Chivo', sans-serif;
+                                             
+                                      
                                               font-size: 14px;
                                               font-weight: 400;  
                                               text-decoration: none !important;
-                                              padding: 10px 20px;
-                                              border-radius: 4px;
+                                            
+                                               
                                               cursor: pointer;
                                             "
                                           >
