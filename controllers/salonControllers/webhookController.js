@@ -126,6 +126,10 @@ const handleInvoicePayment = async (invoice, state, status) => {
       salon.hasObtainedFreeTrial = 1
       salon.subscriptionLatestPaymentStatus = status
       await salon.save()
+    } else {
+      salon.hasObtainedFreeTrial = 1
+      salon.subscriptionLatestPaymentStatus = status
+      await salon.save()
     }
 
     input.salonDetailId = salon.id
