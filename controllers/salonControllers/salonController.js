@@ -1071,7 +1071,7 @@ exports.customerSubscription = async (req, res, next) => {
   const currentDate = new Date()
   const expiryDate = new Date(salonData.registrationExpiryDate)
 
-  if (customerSubscription.status == 'cancel' && expiryDate < currentDate) {
+  if (customerSubscription.status == 'canceled' && expiryDate < currentDate) {
     return res.json(
       returnFunction('2', 'Subscription Expired', { customerSubscription }, ''),
     )
