@@ -1068,6 +1068,15 @@ exports.customerSubscription = async (req, res, next) => {
     return res.json(returnFunction('2', 'No Subcription Plan', {}, ''))
   }
 
+  const currentDate = new Date()
+  const expiryDate = new Date(salonData.registrationExpiryDate)
+
+  if (customerSubscription.status == 'cancel' && expiryDate < currentDate) {
+    return res.json(
+      returnFunction('2', 'Subscription Expired', { customerSubscription }, ''),
+    )
+  }
+
   return res.json(
     returnFunction('1', 'All Subscription Plan', { customerSubscription }, ''),
   )

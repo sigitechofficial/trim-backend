@@ -114,6 +114,8 @@ exports.AddEmployee = async (req, res, next) => {
     countryCode,
     password,
     position,
+    rentType,
+    rentAmount,
   } = req.body
 
   // check if user with same eamil and phoneNum exists
@@ -288,11 +290,11 @@ exports.AddEmployee = async (req, res, next) => {
       })
 
       //Optional need more data from client side
-      employeeWagesMethod.create({
-        value: req.body?.rentAmount || 0,
+      await employeeWagesMethod.create({
+        value: rentAmount,
         wagesMethodId: 3,
         employeeId: employeeData.id,
-        cycle: req.body?.rentType || 'Monthly',
+        cycle: rentType,
       })
     }
 
