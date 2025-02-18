@@ -993,10 +993,10 @@ async function updateSubscriptionPaymentMethod(
     )
 
     // Optional: If you want to ensure the payment goes through immediately
-    // await stripe.subscriptions.update(subscriptionId, {
-    //   billing_cycle_anchor: 'now',
-    //   proration_behavior: 'create_prorations',
-    // })
+    await stripe.subscriptions.update(subscriptionId, {
+      billing_cycle_anchor: 'now',
+      proration_behavior: 'create_prorations',
+    })
 
     return updatedSubscription
   } catch (error) {

@@ -1904,7 +1904,9 @@ exports.salonWallet = async (req, res, next) => {
     where: {
       salonDetailId: salonData.id,
     },
-    attributes: [],
+    attributes: {
+      exclude: ['salonDetailId', 'updatedAt', 'createdAt', 'employeeId'],
+    },
   })
 
   let salonWallet = result ? JSON.parse(JSON.stringify(result)) : null
