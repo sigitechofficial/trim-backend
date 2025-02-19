@@ -31,8 +31,8 @@ function attachments() {
       cid: 'linkedin',
     },
     forgotPassword: {
-      filename: 'forgotPassword.webp',
-      path: __dirname + '/images/forgotPassword.webp',
+      filename: 'forgotPassword.png',
+      path: __dirname + '/images/forgotPassword.png',
       cid: 'forgotPassword',
     },
     invite: {
