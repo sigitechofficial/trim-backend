@@ -13,6 +13,8 @@ const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 
 const AppError = require('../../utils/appError')
+
+const redis_Client = require('../../routes/redis_connect')
 //! Function to create JWT Tocken
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
@@ -22,7 +24,7 @@ const signTocken = (id, dvToken) => {
 const createSendToken = (user, dvToken, statusCode, res) => {
   console.log('ðŸš€ ~ createSendToken ~ user:', user)
   const token = signTocken(user.id, dvToken)
-
+  redis_Client.hSet(`trim${user.id}`, dvToken, token)
   res.status(statusCode).json({
     status: '1',
     message: 'Success',

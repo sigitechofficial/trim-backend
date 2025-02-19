@@ -2160,10 +2160,16 @@ exports.fetchAnnouncements = async (req, res, next) => {
 
 exports.fetchNotifications = async (req, res, next) => {
   const id = req.user.id
-
+  const salon = await user.findByPk(id, { attributes: ['verifiedAt'] })
   const notifications = await pushNotification.findAll({
     where: {
-      [Op.or]: [{ userId: id }, { to: { [Op.or]: ['salon', 'all'] } }],
+      [Op.or]: [
+        { userId: id, createdAt: { [Op.gte]: salon?.verifiedAt } },
+        {
+          to: { [Op.or]: ['salon', 'all'] },
+          createdAt: { [Op.gte]: salon?.verifiedAt },
+        },
+      ],
     },
     attributes: [
       `id`,
