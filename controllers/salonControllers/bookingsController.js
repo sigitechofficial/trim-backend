@@ -115,14 +115,16 @@ exports.calendarAppointments = async (req, res, next) => {
     isExternalEmployee: false,
   }
   const jobCondition = {
-    status: req.body.status == 'Assign' ? 'assign' : 'pending',
-    employeeId: { [Op.ne]: null },
+    status: {
+      [Op.or]: ['assign'],
+    },
     on: req.params?.date,
   }
   const unAssignCondition = {
-    status: req.body.status == 'Un-Assigned' ? 'pending' : 'assign',
+    status: {
+      [Op.or]: ['pending'],
+    },
     on: req.params.date,
-    employeeId: null,
     [Op.and]: literal(`EXISTS (
       SELECT 1
       FROM bookings
@@ -138,8 +140,6 @@ exports.calendarAppointments = async (req, res, next) => {
     jobCondition.serviceId = { [Op.or]: req.body?.serviceList }
     unAssignCondition.serviceId = { [Op.or]: req.body?.serviceList }
   }
-
-  //  Assign
 
   const data = await employee.findAll({
     where: employeCondition,
@@ -314,6 +314,12 @@ exports.calendarAppointments = async (req, res, next) => {
     ],
   })
 
+  if (req.body.status == 'Un-Assigned') {
+    results.forEach((el) => {
+      el.jobs = []
+    })
+  }
+
   if (unAssignedJobs.length > 0) {
     const unassign = {
       id: 0,
@@ -323,11 +329,10 @@ exports.calendarAppointments = async (req, res, next) => {
       openingTime: salonTimes?.openingTime,
       closingTime: salonTimes?.closingTime,
       dayStatus: salonTimes?.status ? 1 : 0,
-      jobs: unAssignedJobs,
+      jobs: req.body.status == 'Assign' ? [] : unAssignedJobs,
     }
     results.push(unassign)
   }
-
   const output = response({
     message: 'Success.',
     data: {
