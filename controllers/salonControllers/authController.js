@@ -398,7 +398,7 @@ exports.signup = async (req, res, next) => {
 */
 exports.resendOTP = async (req, res, next) => {
   const { userId } = req.body
-  const userExist = await user.findByPk(userId)
+  const userExist = await user.findOne({ where: { id: userId } })
   if (!userExist) {
     return next(
       new appError(
@@ -1119,7 +1119,7 @@ exports.forgotPassword = async (req, res, next) => {
   const userData = await user.findOne({
     where: { email, deleted: false, userTypeId: 2 },
     include: { model: otpVerification, attributes: ['id'] },
-    attributes: ['id', 'email'],
+    attributes: ['id', 'email', 'firstName', 'lastName'],
   })
 
   // user not found
