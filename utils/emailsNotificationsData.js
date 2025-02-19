@@ -43,6 +43,7 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
             FROM noShowPolicies
             WHERE 
               booking.noshowPolicyVersion = noShowPolicies.version 
+              booking.salonDetailId = noShowPolicies.salonDetailId 
             LIMIT 1
           )
         `),
