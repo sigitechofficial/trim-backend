@@ -26,6 +26,9 @@ const Stripe = require('../stripe')
 const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
+
+const redis_Client = require('../../routes/redis_connect')
+
 //! Function to create JWT Tocken
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
@@ -120,7 +123,7 @@ exports.googleSignIn = async (req, res) => {
 
   if (userData) {
     const token = signTocken(userData.id, dvToken)
-
+    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
     return res.status(200).json({
       status: '1',
       message: `Welcome back! You've successfully logged in.`,
@@ -197,6 +200,7 @@ exports.signup = async (req, res, next) => {
     })
     //  to return a response indicating successful social sign-up
     const token = signTocken(userData.id, dvToken)
+    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
     EmailWelcome([userData.email], `${userData.firstName} ${userData.lastName}`)
 
     salonProfiles.create({ userid: userData?.id })
@@ -242,7 +246,7 @@ exports.signup = async (req, res, next) => {
         })
       // creating accessToken
       const token = signTocken(userExist.id, dvToken)
-
+      redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
       return res.status(200).json({
         status: '2',
         message: 'User Logged in successfully!',
@@ -473,6 +477,7 @@ exports.verifyOTP = async (req, res, next) => {
       userId: userExist.id,
     })
   const token = signTocken(userExist.id, dvToken)
+  redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
   EmailWelcome(
     [userExist.email],
     `${userExist.firstName} ${userExist.lastName}`,
@@ -595,7 +600,7 @@ exports.login = async (req, res, next) => {
   }
 
   let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : ''
-
+  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   // Response object without salon details or employee
   const response = {
     status: '1',
@@ -758,7 +763,7 @@ exports.login = async (req, res, next) => {
     })
 
     token = signTocken(salon.userId, dvToken)
-
+    redis_Client.hSet(`trim${salon.userId}`, dvToken, token)
     response.data.accessLevels = result
 
     if (!employeeDetails) {
@@ -808,309 +813,6 @@ exports.login = async (req, res, next) => {
   )
 }
 
-exports.loginNew = async (req, res, next) => {
-  const { email, password, dvToken } = req.body
-
-  if (!req.body?.loginBy) req.body.loginBy = 'email'
-  if (!email) {
-    // !password
-    throw new appError('Please provide Email', 200)
-  } else if (req.body.loginBy == 'email' && !password) {
-    throw new appError('Please provide Password', 200)
-  }
-
-  const User = await user.findOne({
-    where: {
-      email,
-      deleted: false,
-      //   userTypeId:[2,3]
-    },
-    include: [
-      {
-        model: deviceToken,
-        required: false,
-        attributes: ['tokenId', 'userId'],
-      },
-    ],
-  })
-
-  if (!User && !password) {
-    return res.json(
-      returnFunction(
-        '6',
-        `No account found with this email. Please check your email or sign up`,
-        {},
-        '',
-      ),
-    )
-  }
-
-  if (!User) {
-    return next(
-      new appError(
-        `No account found with this email. Please check your email or sign up.`,
-        200,
-      ),
-    )
-  }
-
-  if (User.userTypeId == 1) {
-    return next(
-      new appError(
-        `An account with this email (${email}) is already registered as a customer. Please use a different email address to continue.`,
-        200,
-      ),
-    )
-  }
-  if (!User.status) {
-    return next(
-      new appError(
-        'Your account is currently restricted. Please contact support for further assistance.',
-        200,
-      ),
-    )
-  }
-
-  // console.log(JSON.parse(JSON.stringify(User)))
-
-  if (req.body?.loginBy != User?.signedFrom) {
-    return next(
-      new appError(
-        `An account with this email (${email}) is not registered by this singin method`,
-        200,
-      ),
-    )
-  }
-
-  if (
-    User.signedFrom == 'email' &&
-    !(await bcrypt.compare(password, User.password))
-  ) {
-    return next(
-      new appError('Incorrect email or password. Please try again.', 200),
-    )
-  }
-
-  // Check Device Token
-  const found = User.deviceTokens.find(
-    (ele) => ele.tokenId === dvToken && ele.userId == User.id,
-  )
-  console.log('FOUND FOUND', found)
-  if (!found) {
-    await deviceToken.create({
-      tokenId: dvToken,
-      status: true,
-      userId: User.id,
-    })
-  }
-
-  let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : ''
-
-  // Response object without salon details or employee
-  const response = {
-    status: '1',
-    message: 'User logged in successfully!',
-    data: {
-      userId: User.id,
-      image: User.image,
-      firstName: User.firstName,
-      lastName: User.lastName,
-      email: User.email,
-      accessToken: token,
-      phoneNum: `${User.countryCode} ${User.phoneNum}`,
-    },
-    error: '',
-  }
-
-  // Check user type and include appropriate details
-  if (User.userTypeId === 2) {
-    // If user is a salon
-    const salon = await salonDetail.findOne({
-      where: {
-        userId: User.id,
-      },
-      include: [
-        {
-          model: category,
-          required: false,
-          attributes: ['id', 'categoryName', 'color'],
-        },
-        {
-          model: service,
-          attributes: ['id', 'serviceName', 'price', 'duration', 'description'],
-        },
-        {
-          model: time,
-          attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'],
-        },
-        { model: addressDBS },
-        {
-          model: employee,
-          include: {
-            model: user,
-            attributes: ['id', 'firstName', 'lastName', 'image'],
-          },
-        },
-        { model: wallet, required: false },
-      ],
-    })
-    // return res.json(salon)
-    if (!salon || User.verifiedAt === null) {
-      response.status = User.verifiedAt === null ? '3' : '2'
-      response.message =
-        User.verifiedAt === null
-          ? 'Please Verify First!'
-          : 'User Login successfully!'
-      response.data.profileCompletion = {
-        salonDetailId: '',
-        salonName: '',
-        subscriptionLatestPaymentStatus: '',
-        hasBusinessDetails: false,
-        hasBusinessAddress: false,
-        hasServiceList: false,
-        hasWorkingHours: false,
-        hasTeamMembers: false,
-        hasSubscription: false,
-        accountConnected: false,
-      }
-    } else {
-      const isAllDataAvailable =
-        // salon.categories.length !== 0 &&
-        salon.services.length !== 0 &&
-        salon.times.length !== 0 &&
-        salon.approvedByAdmin &&
-        salon?.wallet?.accountConnected &&
-        salon.approvedByAdmin
-
-      const hasEmployee = salon.employees.length !== 0
-      console.log(
-        '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
-        salon.approvedByAdmin,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.connectAccountId :',
-        salon.connectAccountId,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
-        salon.approvedByAdmin,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.times.length:',
-        salon.times.length,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.services.length:',
-        salon.services.length,
-      )
-
-      console.log(
-        '🚀 ~ exports.login= ~  isAllDataAvailable ',
-        isAllDataAvailable,
-      )
-      console.log('🚀 ~ exports.login= ~  hasEmployee:', hasEmployee)
-
-      response.status = isAllDataAvailable && hasEmployee ? '1' : '2'
-      response.message = 'User Login successfully!'
-      response.data.profileCompletion = {
-        salonDetailId: salon.id ?? '',
-        salonName: salon.salonName,
-        subscriptionLatestPaymentStatus: salon?.subscriptionLatestPaymentStatus,
-        hasBusinessDetails: salon ? true : false,
-        hasBusinessAddress: salon.addressDB !== null,
-        hasServiceList: salon.services.length !== 0,
-        hasWorkingHours: salon.times.length !== 0,
-        hasTeamMembers: salon.employees.length !== 0,
-        hasSubscription: salon.approvedByAdmin,
-        accountConnected: salon?.wallet?.accountConnected ? true : false,
-      }
-    }
-  } else if (User.userTypeId === 3) {
-    // If user is an employee
-    const employeeDetails = await employee.findOne({
-      where: {
-        userId: User.id,
-      },
-      include: [
-        {
-          model: employeeService,
-        },
-        { model: employeeWagesMethod },
-        { model: time },
-      ],
-    })
-
-    let access = await employeeAccess.findAll({
-      where: { employeeId: employeeDetails.id },
-    })
-    if (access.length < 1)
-      access = await employeeAccessDefault.findAll({
-        where: { salonDetailId: employeeDetails.salonDetailId },
-      })
-    if (access.length < 1) access = defaultAccess
-
-    const result = {}
-    access.forEach((item) => {
-      result[item.key] = item.level
-    })
-    //For AccessToken
-    const salon = await salonDetail.findOne({
-      where: {
-        id: employeeDetails.salonDetailId,
-      },
-      attributes: ['userId'],
-    })
-
-    token = signTocken(salon.userId, dvToken)
-
-    response.data.accessLevels = result
-
-    if (!employeeDetails) {
-      response.status = '5'
-      response.message = 'User Login successfully!'
-      response.data.accessToken = token
-      response.data.profileCompletion = {
-        salonDetailId: employeeDetails.salonDetailId,
-        employeeId: '',
-        position: '',
-        hasServiceList: false,
-        hasWorkingHours: false,
-        hasWagesMethod: false,
-      }
-    } else {
-      const isAllDataAvailable =
-        employeeDetails.employeeServices.length !== 0 &&
-        employeeDetails.times.length !== 0 &&
-        employeeDetails.employeeWagesMethod
-
-      response.status = isAllDataAvailable ? '4' : '5'
-      response.message = 'User Login successfully!'
-      response.data.accessToken = token
-      response.data.profileCompletion = {
-        salonDetailId: employeeDetails.salonDetailId,
-        employeeId: employeeDetails.id,
-        position: employeeDetails.position,
-        hasServiceList: employeeDetails.employeeServices.length !== 0,
-        hasWorkingHours: employeeDetails.times.length !== 0,
-        hasWagesMethod: employeeDetails.employeeWagesMethod ? true : false,
-      }
-    }
-  }
-
-  response.data.isExternalEmployee = User.isExternalEmployee
-  if (response && response.data && response.data.isExternalEmployee) {
-    response.data.profileCompletion.hasSubscription = true
-  }
-
-  return res.json(
-    returnFunction(
-      response.status,
-      response.message,
-      response.data,
-      response.error,
-    ),
-  )
-}
 /*
             7. OTP request for changing password
 */
@@ -1204,6 +906,7 @@ exports.verifyPasswordOtp = async (req, res, next) => {
   otpData.verifiedInForgetCase = true
   await otpData.save()
   const accessToken = signTocken(otpData.userId, dvToken)
+  redis_Client.hSet(`trim${otpData.userId}`, dvToken, accessToken)
   return res.json(
     returnFunction('1', 'OTP verified successfully!', { accessToken }, ''),
   )
@@ -1221,7 +924,7 @@ exports.resetPassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-
+  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password Reset successfully!',
@@ -1255,7 +958,7 @@ exports.updatePassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-
+  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password Updated successfully!',

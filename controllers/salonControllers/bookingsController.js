@@ -94,7 +94,7 @@ exports.calendarAppointments = async (req, res, next) => {
     where: { userId: req?.user?.id },
     attributes: ['id', 'parentSalonId', 'onlinePayments'],
   })
-
+  console.log(req.body)
   let parentSalonName = ''
 
   if (salon?.parentSalonId) {
@@ -115,16 +115,14 @@ exports.calendarAppointments = async (req, res, next) => {
     isExternalEmployee: false,
   }
   const jobCondition = {
-    status: {
-      [Op.or]: ['assign'],
-    },
+    status: req.body.status == 'Assign' ? 'assign' : 'pending',
+    employeeId: { [Op.ne]: null },
     on: req.params?.date,
   }
   const unAssignCondition = {
-    status: {
-      [Op.or]: ['pending'],
-    },
+    status: req.body.status == 'Un-Assigned' ? 'pending' : 'assign',
     on: req.params.date,
+    employeeId: null,
     [Op.and]: literal(`EXISTS (
       SELECT 1
       FROM bookings
@@ -140,6 +138,8 @@ exports.calendarAppointments = async (req, res, next) => {
     jobCondition.serviceId = { [Op.or]: req.body?.serviceList }
     unAssignCondition.serviceId = { [Op.or]: req.body?.serviceList }
   }
+
+  //  Assign
 
   const data = await employee.findAll({
     where: employeCondition,
