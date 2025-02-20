@@ -2859,7 +2859,10 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     const paid =
       parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
 
-    const noshowCharges = appointment.total * (refundPercentage / 100)
+    const noshowCharges = parseFloat(
+      (appointment.total * (refundPercentage / 100)).toFixed(2),
+    )
+
     console.log(
       'ðŸš€ ~ exports.as= ~ appointment.actualCapturedAmount:',
       appointment.actualCapturedAmount,
