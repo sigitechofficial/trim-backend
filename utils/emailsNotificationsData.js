@@ -42,7 +42,7 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
             SELECT refundPercentage
             FROM noShowPolicies
             WHERE 
-              booking.noshowPolicyVersion = noShowPolicies.version 
+              booking.noshowPolicyVersion = noShowPolicies.version AND
               booking.salonDetailId = noShowPolicies.salonDetailId 
             LIMIT 1
           )

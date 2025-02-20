@@ -427,6 +427,7 @@ exports.addEmployeeService = async (req, res, next) => {
 */
 exports.getWagesMethod = async (req, res, next) => {
   const WagesMethod = await wagesMethod.findAll({
+    where: { status: true },
     attributes: ['id', 'methodName', 'description'],
   })
 
@@ -997,22 +998,18 @@ exports.activeBlockEmployee = async (req, res, next) => {
 
 exports.deleteEmployee = async (req, res, next) => {
   const userId = req.params.employee
-  const worker = await user.findByPk(userId, {
+  const worker = await employee.findOne({
+    where: { userId },
     attributes: [
-      'id',
+      ['userId', 'id'],
       'status',
+      ['id', 'employeeId'],
       'isOwner',
-      [
-        literal(
-          `(SELECT employees.id
-         FROM employees WHERE employees.userId = user.id)`,
-        ),
-        'employeeId',
-      ],
+      'isExternalEmployee',
     ],
   })
   if (!worker) return next(new appError('Data not found', 404))
-  if (worker.isOwner) {
+  if (worker?.dataValues?.isOwner) {
     return next(new appError('The salon owner cannot be deleted.', 200))
   }
   const employeeId = worker?.dataValues?.employeeId
