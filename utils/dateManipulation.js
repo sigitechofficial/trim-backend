@@ -92,6 +92,18 @@ exports.stampToDate = (timestamp) => {
   return formattedDate
 }
 
+exports.stampToDateForSubscription = (timestamp) => {
+  const date = new Date(timestamp * 1000)
+
+  // Get the year, month, and day
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  const formattedDate = day + '-' + month + '-' + year
+  return formattedDate
+}
+
 exports.daysBetween = (startDate, endDate) => {
   // Parse the input dates
   const start = new Date(startDate)
