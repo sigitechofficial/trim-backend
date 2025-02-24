@@ -2006,7 +2006,32 @@ exports.savingTimeHistory = async (req, res, next) => {
   return res.json(returnFunction('1', 'success', { result }, ''))
 }
 
+exports.addCategory = async (req, res, next) => {
+  let { categoryName, salonDetailId } = req.body
+
+  const exist = await service.findOne({
+    where: {
+      categoryName: categoryName,
+      salonDetailId: salonDetailId,
+    },
+  })
+  if (exist) {
+    return next(
+      new appError(`The "${categoryName}" category already exists`, 200),
+    )
+  }
+  await category.create(req.body)
+
+  return res
+    .status(200)
+    .json(returnFunction('1', 'Category added successfully', {}, ''))
+}
+
 exports.addServices = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
   let { serviceData, employees } = req.body
   const selfEmployee = await employee.findOne({
     where: { userId: req.user?.id },
@@ -2024,7 +2049,7 @@ exports.addServices = async (req, res, next) => {
     },
   })
   if (exist) {
-    return next(new appError('Service With Same Name already Exist.', 200))
+    return next(new appError('A service with this name already exists..', 200))
   }
   const newService = await service.create(serviceData)
   const input =

@@ -36,6 +36,7 @@ const {
   commissionPayout,
   rentChairPayout,
   pushNotification,
+  wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
