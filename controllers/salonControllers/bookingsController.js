@@ -116,13 +116,13 @@ exports.calendarAppointments = async (req, res, next) => {
   }
   const jobCondition = {
     status: {
-      [Op.or]: ['assign'],
+      [Op.or]: ['assign', 'complete', 'no-show'],
     },
     on: req.params?.date,
   }
   const unAssignCondition = {
     status: {
-      [Op.or]: ['pending'],
+      [Op.or]: ['pending', 'complete', 'no-show'],
     },
     on: req.params.date,
     [Op.and]: literal(`EXISTS (
