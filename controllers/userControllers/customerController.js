@@ -36,6 +36,7 @@ const {
   commissionPayout,
   rentChairPayout,
   pushNotification,
+  wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -1355,12 +1356,14 @@ exports.cancelAppointment = async (req, res, next) => {
     { where: { salonDetailId: appointment.salonDetailId } },
   )
 
-  if (updatedBooking.status == 'cancel') {
-    await jobs.update({ status: 'cancel' }, { where: { bookingId } })
-    calculatePayoutsOnBooking(appointment, finePercentage, 'cancel')
-    cancelByCustomer(appointment.id) //Notifications etc
-    socketForCalendar({ appointmentId: bookingId, type: 'finish' })
-  }
+  await jobs.update(
+    { status: 'cancel' },
+    { where: { bookingId: appointment.id } },
+  )
+  calculatePayoutsOnBooking(appointment, finePercentage, 'cancel')
+  cancelByCustomer(appointment.id) //Notifications etc
+  socketForCalendar({ appointmentId: bookingId, type: 'finish' })
+
   employeeCommission.update(
     { appointmentClosed: true },
     { where: { bookingId: bookingId } },

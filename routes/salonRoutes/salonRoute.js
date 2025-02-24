@@ -59,7 +59,7 @@ router.post('/salonTiming', catchAsync(salonController.salonTiming))
 //get Salon Timing
 router.get('/getSalonTiming', catchAsync(salonController.getSalonTiming))
 // 2.Add Category
-router.post('/addCategory', catchAsync(factory.createOne(category)))
+router.post('/addCategory', catchAsync(salonController.addCategory))
 router.post(
   '/add-multiple-categories',
   catchAsync(salonController.addMultipleCategories),
