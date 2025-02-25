@@ -161,27 +161,21 @@ exports.AddEmployee = async (req, res, next) => {
 
   //   return res.json(req.body)
   if (userExist) {
-    if (email === userExist.email)
-      return next(
-        new appError(
-          'Users exists,The email you entered is already taken',
-          200,
-        ),
+    if (email === userExist.email) {
+      throw new appError(
+        'Users exists,The email you entered is already taken',
+        200,
       )
-    else if (phoneNum === userExist.phoneNum) {
-      return next(
-        new appError(
-          'Users exists,The Phone Number you entered is already taken',
-          200,
-        ),
+    } else if (phoneNum === userExist.phoneNum) {
+      throw new appError(
+        'Users exists,The Phone Number you entered is already taken',
+        200,
       )
     } else if ([1, 2, 4].includes(userExist.userTypeId)) {
       // check if there is already user with the same Email in relative apps
-      return next(
-        new appError(
-          'Trying to login?,A Customer with the follwoing email exists ',
-          200,
-        ),
+      throw new appError(
+        'Trying to login?,A Customer with the follwoing email exists ',
+        200,
       )
     }
 

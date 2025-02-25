@@ -225,9 +225,10 @@ exports.choosePlan = async (req, res, next) => {
     (salonData.registrationDate = dateManipulation.stampToDate(
       subscription.current_period_start,
     )),
-    (salonData.registrationExpiryDate = dateManipulation.stampToDate(
-      subscription.current_period_end,
-    ))
+    (salonData.registrationExpiryDate =
+      dateManipulation.stampToDateForSubscription(
+        subscription.current_period_end,
+      ))
   salonData.subscriptionPlan = subscription.id
   await salonData.save()
   const check = await wallet.findOne({
@@ -929,14 +930,33 @@ exports.addMultipleCategories = async (req, res, next) => {
   const { categories } = req.body
   const salon = await salonDetail.findOne({ where: { userId: req?.user?.id } })
   console.log('------------', req?.user)
-  console.log('------------', salon?.id)
   const Input = categories.filter((cat) => cat.isSelected === true)
-  const finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
-  const categoriesData = await category.bulkCreate(finalInput)
+  let finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
+
+  console.log('------------', finalInput)
+  const categoriesExist = await category.findAll({
+    where: { salonDetailId: salon.id },
+  })
+
+  finalInput =
+    categoriesExist.length > 0
+      ? finalInput.filter(
+          (salonItem) =>
+            !categoriesExist.some(
+              (existItem) =>
+                existItem.categoryName.toLowerCase() ==
+                salonItem.categoryName.toLowerCase(),
+            ),
+        )
+      : finalInput
+
+  if (finalInput.length > 0) await category.bulkCreate(finalInput)
+
   return res.json(
     returnFunction('1', 'Categories have been successfully added!', {}, ''),
   )
 }
+
 // Salon's
 exports.getCategories = async (req, res, next) => {
   const userId = req.user.id
@@ -2016,9 +2036,16 @@ exports.addCategory = async (req, res, next) => {
     },
   })
   if (exist) {
-    return next(
-      new appError(`The "${categoryName}" category already exists`, 200),
-    )
+    res
+      .status(200)
+      .json(
+        returnFunction(
+          '1',
+          `The "${categoryName}" category already exists`,
+          {},
+          '',
+        ),
+      )
   }
   await category.create(req.body)
 

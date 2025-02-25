@@ -96,6 +96,55 @@ exports.calendarAppointments = async (req, res, next) => {
   })
   console.log(req.body)
   let parentSalonName = ''
+  const JobAttributes = [
+    'id',
+    'on',
+    'status',
+    'startTime',
+    'endTime',
+    'total',
+    'duration',
+    'serviceDiscount',
+    'extraDiscount',
+    'serviceId',
+    'employeeId',
+    'bookingId',
+    [
+      literal(
+        `(SELECT services.serviceName
+       FROM services WHERE services.id = jobs.serviceId)`,
+      ),
+      'serviceName',
+    ],
+    [
+      literal(
+        `(SELECT categories.color
+          FROM services
+          INNER JOIN categories ON services.categoryId = categories.id
+          WHERE services.id = jobs.serviceId
+          LIMIT 1)`,
+      ),
+      'color',
+    ],
+
+    [
+      literal(
+        `(SELECT CONCAT(users.firstName, ' ', users.lastName)
+          FROM users
+          INNER JOIN bookings ON bookings.customerId = users.id
+          WHERE bookings.id = jobs.bookingId
+          LIMIT 1)`,
+      ),
+      'customerName',
+    ],
+    [
+      literal(
+        `(SELECT bookings.customerId
+       FROM bookings WHERE bookings.id = jobs.bookingId)`,
+      ),
+      'customerId',
+    ],
+  ]
 
   if (salon?.parentSalonId) {
     const parentSalon = await salonDetail.findOne({
@@ -116,13 +165,13 @@ exports.calendarAppointments = async (req, res, next) => {
   }
   const jobCondition = {
     status: {
-      [Op.or]: ['assign'],
+      [Op.or]: ['assign', 'complete', 'no-show'],
     },
     on: req.params?.date,
   }
   const unAssignCondition = {
     status: {
-      [Op.or]: ['pending'],
+      [Op.or]: ['pending', 'no-show'],
     },
     on: req.params.date,
     [Op.and]: literal(`EXISTS (
@@ -195,54 +244,7 @@ exports.calendarAppointments = async (req, res, next) => {
         model: jobs,
         required: false,
         where: jobCondition,
-        attributes: [
-          'id',
-          'on',
-          'startTime',
-          'endTime',
-          'total',
-          'duration',
-          'serviceDiscount',
-          'extraDiscount',
-          'serviceId',
-          'employeeId',
-          'bookingId',
-          [
-            literal(
-              `(SELECT services.serviceName
-             FROM services WHERE services.id = jobs.serviceId)`,
-            ),
-            'serviceName',
-          ],
-          [
-            literal(
-              `(SELECT categories.color
-                FROM services
-                INNER JOIN categories ON services.categoryId = categories.id
-                WHERE services.id = jobs.serviceId
-                LIMIT 1)`,
-            ),
-            'color',
-          ],
-
-          [
-            literal(
-              `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-                FROM users
-                INNER JOIN bookings ON bookings.customerId = users.id
-                WHERE bookings.id = jobs.bookingId
-                LIMIT 1)`,
-            ),
-            'customerName',
-          ],
-          [
-            literal(
-              `(SELECT bookings.customerId
-             FROM bookings WHERE bookings.id = jobs.bookingId)`,
-            ),
-            'customerId',
-          ],
-        ],
+        attributes: JobAttributes,
       },
     ],
   })
@@ -268,50 +270,7 @@ exports.calendarAppointments = async (req, res, next) => {
 
   const unAssignedJobs = await jobs.findAll({
     where: unAssignCondition,
-    attributes: [
-      'id',
-      'on',
-      'startTime',
-      'endTime',
-      'serviceId',
-      'employeeId',
-      'bookingId',
-      [
-        literal(
-          `(SELECT services.serviceName
-         FROM services WHERE services.id = jobs.serviceId)`,
-        ),
-        'serviceName',
-      ],
-      [
-        literal(
-          `(SELECT categories.color
-            FROM services
-            INNER JOIN categories ON services.categoryId = categories.id
-            WHERE services.id = jobs.serviceId
-            LIMIT 1)`,
-        ),
-        'color',
-      ],
-
-      [
-        literal(
-          `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-            FROM users
-            INNER JOIN bookings ON bookings.customerId = users.id
-            WHERE bookings.id = jobs.bookingId
-            LIMIT 1)`,
-        ),
-        'customerName',
-      ],
-      [
-        literal(
-          `(SELECT bookings.customerId
-         FROM bookings WHERE bookings.id = jobs.bookingId)`,
-        ),
-        'customerId',
-      ],
-    ],
+    attributes: JobAttributes,
   })
 
   if (req.body.status == 'Un-Assigned') {
@@ -1697,6 +1656,7 @@ exports.jobStatus = async (req, res, next) => {
   socketForCalendarJobOnly({
     appointmentId: jobData?.bookingId,
     jobId: jobData.id,
+    type: status,
   })
 
   return res.json(
