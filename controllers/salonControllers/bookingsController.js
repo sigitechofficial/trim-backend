@@ -98,27 +98,31 @@ exports.calendarAppointments = async (req, res, next) => {
   let parentSalonName = ''
   const JobAttributes = [
     'id',
-    'status',
     'on',
+    'status',
     'startTime',
     'endTime',
+    'total',
+    'duration',
+    'serviceDiscount',
+    'extraDiscount',
     'serviceId',
     'employeeId',
     'bookingId',
     [
       literal(
         `(SELECT services.serviceName
-     FROM services WHERE services.id = jobs.serviceId)`,
+       FROM services WHERE services.id = jobs.serviceId)`,
       ),
       'serviceName',
     ],
     [
       literal(
         `(SELECT categories.color
-        FROM services
-        INNER JOIN categories ON services.categoryId = categories.id
-        WHERE services.id = jobs.serviceId
-        LIMIT 1)`,
+          FROM services
+          INNER JOIN categories ON services.categoryId = categories.id
+          WHERE services.id = jobs.serviceId
+          LIMIT 1)`,
       ),
       'color',
     ],
@@ -126,21 +130,22 @@ exports.calendarAppointments = async (req, res, next) => {
     [
       literal(
         `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-        FROM users
-        INNER JOIN bookings ON bookings.customerId = users.id
-        WHERE bookings.id = jobs.bookingId
-        LIMIT 1)`,
+          FROM users
+          INNER JOIN bookings ON bookings.customerId = users.id
+          WHERE bookings.id = jobs.bookingId
+          LIMIT 1)`,
       ),
       'customerName',
     ],
     [
       literal(
         `(SELECT bookings.customerId
-     FROM bookings WHERE bookings.id = jobs.bookingId)`,
+       FROM bookings WHERE bookings.id = jobs.bookingId)`,
       ),
       'customerId',
     ],
   ]
+
   if (salon?.parentSalonId) {
     const parentSalon = await salonDetail.findOne({
       where: { id: salon?.parentSalonId },
