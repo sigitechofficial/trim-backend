@@ -120,7 +120,7 @@ exports.socketForCalendarJobOnly = async ({
   type = 'finish',
 }) => {
   try {
-    let event = `${type}-job`
+    let event = `finish-job`
 
     const appointment = await booking.findByPk(appointmentId, {
       attributes: ['id', 'salonDetailId', 'on'],
@@ -130,6 +130,7 @@ exports.socketForCalendarJobOnly = async ({
       event: event,
       data: {
         jobId: jobId,
+        type,
       },
       bookingId: appointmentId,
     }

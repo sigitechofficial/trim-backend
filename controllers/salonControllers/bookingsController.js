@@ -1651,6 +1651,7 @@ exports.jobStatus = async (req, res, next) => {
   socketForCalendarJobOnly({
     appointmentId: jobData?.bookingId,
     jobId: jobData.id,
+    type: 'complete',
   })
 
   return res.json(
