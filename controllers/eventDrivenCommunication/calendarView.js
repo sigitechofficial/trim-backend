@@ -20,6 +20,7 @@ const { employeeForSocket } = require('../../utils/socketUtilities')
 const jobAttributes = [
   'id',
   'on',
+  'status',
   'startTime',
   'endTime',
   'total',
