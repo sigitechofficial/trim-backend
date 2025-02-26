@@ -413,7 +413,9 @@ exports.addEmployeeService = async (req, res, next) => {
     newService.salonDetailId = SalonDetail.id
     await newService.save()
   })
-  return res.json(returnFunction('1', 'Services of Employee', {}, ''))
+  return res.json(
+    returnFunction('1', 'Services of Employee added successfully!', {}, ''),
+  )
 }
 /*
             3.get Wages Method
