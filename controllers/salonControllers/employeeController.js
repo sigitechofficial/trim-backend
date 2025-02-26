@@ -140,13 +140,15 @@ exports.AddEmployee = async (req, res, next) => {
   })
   // to equal self employee
 
-  if (teamCount >= salonDetails.teamSize) {
-    return next(
-      new appError(
-        '"Your subscription limit has been reached. Please upgrade your plan to add more employees.',
-        200,
-      ),
-    )
+  if (req?.body?.registerEmployeeDuringSalonRegistration != 'fromAuth') {
+    if (teamCount >= salonDetails.teamSize) {
+      return next(
+        new appError(
+          'Your subscription limit has been reached. Please upgrade your plan to add more employees.',
+          200,
+        ),
+      )
+    }
   }
   const salonDetailId = salonDetails.id
   const userExist = await user.findOne({

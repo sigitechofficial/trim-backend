@@ -173,6 +173,7 @@ exports.calendarAppointments = async (req, res, next) => {
     status: {
       [Op.or]: ['pending', 'no-show'],
     },
+    employeeId: null,
     on: req.params.date,
     [Op.and]: literal(`EXISTS (
       SELECT 1
