@@ -225,10 +225,9 @@ exports.choosePlan = async (req, res, next) => {
     (salonData.registrationDate = dateManipulation.stampToDate(
       subscription.current_period_start,
     )),
-    (salonData.registrationExpiryDate =
-      dateManipulation.stampToDateForSubscription(
-        subscription.current_period_end,
-      ))
+    (salonData.registrationExpiryDate = dateManipulation.stampToDate(
+      subscription.current_period_end,
+    ))
   salonData.subscriptionPlan = subscription.id
   await salonData.save()
   const check = await wallet.findOne({
@@ -248,6 +247,9 @@ exports.choosePlan = async (req, res, next) => {
     },
     { where: { salonDetailId: salonData.id } },
   )
+  // const output = JSON.parse(JSON.stringify(salonData))
+  salonData.registrationExpiryDate =
+    dateManipulation.stampToDateForSubscription(subscription.current_period_end)
 
   return res.json(
     returnFunction(
