@@ -248,8 +248,7 @@ exports.choosePlan = async (req, res, next) => {
     { where: { salonDetailId: salonData.id } },
   )
   // const output = JSON.parse(JSON.stringify(salonData))
-  salonData.registrationExpiryDate =
-    dateManipulation.stampToDateForSubscription(subscription.current_period_end)
+  // subscription.current_period_end
 
   return res.json(
     returnFunction(
