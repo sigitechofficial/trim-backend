@@ -2031,7 +2031,7 @@ exports.savingTimeHistory = async (req, res, next) => {
 exports.addCategory = async (req, res, next) => {
   let { categoryName, salonDetailId } = req.body
 
-  const exist = await service.findOne({
+  const exist = await category.findOne({
     where: {
       categoryName: categoryName,
       salonDetailId: salonDetailId,
@@ -2307,7 +2307,7 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     await user.update({ stripeCustomerId }, { where: { id: salon.id } })
   }
 
-  const price = await Stripe.getPriceById('price_1QwitTEElwxEWjRbrpLVXPSH')
+  const price = await Stripe.getPriceById('price_1Qwj3FCmsFtCbz25grLeLSn0')
   const setupIntent = await Stripe.setupIntent(stripeCustomer)
   const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
 
