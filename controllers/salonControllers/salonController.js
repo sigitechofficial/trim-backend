@@ -1333,6 +1333,7 @@ exports.getCancellationPolicies = async (req, res) => {
     },
     atrributes: ['percentage'],
   })
+
   return res.status(200).json(
     returnFunction(
       '1',
@@ -2306,7 +2307,7 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     await user.update({ stripeCustomerId }, { where: { id: salon.id } })
   }
 
-  const price = await Stripe.getPriceById('price_1QMk38IUi1Nn55FG2GP2Oxoq')
+  const price = await Stripe.getPriceById('price_1Qwj3FCmsFtCbz25grLeLSn0')
   const setupIntent = await Stripe.setupIntent(stripeCustomer)
   const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
 
