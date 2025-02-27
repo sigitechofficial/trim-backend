@@ -104,7 +104,7 @@ exports.cash = async (bookingId, tip, amount = 0) => {
     sendEvent(`${bookingData?.salonDetailId}S`, socketInput)
     const workers = await employeeForSocket(bookingData?.salonDetailId)
     workers.forEach((el) => sendEvent(`${el}E`, socketInput))
-    console.log('🚀 ~~~~~ eventDrivenCommunication ~~~~~~~ 🚀')
+    console.log('🚀 ~~~~~ eventDrivenCommunication CASH CHECKOUT ~~~~~~~ 🚀')
     return true
   } catch (error) {
     console.log('🚀 ~ exports.onlineAppointmentConfirm= ~ error:', error)
@@ -179,7 +179,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
       bookingData?.salonDetail?.user.id,
     )
 
-    if (booking?.customerId) {
+    if (bookingData?.customerId) {
       ThankYouForVisiting([booking?.client?.customerEmail], booking)
       ThrowNotification(
         customerTokens,
@@ -204,7 +204,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
     const workers = await employeeForSocket(bookingData?.salonDetailId)
     workers.forEach((el) => sendEvent(`${el}E`, socketInput))
 
-    console.log('🚀 ~~~~~ eventDrivenCommunication ~~~~~~~ 🚀')
+    console.log('🚀 ~~~~~ eventDrivenCommunication ONLINE CHECKOUT ~~~~~~~ 🚀')
 
     return true
   } catch (error) {
@@ -233,7 +233,7 @@ exports.saveUnpaid = async (bookingData) => {
     sendEvent(`${bookingData?.salonDetailId}S`, socketInput)
     const workers = await employeeForSocket(bookingData?.salonDetailId)
     workers.forEach((el) => sendEvent(`${el}E`, socketInput))
-    console.log('🚀 ~~~~~ eventDrivenCommunication ~~~~~~~ 🚀')
+    console.log('🚀 ~~~~~ eventDrivenCommunication Save Unpaid~~~~~~~ 🚀')
 
     return true
   } catch (error) {

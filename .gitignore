@@ -14,7 +14,7 @@ config/
 
 Public/
 
- 
+# .env
 
 firebase.json
 
