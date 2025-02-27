@@ -2307,7 +2307,7 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     await user.update({ stripeCustomerId }, { where: { id: salon.id } })
   }
 
-  const price = await Stripe.getPriceById('price_1Qwj3FCmsFtCbz25grLeLSn0')
+  const price = await Stripe.getPriceById('price_1QwitTEElwxEWjRbrpLVXPSH')
   const setupIntent = await Stripe.setupIntent(stripeCustomer)
   const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
 
