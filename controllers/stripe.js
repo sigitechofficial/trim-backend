@@ -61,6 +61,11 @@ async function addCard(data) {
 }
 //* attch Payment Method
 async function attchPaymentMethod(paymentMethod, customerId) {
+  console.log(
+    '🚀 ~ attchPaymentMethod ~ paymentMethod, customerId:',
+    paymentMethod,
+    customerId,
+  )
   try {
     //   Attact payment Method to Customer (Alternate)
     await stripe.paymentMethods.attach(paymentMethod, {

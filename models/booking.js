@@ -17,6 +17,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 0,
     },
+    platformFee: {
+      type: DataTypes.DECIMAL(20, 2),
+      defaultValue: 0,
+    },
     discount: {
       type: DataTypes.DECIMAL(20, 2),
       allowNull: true,

@@ -1413,7 +1413,14 @@ exports.bookAppointment = async (req, res, next) => {
         'Card not attached! Please attach card to proceed',
         200,
       )
-    appointment.stripeCardId = req.body.stripeCardId
+    appointment.stripeCardId = req?.body?.stripeCardId
+    const client = await user.findByPk(customerId, {
+      attributes: ['stripeCustomerId'],
+    })
+    Stripe.attchPaymentMethod(
+      appointment?.stripeCardId,
+      client?.stripeCustomerId,
+    )
   } else if (req.body.paymentMethod === 'cash') {
     appointment.paymentMethod = 'cash'
   } else {
@@ -1568,8 +1575,11 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     req.body.advanceAmount && req.body.advanceAmount > 0
       ? parseFloat(req.body.advanceAmount)
       : 0
+  const platformFee = req.body?.platformFee
+    ? parseFloat(req.body?.platformFee)
+    : 0
   const tip = req.body.tip ? parseFloat(req.body.tip) : 0
-  const advanceAmount = upFrontAmount + tip
+  const advanceAmount = upFrontAmount + tip + platformFee
   const actualCapturedAmount = upFrontAmount
   const ephemeralKey = await Stripe.createEphemeralKey(
     req.body.stripeCustomerId,
@@ -1595,6 +1605,7 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     paymentIntendId: indent ? indent.id : '',
     initialPayment: upFrontAmount,
     tip: tip,
+    platformFee,
     actualCapturedAmount: actualCapturedAmount,
     stripeCustomerId: req.body.stripeCustomerId,
   }
