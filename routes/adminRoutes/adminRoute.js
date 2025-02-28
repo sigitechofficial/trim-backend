@@ -4,6 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const router = express.Router()
 const adminController = require('../../controllers/adminController/adminController')
+const reportController = require('../../controllers/salonControllers/newReportsController')
 const customerController = require('../../controllers/userControllers/customerController')
 const protect = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
@@ -21,6 +22,49 @@ const {
 } = require('../../models')
 
 const { createDestinationDirectory } = require('../../utils/customFunctions')
+
+router.get(
+  '/single-salon-report/busiest-vs-quietest/:basedOn/:salon',
+  catchAsync(reportController.busiestVsQuietest),
+)
+
+router.get(
+  '/single-salon-report/services-by-staff-per-week/:salon',
+  catchAsync(reportController.servicesByStaffPerWeek),
+)
+
+router.get(
+  '/single-salon-report/services-provided-by-each-employee/:salon',
+  catchAsync(reportController.totalBookings),
+)
+
+router.get(
+  '/single-salon-report/most-popular-services/:salon',
+  catchAsync(reportController.mostPopularServices),
+)
+
+router.get(
+  '/single-salon-report/services-performance/:salon',
+  catchAsync(reportController.bookingPerformance),
+)
+
+router.get(
+  '/single-salon-report/income-report-yearly/:year/:salon',
+  catchAsync(reportController.IncomeReportYear),
+)
+
+router.get(
+  '/single-salon-report/income-report-week/:salon',
+  catchAsync(reportController.weeklyIncomeReport),
+)
+router.get(
+  '/single-salon-report/income-report-per-hour/:salon',
+  catchAsync(reportController.hourlyIncomeReport),
+)
+router.get(
+  '/single-salon-report/average-bookings/:salon',
+  catchAsync(reportController.averageJobsReport),
+)
 
 // !Module:1 Home
 router.post('/auth/login', catchAsync(adminController.login))

@@ -454,6 +454,7 @@ exports.fecthSalons = async (req, res, next) => {
     where: condition,
     attributes: [
       'id',
+      'userId',
       'salonName',
       'coverImage',
       'metadata',

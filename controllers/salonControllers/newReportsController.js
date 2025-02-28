@@ -47,8 +47,9 @@ const CustomDate = require('../../utils/currentDay')
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
 exports.busiestVsQuietest = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId: userId },
     attributes: ['id'],
   })
 
@@ -95,8 +96,9 @@ exports.busiestVsQuietest = async (req, res, next) => {
 //* 3.Reports-> Services By Staff Per Week------------------------------------------------------------------
 
 exports.servicesByStaffPerWeek = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -168,8 +170,10 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
 //* 4.Reports-> Total Bookings------------------------------------------------------------------------------
 
 exports.totalBookings = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -224,8 +228,10 @@ exports.totalBookings = async (req, res, next) => {
 //* 6.Reports-> Most popular service--------------------------------------------------------------------------
 
 exports.mostPopularServices = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -273,8 +279,10 @@ exports.mostPopularServices = async (req, res, next) => {
 //* 7.Reports-> Booking performance----------------------------------------------------------------------------
 
 exports.bookingPerformance = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -320,6 +328,8 @@ exports.bookingPerformance = async (req, res, next) => {
 //* 8.Reports-> Income Report Yearly------------------------------------------------------------------------------
 
 exports.IncomeReportYear = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   const { year } = req.params
 
   // Validate that 'year' is provided
@@ -370,7 +380,7 @@ exports.IncomeReportYear = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -438,6 +448,8 @@ exports.IncomeReportYear = async (req, res, next) => {
 
 //* 9.Reports-> Income Report weekly------------------------------------------------------------------------------
 exports.weeklyIncomeReport = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
 
@@ -497,7 +509,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -687,6 +699,8 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 
 //* 10.Reports-> Income Report Houly------------------------------------------------------------------------------
 exports.hourlyIncomeReport = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
 
@@ -728,7 +742,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { userId },
     attributes: ['id'],
   })
 
@@ -889,12 +903,14 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 
 exports.averageJobsReport = async (req, res, next) => {
   // 1. Extract the 'year' from query parameters
+  const userId = req.params?.salon || req.user?.id
+
   const { year } = req.query
 
   let startDate, endDate
 
   const salonData = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { userId },
     attributes: ['id', 'createdAt'],
     raw: true,
   })
