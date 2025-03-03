@@ -2520,12 +2520,12 @@ exports.fetchFAQs = async (req, res, next) => {
 //^ 2.Update FAQs  ----------------------------
 
 exports.updateFAQs = async (req, res, next) => {
-  await faqs.update({ reason: req.body }, { where: { type: req.params?.id } })
+  await faqs.update(req.body, { where: { id: req.params?.id } })
 
   return res.status(200).json(
     response({
       message: 'success',
-      data: {},
+      data: { id: req.params?.id },
     }),
   )
 }
