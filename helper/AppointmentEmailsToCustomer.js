@@ -682,10 +682,13 @@ module.exports = function (to, data, state = 'book') {
                                       </td>
  </tr>`
 
+  const businessEmail =
+    data.salonDetail?.businessEmail || data.salonDetail?.user?.email
   transporter.sendMail(
     {
       from: `${salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`, // sender address
       to: ['sigidevelopers@gmail.com'],
+      replyTo: businessEmail,
       subject: subject, // Subject line
       attachments: attachments,
       html: `<!DOCTYPE html>

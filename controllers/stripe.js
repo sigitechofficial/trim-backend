@@ -483,6 +483,7 @@ async function createConnectAccount(email, country) {
     country: country, // The country code for the account
     email, // The email address of the account holder
     capabilities: {
+      card_payments: { requested: true },
       transfers: { requested: true },
     },
   })
