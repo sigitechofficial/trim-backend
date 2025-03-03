@@ -10,7 +10,9 @@ const {
 const protect = require('../../middlewares/accessCheck')
 const publicProtected = require('../../middlewares/publicProtected')
 const catchAsync = require('../../middlewares/catchAync')
-
+const {
+  fetchFAQs,
+} = require('../../controllers/adminController/adminController')
 const destinationDirectory = './Public/Customer-Profiles/'
 
 if (!fs.existsSync(destinationDirectory)) {
@@ -42,7 +44,7 @@ router.post(
   '/notification-testing',
   catchAsync(appController.notificationTesting),
 )
-
+router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 router.get('/session', protect, catchAsync(appController.session))
 router.post('/home', publicProtected, catchAsync(appController.home))
 router.get('/service-types', publicProtected, catchAsync(fetchServiceTypes))
