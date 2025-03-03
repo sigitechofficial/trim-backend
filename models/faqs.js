@@ -6,11 +6,11 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
     },
     question: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     answer: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     faqFor: {

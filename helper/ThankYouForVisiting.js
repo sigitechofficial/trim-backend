@@ -6,7 +6,6 @@ const attachment = attachments()
 const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 const { emailDateFormate } = require('../utils/emailDateFormate')
-const { builtinRules } = require('eslint/use-at-your-own-risk')
 
 const { CURRENCY_UNIT } = process.env
 module.exports = function (to, input) {
