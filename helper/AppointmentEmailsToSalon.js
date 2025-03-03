@@ -115,9 +115,9 @@ module.exports = function (to, data, state = 'book') {
   })
   jobs = jobs.join(' ')
   const date = emailDateFormate(data.on, data.startTime)
-  const salonName = data.salonDetail.salonName
-  const address = data.salonDetail.addressDB
-  let addressString = `${salonName} - ${address.streetAddress},${address.province} ${address.country}`
+  const salonName = data.salonDetail?.salonName || ''
+  const address = data.salonDetail?.addressDB
+  let addressString = `${salonName} - ${address?.streetAddress},${address?.province} ${address?.country}`
 
   const client = {
     name: `${data?.user?.firstName || ''} ${data?.user?.lastName || ''}`,
@@ -151,10 +151,10 @@ module.exports = function (to, data, state = 'book') {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: ['sigidevelopers@gmail.com'], // list of receivers
+
       subject: subject,
       attachments: attachment.footer,
       html: `<!DOCTYPE html>
-
       <html
         lang="en"
         xmlns:o="urn:schemas-microsoft-com:office:office"

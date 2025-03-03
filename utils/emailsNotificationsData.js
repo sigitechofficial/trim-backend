@@ -35,6 +35,7 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
       'customerId',
       'noshowPolicyVersion',
       'cancellationPolicyVersion',
+
       'by',
       [
         literal(`
@@ -53,7 +54,13 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
     include: [
       {
         model: salonDetail,
-        attributes: ['id', 'salonName', 'connectAccountId', 'coverImage'],
+        attributes: [
+          'id',
+          'salonName',
+          'connectAccountId',
+          'coverImage',
+          'businessEmail',
+        ],
         include: [
           {
             model: addressDBS,

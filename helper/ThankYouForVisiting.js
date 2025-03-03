@@ -6,6 +6,7 @@ const attachment = attachments()
 const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 const { emailDateFormate } = require('../utils/emailDateFormate')
+const { builtinRules } = require('eslint/use-at-your-own-risk')
 
 const { CURRENCY_UNIT } = process.env
 module.exports = function (to, input) {
@@ -114,10 +115,13 @@ module.exports = function (to, input) {
   const address = data.salonDetail.addressDB
   let addressString = `$${address.streetAddress}, ${address.province}, ${address.country}`
   const total = data.total
+  const businessEmail =
+    data.salonDetail?.businessEmail || data.salonDetail?.user?.email
   transporter.sendMail(
     {
       from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
       to: ['sigidevelopers@gmail.com'],
+      replyTo: businessEmail,
       subject: ` Thank you for visiting ${input?.salon?.salonName}.`,
       attachments: attachment.footer.concat(attachment.star),
       html: `<!DOCTYPE html>
