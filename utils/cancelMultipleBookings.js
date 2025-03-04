@@ -14,16 +14,20 @@ const {
 const Stripe = require('../controllers/stripe')
 
 async function processAllAppointments(allAppointments) {
-  for (const appointment of allAppointments) {
-    try {
-      await processAppointment(appointment)
-      console.log(
-        `Appointment ${appointment.bookingId} processed successfully.`,
-      )
-    } catch (error) {
-      console.error(`Failed to process appointment ${appointment?.id}:`, error)
+  if (!allAppointments || allAppointments.length)
+    for (const appointment of allAppointments) {
+      try {
+        await processAppointment(appointment)
+        console.log(
+          `Appointment ${appointment.bookingId} processed successfully.`,
+        )
+      } catch (error) {
+        console.error(
+          `Failed to process appointment ${appointment?.id}:`,
+          error,
+        )
+      }
     }
-  }
 }
 
 async function processAppointment(appointment) {

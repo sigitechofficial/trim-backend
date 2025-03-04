@@ -48,6 +48,12 @@ const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+
+const {
+  processAllAppointments,
+  processAppointment,
+} = require('../../utils/cancelMultipleBookings')
+
 function formatDateTime(date) {
   // Format the date portion as 'YYYY-MM-DD'
   const year = date.getFullYear()
@@ -2738,4 +2744,78 @@ exports.changePaymentMethodsForSubscription = async (req, res, next) => {
       data: { price: output },
     }),
   )
+}
+
+//!Account Delete
+//* 1. SALON Account Delete
+exports.accountDelete = async (req, res, next) => {
+  const id = req.user.id
+
+  const salon = await salonDetail.findOne({
+    where: { userId: id },
+    attributes: ['id'],
+  })
+
+  const data = await user.findOne({
+    where: { id },
+    attributes: [
+      'firstName',
+      'lastName',
+      'image',
+      'email',
+      'countryCode',
+      'phoneNum',
+      'stripeCustomerId',
+      [
+        literal(
+          `(SELECT COUNT(*) 
+           FROM bookings 
+           WHERE bookings.customerId = user.id 
+           AND bookings.status IN ('pending', 'book', 'saveunpaid'))`,
+        ),
+        'bookingCount',
+      ],
+    ],
+  })
+
+  if (!data || salon) throw new appError('resource not found', 200)
+
+  if (salon) {
+    const work = await booking.findAll({
+      where: {
+        [Op.or]: [{ status: 'assign' }, { status: 'pending' }],
+        salonDetailId: salon?.id,
+      },
+      attributes: [
+        'id',
+        'status',
+        'actualCapturedAmount',
+        'tip',
+        'initialPaymentIntend',
+        'stripeCardId',
+        'total',
+        'subTotal',
+        'initialPayment',
+        'salonDetailId',
+      ],
+    })
+    processAllAppointments(work)
+  }
+  //TODO using Customer table for salon as well. will change in future if needed
+  await deletedCustomer.create({ userId: id, ...data.get({ plain: true }) })
+  await user.update(
+    {
+      deleted: true,
+      firstName: 'Anonymous',
+      lastName: 'Customer',
+      email: `Anonymous${id}@gmail.com`,
+      countryCode: '+00',
+      phoneNum: '000 0000000',
+      image: '',
+    },
+    { where: { id } },
+  )
+  Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
+  deviceToken.destroy({ where: { userId: id } })
+  return res.json(response({ message: 'Account Deleted.', data: { data } }))
 }

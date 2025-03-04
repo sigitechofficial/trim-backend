@@ -1010,10 +1010,39 @@ async function updateSubscriptionPaymentMethod(
     throw new AppError(`${error.message}`, 200)
   }
 }
+
+async function deleteCustomer(customerId, type) {
+  try {
+    if (!customerId) return 0
+    // First, retrieve the customer to get their subscriptions and cards
+    if (type == 'salon') {
+      const customer = await stripe.customers.retrieve(customerId)
+
+      // Cancel all subscriptions associated with the customer
+      await Promise.all(
+        customer.subscriptions.data.map(async (subscription) => {
+          await stripe.subscriptions.del(subscription.id)
+        }),
+      )
+    }
+
+    // Finally, delete the customer itself
+    await stripe.customers.del(customerId)
+
+    console.log(
+      `Customer ${customerId} and associated subscriptions cancelled/deleted successfully`,
+    )
+  } catch (error) {
+    console.error(error)
+    throw new AppError(`${error.message}`, 200)
+  }
+}
+
 module.exports = {
   updateSubscriptionPaymentMethod,
   sessionCheckoutPaymnet,
   // customer
+  deleteCustomer,
   addCustomer,
   // payment Mehtods
   addCard,
