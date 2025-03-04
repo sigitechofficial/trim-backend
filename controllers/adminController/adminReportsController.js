@@ -266,17 +266,7 @@ exports.mostPopularServices = async (req, res, next) => {
 //* 7.Reports-> Booking performance----------------------------------------------------------------------------
 
 exports.bookingPerformance = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
-
-  const salon = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id'],
-  })
-
-  const condition = {
-    salonDetailId: salon.id,
-    // deleted: false,
-  }
+  const condition = {}
 
   let complete = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'complete')`
   let cancel = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'cancel')`
@@ -315,8 +305,6 @@ exports.bookingPerformance = async (req, res, next) => {
 //* 8.Reports-> Income Report Yearly------------------------------------------------------------------------------
 
 exports.IncomeReportYear = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
-
   const { year } = req.params
 
   // Validate that 'year' is provided
@@ -365,22 +353,14 @@ exports.IncomeReportYear = async (req, res, next) => {
       ORDER BY MONTH(bookings.on)
     `
 
-  // Fetch the salon details for the current user
-  const salon = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id'],
-  })
-
-  if (!salon) throw new AppError('resource not found', 404)
-
   // Execute both queries concurrently
   const [currentYearRevenue, lastYearRevenue] = await Promise.all([
     sequelize.query(currentYearRevenueQuery, {
-      replacements: { salonDetailId: salon.id, thisYear },
+      replacements: { thisYear },
       type: sequelize.QueryTypes.SELECT,
     }),
     sequelize.query(lastYearRevenueQuery, {
-      replacements: { salonDetailId: salon.id, lastYear },
+      replacements: { lastYear },
       type: sequelize.QueryTypes.SELECT,
     }),
   ])
@@ -435,8 +415,6 @@ exports.IncomeReportYear = async (req, res, next) => {
 
 //* 9.Reports-> Income Report weekly------------------------------------------------------------------------------
 exports.weeklyIncomeReport = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
-
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
 
@@ -494,14 +472,6 @@ exports.weeklyIncomeReport = async (req, res, next) => {
     formattedPrevEndDate,
   )
 
-  // Fetch the salon details for the current user
-  const salon = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id'],
-  })
-
-  if (!salon) throw new AppError(`Salon not found!`, 200)
-
   // Fetch earliest and latest booking dates for all-time average
   const bookingDates = await sequelize.query(
     `
@@ -509,11 +479,10 @@ exports.weeklyIncomeReport = async (req, res, next) => {
         MIN(bookings.on) AS earliestDate,
         MAX(bookings.on) AS latestDate
       FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete'
+      WHERE bookings.status = 'complete'
       `,
     {
-      replacements: { salonDetailId: salon.id },
+      // replacements: {},
       type: sequelize.QueryTypes.SELECT,
     },
   )
@@ -544,8 +513,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
         DAYNAME(bookings.on) AS day,
         SUM(bookings.total) AS revenue 
       FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      WHERE bookings.status = 'complete' 
         AND bookings.on >= :startDate 
         AND bookings.on <= :endDate
       GROUP BY DAYNAME(bookings.on)
@@ -556,8 +524,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
         DAYNAME(bookings.on) AS day,
         SUM(bookings.total) AS revenue 
       FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      WHERE bookings.status = 'complete' 
         AND bookings.on >= :prevStartDate 
         AND bookings.on <= :prevEndDate
       GROUP BY DAYNAME(bookings.on)
@@ -568,8 +535,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
         DAYNAME(bookings.on) AS day,
         SUM(bookings.total) AS totalRevenue 
       FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      WHERE bookings.status = 'complete' 
       GROUP BY DAYNAME(bookings.on)
     `
 
@@ -578,7 +544,6 @@ exports.weeklyIncomeReport = async (req, res, next) => {
     await Promise.all([
       sequelize.query(thisWeekRevenueQuery, {
         replacements: {
-          salonDetailId: salon.id,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
         },
@@ -586,14 +551,12 @@ exports.weeklyIncomeReport = async (req, res, next) => {
       }),
       sequelize.query(previousWeekRevenueQuery, {
         replacements: {
-          salonDetailId: salon.id,
           prevStartDate: formattedPrevStartDate,
           prevEndDate: formattedPrevEndDate,
         },
         type: sequelize.QueryTypes.SELECT,
       }),
       sequelize.query(allTimeRevenueQuery, {
-        replacements: { salonDetailId: salon.id },
         type: sequelize.QueryTypes.SELECT,
       }),
     ])

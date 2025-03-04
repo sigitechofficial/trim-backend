@@ -1000,6 +1000,28 @@ exports.updateCategory = async (req, res, next) => {
     returnFunction('1', 'Salon Category Updated Successfully!', {}, ''),
   )
 }
+
+exports.changeCategoryStatus = async (req, res, next) => {
+  const { status } = req.body
+  const { id } = req.params
+  await category.update(
+    { status },
+    {
+      where: { id },
+    },
+  )
+
+  await service.update(
+    { status },
+    {
+      where: { categoryId: id },
+    },
+  )
+
+  return res.json(
+    returnFunction('1', 'Salon Category Updated Successfully!', {}, ''),
+  )
+}
 //! Coupon
 /*
             6.Fetch Coupons

@@ -32,6 +32,11 @@ router.get(
   catchAsync(adminReports.busiestVsQuietestAdmin),
 )
 
+router.get(
+  '/overall-report/income-report-week',
+  catchAsync(adminReports.weeklyIncomeReport),
+)
+
 /////////////////////////////////////////////////////////////////////////////
 router.get(
   '/single-salon-report/busiest-vs-quietest/:basedOn/:salon',
