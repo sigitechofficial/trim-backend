@@ -1019,7 +1019,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon Category Updated Successfully!', {}, ''),
+    returnFunction('1', 'Salon category status updated successfully!', {}, ''),
   )
 }
 //! Coupon

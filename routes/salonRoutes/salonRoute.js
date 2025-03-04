@@ -329,4 +329,9 @@ router.patch(
 
 router.delete('/account-delete', catchAsync(salonController.accountDelete))
 
+router.patch(
+  '/change-category-status/:id',
+  catchAsync(salonController.changeCategoryStatus),
+)
+
 module.exports = router
