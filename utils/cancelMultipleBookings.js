@@ -10,7 +10,7 @@ const {
 } = require('../controllers/eventDrivenCommunication/appointmentCancel')
 const {
   socketForCalendar,
-} = require('../eventDrivenCommunication/calendarView')
+} = require('../controllers/eventDrivenCommunication/calendarView')
 const Stripe = require('../controllers/stripe')
 
 async function processAllAppointments(allAppointments) {
