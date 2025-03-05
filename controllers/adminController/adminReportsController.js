@@ -304,7 +304,7 @@ exports.bookingPerformance = async (req, res, next) => {
 
 //* 8.Reports-> Income Report Yearly------------------------------------------------------------------------------
 
-exports.IncomeReportYear = async (req, res, next) => {
+exports.IncomeReportYearAdmin = async (req, res, next) => {
   const { year } = req.params
 
   // Validate that 'year' is provided
@@ -333,9 +333,7 @@ exports.IncomeReportYear = async (req, res, next) => {
       SELECT 
         MONTH(bookings.on) AS month, 
         SUM(bookings.total) AS revenue 
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      FROM bookings WHERE  bookings.status = 'complete' 
         AND YEAR(bookings.on) = :thisYear
       GROUP BY MONTH(bookings.on)
       ORDER BY MONTH(bookings.on)
@@ -345,9 +343,7 @@ exports.IncomeReportYear = async (req, res, next) => {
       SELECT 
         MONTH(bookings.on) AS month, 
         SUM(bookings.total) AS revenue 
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      FROM bookings WHERE bookings.status = 'complete' 
         AND YEAR(bookings.on) = :lastYear
       GROUP BY MONTH(bookings.on)
       ORDER BY MONTH(bookings.on)
@@ -414,7 +410,7 @@ exports.IncomeReportYear = async (req, res, next) => {
 }
 
 //* 9.Reports-> Income Report weekly------------------------------------------------------------------------------
-exports.weeklyIncomeReport = async (req, res, next) => {
+exports.weeklyIncomeReportAdmin = async (req, res, next) => {
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
 
@@ -648,7 +644,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 }
 
 //* 10.Reports-> Income Report Houly------------------------------------------------------------------------------
-exports.hourlyIncomeReport = async (req, res, next) => {
+exports.hourlyIncomeReportAdmin = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   // Extract startDate and endDate from query parameters
@@ -706,12 +702,9 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       SELECT 
         MIN(bookings.on) AS earliestDate,
         MAX(bookings.on) AS latestDate
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete'
+      FROM bookings WHERE bookings.status = 'complete'
     `,
     {
-      replacements: { salonDetailId: salonId },
       type: sequelize.QueryTypes.SELECT,
     },
   )
@@ -739,9 +732,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       SELECT 
         HOUR(bookings.startTime) AS hour,
         SUM(bookings.total) AS revenue 
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      FROM bookings WHERE bookings.status = 'complete' 
         AND bookings.on BETWEEN :startDate AND :endDate
       GROUP BY HOUR(bookings.startTime)
       ORDER BY HOUR(bookings.startTime)
@@ -751,9 +742,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       SELECT 
         HOUR(bookings.startTime) AS hour,
         SUM(bookings.total) AS revenue 
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete' 
+      FROM bookings WHERE bookings.status = 'complete' 
         AND bookings.on BETWEEN :prevStartDate AND :prevEndDate
       GROUP BY HOUR(bookings.startTime)
       ORDER BY HOUR(bookings.startTime)
@@ -763,9 +752,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       SELECT 
         HOUR(bookings.startTime) AS hour,
         SUM(bookings.total) AS totalRevenue 
-      FROM bookings 
-      WHERE bookings.salonDetailId = :salonDetailId 
-        AND bookings.status = 'complete'
+      FROM bookings WHERE bookings.status = 'complete'
       GROUP BY HOUR(bookings.startTime)
       ORDER BY HOUR(bookings.startTime)
     `
@@ -775,7 +762,6 @@ exports.hourlyIncomeReport = async (req, res, next) => {
     await Promise.all([
       sequelize.query(thisWeekRevenueQuery, {
         replacements: {
-          salonDetailId: salonId,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
         },
@@ -783,14 +769,12 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       }),
       sequelize.query(previousWeekRevenueQuery, {
         replacements: {
-          salonDetailId: salonId,
           prevStartDate: formattedPrevStartDate,
           prevEndDate: formattedPrevEndDate,
         },
         type: sequelize.QueryTypes.SELECT,
       }),
       sequelize.query(allTimeAverageRevenueQuery, {
-        replacements: { salonDetailId: salonId },
         type: sequelize.QueryTypes.SELECT,
       }),
     ])
@@ -847,95 +831,4 @@ exports.hourlyIncomeReport = async (req, res, next) => {
       },
     }),
   )
-}
-
-//* 11.Reports-> Income Report week------------------------------------------------------------------------------
-
-exports.averageJobsReport = async (req, res, next) => {
-  // 1. Extract the 'year' from query parameters
-  const userId = req.params?.salon || req.user?.id
-
-  const { year } = req.query
-
-  let startDate, endDate
-
-  const salonData = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id', 'createdAt'],
-    raw: true,
-  })
-  console.log('🚀 ~ exports.averageJobsReport= ~ salonData:', salonData.id)
-
-  if (year) {
-    // Annual Report
-    startDate = new Date(`${year}-01-01T00:00:00Z`)
-    endDate = new Date(`${year}-12-31T23:59:59Z`)
-  } else {
-    if (salonData && salonData.createdAt) {
-      startDate = new Date(salonData.createdAt)
-    } else {
-      // If salon.createdAt is not found, default to a very early date
-      startDate = new Date('2024-01-01T00:00:00Z')
-    }
-
-    endDate = new Date() // Current date and time
-  }
-
-  // 2. Calculate the number of weeks and months in the reporting period
-  const numberOfWeeks = getNumberOfWeeks(startDate, endDate)
-  const numberOfMonths = getNumberOfMonths(startDate, endDate)
-
-  // 3. Fetch employees with their firstName, lastName, and count of jobs
-  const appointments = await employee.findAll({
-    where: {
-      salonDetailId: salonData.id,
-      deleted: false,
-      isExternalEmployee: false,
-    },
-    attributes: [
-      'id',
-      [
-        literal(
-          `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-             FROM users 
-             WHERE users.id = employee.userId)`,
-        ),
-        'fullName',
-      ],
-      [
-        literal(
-          `(SELECT COUNT(job.id) 
-              FROM jobs AS job
-              WHERE job.employeeId = employee.id 
-                AND job.status = 'complete' 
-                AND job.on BETWEEN '${formatDateTime(startDate)}' AND '${formatDateTime(endDate)}')`,
-        ),
-        'servicesProvided',
-      ],
-    ],
-    raw: true,
-  })
-
-  // 4. Assemble the report
-  const report = appointments.map((emp) => {
-    const name = emp.fullName || `Emp #${emp.id}`
-    const totalJobs = parseInt(emp.servicesProvided, 10) || 0
-    const averageBookingsPerWeek =
-      numberOfWeeks > 0
-        ? parseFloat((totalJobs / numberOfWeeks).toFixed(1))
-        : 0.0
-    const averageBookingsPerMonth =
-      numberOfMonths > 0
-        ? parseFloat((totalJobs / numberOfMonths).toFixed(1))
-        : 0.0
-    return {
-      name: name,
-      averageBookingsPerWeek: averageBookingsPerWeek,
-      averageBookingsPerMonth: averageBookingsPerMonth,
-    }
-  })
-
-  return res
-    .status(200)
-    .json(response({ message: 'success', data: { report } }))
 }
