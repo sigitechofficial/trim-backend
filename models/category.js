@@ -13,6 +13,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    status: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   })
 
   category.associate = (models) => {

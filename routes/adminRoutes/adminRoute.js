@@ -4,6 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const router = express.Router()
 const adminController = require('../../controllers/adminController/adminController')
+const adminReports = require('../../controllers/adminController/adminReportsController')
 const reportController = require('../../controllers/salonControllers/newReportsController')
 const customerController = require('../../controllers/userControllers/customerController')
 const protect = require('../../middlewares/accessCheck')
@@ -20,9 +21,23 @@ const {
   pushNotification,
   role,
 } = require('../../models')
+// !Module:1 Home
 
 const { createDestinationDirectory } = require('../../utils/customFunctions')
 
+router.post('/auth/login', catchAsync(adminController.login))
+//!NEW REPORTS FOR ADMIN
+router.get(
+  '/overall-report/busiest-vs-quietest/:basedOn',
+  catchAsync(adminReports.busiestVsQuietestAdmin),
+)
+
+router.get(
+  '/overall-report/income-report-week',
+  catchAsync(adminReports.weeklyIncomeReport),
+)
+
+/////////////////////////////////////////////////////////////////////////////
 router.get(
   '/single-salon-report/busiest-vs-quietest/:basedOn/:salon',
   catchAsync(reportController.busiestVsQuietest),
@@ -65,9 +80,6 @@ router.get(
   '/single-salon-report/average-bookings/:salon',
   catchAsync(reportController.averageJobsReport),
 )
-
-// !Module:1 Home
-router.post('/auth/login', catchAsync(adminController.login))
 
 //!2.Service Types -------------------------------
 const serviceTypeImage = multer.diskStorage({

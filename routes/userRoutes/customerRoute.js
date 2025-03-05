@@ -168,9 +168,7 @@ router.post(
   protect,
   catchAsync(appController.skipRating),
 )
-
 //Stripe customers Ephemeral Secret
-
 router.patch(
   '/ephemeral-secret/renew',
   protect,
@@ -190,7 +188,7 @@ router.post(
   protect,
   catchAsync(appController.accountDelete),
 )
-//LOGOUT
+
 router.post('/logout', protect, catchAsync(appController.logout))
 //! Client Feed Back
 

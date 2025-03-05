@@ -36,6 +36,10 @@ const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
 const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees')
 
+const {
+  processAllAppointments,
+  processAppointment,
+} = require('../../utils/cancelMultipleBookings')
 //! Return Function
 let returnFunction = (status, message, data, error) => {
   return {
@@ -1010,30 +1014,59 @@ exports.deleteEmployee = async (req, res, next) => {
   if (worker?.dataValues?.isOwner) {
     return next(new appError('The salon owner cannot be deleted.', 200))
   }
-  const employeeId = worker?.dataValues?.employeeId
-  console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
-  const work = await jobs.findAll({
-    where: { status: 'assign', employeeId },
-    attributes: ['id', 'bookingId'],
-  })
   // return res.json({ work, employeeId })
-  if (work && work.length > 0) {
-    const jobsIds = work.map((ele) => ele.id)
-    console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
-    const bookingIds = work.map((ele) => ele.bookingId)
-    console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
-    const uniqueBookingIds = [...new Set(bookingIds)]
-    console.log(
-      '🚀 ~ exports.deleteEmployee ~ uniqueBookingIds:',
-      uniqueBookingIds,
-    )
-    jobs.update(
-      { employeeId: null, status: 'pending' },
-      { where: { id: jobsIds } },
-    )
-    booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
-  }
 
+  if (worker?.isExternalEmployee) {
+    const salon = await salonDetail.findOne({
+      where: { userId },
+      attributes: ['id'],
+    })
+    if (salon) {
+      const work = await booking.findAll({
+        where: {
+          [Op.or]: [{ status: 'assign' }, { status: 'pending' }],
+          salonDetailId: salon?.id,
+        },
+        attributes: [
+          'id',
+          'status',
+          'actualCapturedAmount',
+          'tip',
+          'initialPaymentIntend',
+          'stripeCardId',
+          'total',
+          'subTotal',
+          'initialPayment',
+          'salonDetailId',
+        ],
+      })
+      processAllAppointments(work)
+    }
+  } else {
+    const employeeId = worker?.dataValues?.employeeId
+    console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
+    const work = await jobs.findAll({
+      where: { status: 'assign', employeeId },
+      attributes: ['id', 'bookingId'],
+    })
+
+    if (work && work.length > 0) {
+      const jobsIds = work.map((ele) => ele.id)
+      console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
+      const bookingIds = work.map((ele) => ele.bookingId)
+      console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
+      const uniqueBookingIds = [...new Set(bookingIds)]
+      console.log(
+        '🚀 ~ exports.deleteEmployee ~ uniqueBookingIds:',
+        uniqueBookingIds,
+      )
+      jobs.update(
+        { employeeId: null, status: 'pending' },
+        { where: { id: jobsIds } },
+      )
+      booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
+    }
+  }
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })
   deviceToken.destroy({ where: { userId } })

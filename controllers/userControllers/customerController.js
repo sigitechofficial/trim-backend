@@ -535,6 +535,8 @@ exports.salonDetails = async (req, res, next) => {
       },
       {
         model: category,
+        where: { status: true },
+        required: false,
         attributes: ['id', 'categoryName', 'color'],
         include: {
           model: service,
@@ -2365,6 +2367,7 @@ exports.accountDelete = async (req, res, next) => {
     },
     { where: { id } },
   )
+  Stripe.deleteCustomer(data?.stripeCustomerId)
   deviceToken.destroy({ where: { userId: id } })
   return res.json(response({ message: 'Account Deleted.', data: { data } }))
 }

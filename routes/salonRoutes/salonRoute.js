@@ -327,4 +327,11 @@ router.patch(
   catchAsync(salonController.attachPaymentMethodsForSubscription),
 )
 
+router.delete('/account-delete', catchAsync(salonController.accountDelete))
+
+router.patch(
+  '/change-category-status/:id',
+  catchAsync(salonController.changeCategoryStatus),
+)
+
 module.exports = router

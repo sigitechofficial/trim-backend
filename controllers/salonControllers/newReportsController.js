@@ -104,7 +104,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
 
   const condition = {
     salonDetailId: salon.id,
-    // status: 'complete'
+    status: 'complete',
     deleted: false,
     isExternalEmployee: false,
   }
