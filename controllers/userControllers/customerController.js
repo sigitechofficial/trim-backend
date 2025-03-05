@@ -536,7 +536,7 @@ exports.salonDetails = async (req, res, next) => {
       {
         model: category,
         where: { status: true },
-        required: false,
+        required: true,
         attributes: ['id', 'categoryName', 'color'],
         include: {
           model: service,
