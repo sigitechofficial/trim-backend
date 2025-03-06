@@ -45,8 +45,13 @@ router.get(
 )
 
 router.get(
-  '/overall-reportt/most-popular-service-types',
+  '/overall-report/most-popular-service-types',
   catchAsync(adminReports.mostPopularServiceTypes),
+)
+
+router.get(
+  '/overall-report/service-types-performance',
+  catchAsync(adminReports.bookingPerformance),
 )
 
 // router.get(
