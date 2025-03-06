@@ -296,11 +296,19 @@ exports.login = async (req, res, next) => {
   // }
   console.log('🚀 ~ !User.verifiedAt:', !User.verifiedAt)
   console.log("🚀 ~ User.signedFrom == 'email':", User.signedFrom == 'email')
-  if (
-    User.signedFrom == 'email' ||
-    (User.signedFrom == 'walkin' && !User.verifiedAt)
-  ) {
-    console.log('🚀 ~ User.verifiedAt:', User.verifiedAt)
+
+  if (User.signedFrom == 'walkin' && !User.password) {
+    return res.json(
+      returnFunction(
+        '3',
+        'Reset your password.',
+        { email: `${User.email}` },
+        '',
+      ),
+    )
+  }
+
+  if (User.signedFrom == 'email' && !User.verifiedAt) {
     return res.json(
       returnFunction(
         '2',
@@ -450,6 +458,7 @@ exports.updatePassword = async (req, res, next) => {
     )
   }
   User.password = await bcrypt.hash(newPassword, 12)
+  User.verifiedAt = Date.now()
   await User.save()
 
   return res.json(returnFunction('1', 'Password updated successfully.', {}, ''))
