@@ -1374,10 +1374,11 @@ exports.addWalkinCustomer = async (req, res, next) => {
 
   let userExist = await user.findOne({
     where: {
-      [Op.or]: [
-        { email: email },
-        // { [Op.and]: [{ countryCode: countryCode }, { phonenum: phoneNum }] },
-      ],
+      email: email,
+      // [Op.or]: [
+      //   { email: email },
+      //   // { [Op.and]: [{ countryCode: countryCode }, { phonenum: phoneNum }] },
+      // ],
       deletedAt: { [Op.is]: null },
     },
   })
