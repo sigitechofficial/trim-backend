@@ -271,7 +271,6 @@ exports.login = async (req, res, next) => {
     },
     include: [{ model: deviceToken, required: false, attributes: ['tokenId'] }],
   })
-  console.log('🚀 ~ exports.login= ~ User:', User)
 
   // if (!User || password !== User.password) {
   // this is fri email or by google
@@ -291,19 +290,17 @@ exports.login = async (req, res, next) => {
       ),
     )
   }
+
+  // if (User.signedFrom == 'walkin') {
+  //   return next(new appError(`Invalid Email. User not Found.`, 200))
+  // }
+  console.log('🚀 ~ !User.verifiedAt:', !User.verifiedAt)
+  console.log("🚀 ~ User.signedFrom == 'email':", User.signedFrom == 'email')
   if (
-    User.signedFrom == 'email' &&
-    password &&
-    !(await bcrypt.compare(password || '123', User?.password))
+    User.signedFrom == 'email' ||
+    (User.signedFrom == 'walkin' && !User.verifiedAt)
   ) {
-    return next(new appError('Incorrect Password', 200))
-  }
-
-  if (!User.status) {
-    return next(new appError('User Blocked by admin', 200))
-  }
-
-  if (User.signedFrom == 'email' && !User.verifiedAt) {
+    console.log('🚀 ~ User.verifiedAt:', User.verifiedAt)
     return res.json(
       returnFunction(
         '2',
@@ -312,6 +309,18 @@ exports.login = async (req, res, next) => {
         '',
       ),
     )
+  }
+
+  if (
+    User.signedFrom == 'email' &&
+    password &&
+    !(await bcrypt.compare(password, User?.password || '1'))
+  ) {
+    return next(new appError('Incorrect Password', 200))
+  }
+
+  if (!User.status) {
+    return next(new appError('User Blocked by admin', 200))
   }
 
   // check Device Token

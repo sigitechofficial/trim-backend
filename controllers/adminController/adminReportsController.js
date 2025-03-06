@@ -17,6 +17,7 @@ const {
   booking,
   jobs,
   opportunities,
+  serviceType,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
@@ -213,47 +214,44 @@ exports.totalBookings = async (req, res, next) => {
 }
 
 //* 6.Reports-> Most popular service--------------------------------------------------------------------------
+exports.mostPopularServiceTypes = async (req, res, next) => {
+  // Build the subquery to count completed jobs for services under each serviceType.
+  // The inner query ensures that only services belonging to the current salon are counted.
+  let subQuery = `(SELECT COUNT(*) 
+                     FROM jobs AS j 
+                     WHERE j.serviceId IN (
+                       SELECT s.id FROM services AS s 
+                       WHERE s.serviceTypeId = serviceType.id 
+                     ) 
+                     AND j.status = 'complete')`
 
-exports.mostPopularServices = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
-
-  const salon = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id'],
-  })
-
-  const condition = {
-    salonDetailId: salon.id,
-    deleted: false,
-  }
-
-  let queryString = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'complete')`
+  // If a date range is provided, adjust the subquery to count jobs within that range.
   if (req.query && req.query.startDate && req.query.endDate) {
-    const startDate = req.query.startDate
-    const endDate = req.query.endDate
-    queryString = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'complete' AND jobs.on BETWEEN '${startDate}' AND '${endDate}')`
+    const { startDate, endDate } = req.query
+    subQuery = `(SELECT COUNT(*) 
+                   FROM jobs AS j 
+                   WHERE j.serviceId IN (
+                     SELECT s.id FROM services AS s 
+                     WHERE s.serviceTypeId = serviceType.id 
+                   ) 
+                   AND j.status = 'complete'
+                   AND j.on BETWEEN '${startDate}' AND '${endDate}')`
   }
 
-  const result = await service.findAll({
-    where: { salonDetailId: salon?.id },
+  // Query the serviceType model and include the computed services count.
+  const result = await serviceType.findAll({
+    // If your serviceType model does not have a direct salonDetailId field,
+    // ensure you adjust your association or query accordingly.
+    // Here we assume all serviceTypes are relevant to the salon.
+    where: { deleted: false },
     attributes: [
       'id',
-      'serviceName',
-      [literal(queryString), 'servicesCount'],
-
-      [
-        literal(
-          `(SELECT categories.color
-           FROM categories WHERE categories.id = service.categoryId)`,
-        ),
-        'color',
-      ],
+      'typeName',
+      'image',
+      [literal(subQuery), 'servicesCount'],
     ],
   })
 
-  // const report = JSON.parse(JSON.stringify(appointments))
-  // const input = JSON.parse(JSON.stringify(appointments))
-  // const ouptut = processServicesReport({ report: input, servicesList })
   return res.status(200).json(
     response({
       data: {
@@ -264,35 +262,64 @@ exports.mostPopularServices = async (req, res, next) => {
 }
 
 //* 7.Reports-> Booking performance----------------------------------------------------------------------------
-
 exports.bookingPerformance = async (req, res, next) => {
-  const condition = {}
+  // Build the subqueries to count jobs for each status, aggregating over all services
+  // that belong to a given service type.
+  let complete = `(SELECT COUNT(*) FROM jobs AS j 
+                      WHERE j.serviceId IN (
+                        SELECT s.id FROM services AS s 
+                        WHERE s.serviceTypeId = serviceType.id
+                      ) AND j.status = 'complete')`
 
-  let complete = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'complete')`
-  let cancel = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'cancel')`
-  let noshow = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'no-show')`
+  let cancel = `(SELECT COUNT(*) FROM jobs AS j 
+                    WHERE j.serviceId IN (
+                      SELECT s.id FROM services AS s 
+                      WHERE s.serviceTypeId = serviceType.id
+                    ) AND j.status = 'cancel')`
+
+  let noshow = `(SELECT COUNT(*) FROM jobs AS j 
+                    WHERE j.serviceId IN (
+                      SELECT s.id FROM services AS s 
+                      WHERE s.serviceTypeId = serviceType.id
+                    ) AND j.status = 'no-show')`
+
+  // If a date range is provided in the query parameters, adjust the subqueries accordingly.
   if (req.query && req.query.startDate && req.query.endDate) {
-    const startDate = req.query.startDate
-    const endDate = req.query.endDate
-    complete = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'complete' AND jobs.on BETWEEN '${startDate}' AND '${endDate}')`
-    cancel = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'cancel' AND jobs.on BETWEEN '${startDate}' AND '${endDate}')`
-    noshow = `(SELECT COUNT(*) FROM jobs WHERE jobs.serviceId = service.id AND jobs.status = 'no-show' AND jobs.on BETWEEN '${startDate}' AND '${endDate}')`
+    const { startDate, endDate } = req.query
+    complete = `(SELECT COUNT(*) FROM jobs AS j 
+                   WHERE j.serviceId IN (
+                     SELECT s.id FROM services AS s 
+                     WHERE s.serviceTypeId = serviceType.id
+                   ) AND j.status = 'complete' 
+                   AND j.on BETWEEN '${startDate}' AND '${endDate}')`
+
+    cancel = `(SELECT COUNT(*) FROM jobs AS j 
+                 WHERE j.serviceId IN (
+                   SELECT s.id FROM services AS s 
+                   WHERE s.serviceTypeId = serviceType.id
+                 ) AND j.status = 'cancel'
+                 AND j.on BETWEEN '${startDate}' AND '${endDate}')`
+
+    noshow = `(SELECT COUNT(*) FROM jobs AS j 
+                 WHERE j.serviceId IN (
+                   SELECT s.id FROM services AS s 
+                   WHERE s.serviceTypeId = serviceType.id
+                 ) AND j.status = 'no-show'
+                 AND j.on BETWEEN '${startDate}' AND '${endDate}')`
   }
 
-  const result = await service.findAll({
-    where: condition,
+  // Query the serviceType model along with the computed counts.
+  const result = await serviceType.findAll({
+    where: { deleted: false }, // adjust condition as needed if you have salon-specific filtering
     attributes: [
       'id',
-      'serviceName',
+      'typeName',
       [literal(complete), 'complete'],
       [literal(cancel), 'cancel'],
       [literal(noshow), 'noshow'],
     ],
   })
 
-  // const report = JSON.parse(JSON.stringify(appointments))
-  // const input = JSON.parse(JSON.stringify(appointments))
-  // const ouptut = processServicesReport({ report: input, servicesList })
   return res.status(200).json(
     response({
       data: {
