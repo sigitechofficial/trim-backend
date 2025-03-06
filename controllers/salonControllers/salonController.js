@@ -2803,7 +2803,7 @@ exports.accountDelete = async (req, res, next) => {
     ],
   })
 
-  if (!data || salon) throw new appError('resource not found', 200)
+  if (!data || !salon) throw new appError('resource not found', 200)
 
   if (salon) {
     const work = await booking.findAll({
