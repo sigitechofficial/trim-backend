@@ -2078,6 +2078,8 @@ exports.addCategory = async (req, res, next) => {
         ),
       )
   }
+
+  req.body.status = true
   await category.create(req.body)
 
   return res
