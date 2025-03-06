@@ -36,6 +36,7 @@ const {
   salonProfiles,
   allergies,
   clientNotes,
+  deletedCustomer,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')

@@ -44,6 +44,11 @@ router.get(
   catchAsync(adminReports.hourlyIncomeReportAdmin),
 )
 
+router.get(
+  '/overall-reportt/most-popular-service-types',
+  catchAsync(adminReports.mostPopularServiceTypes),
+)
+
 // router.get(
 //   '/overall-report/income-report-week',
 //   catchAsync(adminReports.weeklyIncomeReport),
