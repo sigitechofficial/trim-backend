@@ -433,7 +433,7 @@ exports.fecthSalons = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
   const condition = {
-    isExternalEmployee: { [Op.or]: [false, null], delete: 0 },
+    isExternalEmployee: { [Op.or]: [false, null] },
   }
 
   if (req.params?.subscription == 'active') {
