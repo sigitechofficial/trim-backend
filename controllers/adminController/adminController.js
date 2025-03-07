@@ -432,7 +432,9 @@ exports.fetchSalonCustomer = async (req, res, next) => {
 exports.fecthSalons = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
-  const condition = { isExternalEmployee: { [Op.or]: [false, null] } }
+  const condition = {
+    isExternalEmployee: { [Op.or]: [false, null], delete: 0 },
+  }
 
   if (req.params?.subscription == 'active') {
     condition.registrationExpiryDate = { [Op.gte]: currentDay.currentDateOnly }
@@ -518,6 +520,7 @@ exports.fecthSalons = async (req, res, next) => {
       {
         model: user,
         required: true,
+        where: { delete: 0 },
         attributes: [
           `id`,
           `firstName`,

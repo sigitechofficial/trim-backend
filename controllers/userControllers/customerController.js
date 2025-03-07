@@ -244,6 +244,7 @@ exports.home = async (req, res, next) => {
     ],
     approvedByAdmin: true,
     status: 1,
+    deleted: 0,
   }
 
   // Apply favorite filter if requested
@@ -364,7 +365,7 @@ exports.home = async (req, res, next) => {
       },
       {
         model: user,
-        where: { status: true },
+        where: { status: true, deleted: 0 },
         required: true,
         attributes: ['id'],
       },

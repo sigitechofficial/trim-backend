@@ -156,6 +156,7 @@ async function createPaymentIntendForUpFrontPayments(
       automatic_payment_methods: {
         enabled: true,
       },
+      application_fee_amount: 50,
       transfer_data: {
         destination: accountId, // Replace with the Connect account ID
       },
