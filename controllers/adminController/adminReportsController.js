@@ -754,7 +754,6 @@ exports.hourlyIncomeReportAdmin = async (req, res, next) => {
       ? calculateNumberOfDays(earliestDate, latestDate)
       : 0
 
-  // Define SQL queries for this week, previous week, and all-time average
   const thisWeekRevenueQuery = `
       SELECT 
         HOUR(bookings.startTime) AS hour,
