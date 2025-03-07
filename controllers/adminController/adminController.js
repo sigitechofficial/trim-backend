@@ -520,7 +520,7 @@ exports.fecthSalons = async (req, res, next) => {
       {
         model: user,
         required: true,
-        where: { delete: 0 },
+        where: { deleted: 0 },
         attributes: [
           `id`,
           `firstName`,
