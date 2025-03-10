@@ -2792,15 +2792,6 @@ exports.accountDelete = async (req, res, next) => {
       'countryCode',
       'phoneNum',
       'stripeCustomerId',
-      [
-        literal(
-          `(SELECT COUNT(*) 
-           FROM bookings 
-           WHERE bookings.customerId = user.id 
-           AND bookings.status IN ('pending', 'book', 'saveunpaid'))`,
-        ),
-        'bookingCount',
-      ],
     ],
   })
 
@@ -2828,7 +2819,9 @@ exports.accountDelete = async (req, res, next) => {
     processAllAppointments(work)
   }
   //TODO using Customer table for salon as well. will change in future if needed
+
   await deletedCustomer.create({ userId: id, ...data.get({ plain: true }) })
+
   await user.update(
     {
       deleted: true,
@@ -2841,6 +2834,7 @@ exports.accountDelete = async (req, res, next) => {
     },
     { where: { id } },
   )
+
   Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
   return res.json(response({ message: 'Account Deleted.', data: { data } }))
