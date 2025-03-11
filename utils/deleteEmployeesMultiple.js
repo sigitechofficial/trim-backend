@@ -8,6 +8,7 @@ const {
   user,
   deletedCustomer,
   deviceToken,
+  employee,
 } = require('../models')
 const {
   cancelBySalon,
@@ -20,23 +21,30 @@ const Stripe = require('../controllers/stripe')
 const {
   processAllAppointments,
   processAppointment,
-} = require('../../utils/cancelMultipleBookings')
+} = require('./cancelMultipleBookings')
 
 async function deleteEmployeesAll(salonId) {
-  if (!allAppointments || allAppointments.length)
-    for (const appointment of allAppointments) {
-      try {
-        await processAppointment(appointment)
-        console.log(
-          `Appointment ${appointment.bookingId} processed successfully.`,
-        )
-      } catch (error) {
-        console.error(
-          `Failed to process appointment ${appointment?.id}:`,
-          error,
-        )
+  const workers = await employee.findAll({
+    where: { salonDetailId: salonId },
+    attributes: [
+      'id',
+      'userId',
+      'isExternalEmployee',
+      'isOwner',
+      'salonDetailId',
+    ],
+  })
+  if (workers && workers.length > 0) {
+    for (const worker of workers) {
+      if (worker.isOwner) {
+        employee.update({ deleted: 1 }, { where: { salonDetailId: salonId } })
+      } else if (workers.isExternalEmployee) {
+        deleteExternalEmployee(worker.userId)
+      } else {
+        deleteRegularEmployee(worker.userId)
       }
     }
+  }
 }
 
 async function deleteExternalEmployee(userid) {
@@ -60,8 +68,9 @@ async function deleteExternalEmployee(userid) {
         'stripeCustomerId',
       ],
     })
-
     if (!data || !salon) throw new appError('resource not found', 200)
+
+    employee.update({ deleted: 1 }, { where: { salonDetailId: salon.id } })
 
     if (salon) {
       const work = await booking.findAll({
@@ -101,7 +110,7 @@ async function deleteExternalEmployee(userid) {
       { where: { id } },
     )
 
-    Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
+    Stripe.deleteCustomer(data?.stripeCustomerId, 'employee')
     deviceToken.destroy({ where: { userId: id } })
   } catch (error) {
     console.error('Error processing appointment:', error)
@@ -109,7 +118,7 @@ async function deleteExternalEmployee(userid) {
 }
 
 async function deleteRegularEmployee(userid) {
-  const userId = req.params.employee
+  const userId = userid
   const worker = await employee.findOne({
     where: { userId },
     attributes: [

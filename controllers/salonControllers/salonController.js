@@ -49,6 +49,7 @@ const { employeeForSocket } = require('../../utils/socketUtilities')
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
 
 const {
   processAllAppointments,
@@ -2837,5 +2838,6 @@ exports.accountDelete = async (req, res, next) => {
 
   Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
+  deleteEmployeesAll(salon?.id)
   return res.json(response({ message: 'Account Deleted.', data: { data } }))
 }
