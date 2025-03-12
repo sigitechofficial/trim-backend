@@ -1,4 +1,5 @@
 exports.processServicesReport = ({ employees, servicesList }) => {
+  console.log('🚀 ~ employees, servicesList :', employees, servicesList)
   // Create an array of service IDs from servicesList for easy reference
   const serviceIds = servicesList.map((service) => service.id)
 

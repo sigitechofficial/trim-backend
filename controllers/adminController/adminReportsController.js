@@ -332,7 +332,7 @@ exports.bookingPerformance = async (req, res, next) => {
 //* 8.Reports-> Income Report Yearly------------------------------------------------------------------------------
 
 exports.IncomeReportYearAdmin = async (req, res, next) => {
-  const { year } = req.params
+  const { year } = req.query
 
   // Validate that 'year' is provided
   if (!year) {
