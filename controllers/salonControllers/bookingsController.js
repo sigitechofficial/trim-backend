@@ -841,7 +841,11 @@ exports.cancelBooking = async (req, res, next) => {
     reasonId,
   })
   cancelBySalon(bookingId)
-  socketForCalendar({ appointmentId: bookingId, type: 'finish' })
+  socketForCalendar({
+    appointmentId: bookingId,
+    type: 'finish',
+    status: 'cancel',
+  })
 
   return res.json(
     returnFunction('1', 'Booking Cancelled Successfully!', {}, ''),
@@ -2908,7 +2912,11 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     noShowMessages(appointment?.id, finePercentage)
   }
 
-  socketForCalendar({ appointmentId: bookingId, type: 'finish' })
+  socketForCalendar({
+    appointmentId: bookingId,
+    type: 'finish',
+    status: 'no-show',
+  })
 
   //notifications
   const output = response({

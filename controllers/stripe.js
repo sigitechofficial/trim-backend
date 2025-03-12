@@ -150,7 +150,7 @@ async function createPaymentIntendForUpFrontPayments(
     const paymentIntent = await stripe.paymentIntents.create({
       amount: convertToCents(amount),
       currency: 'gbp', //Specify British pounds (GBP)  as the currency
-      //setup_future_usage: 'off_session',
+      setup_future_usage: 'off_session', //  # This saves the payment method for future off-session payments
       customer: customerId,
       // capture_method: "manual",
       automatic_payment_methods: {
