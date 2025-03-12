@@ -672,8 +672,6 @@ exports.weeklyIncomeReportAdmin = async (req, res, next) => {
 
 //* 10.Reports-> Income Report Houly------------------------------------------------------------------------------
 exports.hourlyIncomeReportAdmin = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
-
   // Extract startDate and endDate from query parameters
   const { startDate, endDate } = req.query
 
@@ -714,14 +712,6 @@ exports.hourlyIncomeReportAdmin = async (req, res, next) => {
   const formattedPrevEndDate = previousWeekEnd.toISOString().split('T')[0]
 
   // Fetch the salon details for the current user
-  const salon = await salonDetail.findOne({
-    where: { userId },
-    attributes: ['id'],
-  })
-
-  if (!salon) throw new AppError(`Salon not found.`, 404)
-
-  const salonId = salon.id
 
   // Fetch earliest and latest booking dates for all-time average
   const bookingDates = await sequelize.query(
