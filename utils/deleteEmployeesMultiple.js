@@ -68,7 +68,7 @@ async function deleteExternalEmployee(userid) {
         'stripeCustomerId',
       ],
     })
-    if (!data || !salon) throw new appError('resource not found', 200)
+    if (!data || !salon) return 0
 
     employee.update({ deleted: 1 }, { where: { salonDetailId: salon.id } })
 

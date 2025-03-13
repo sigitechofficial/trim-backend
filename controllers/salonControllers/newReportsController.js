@@ -96,7 +96,8 @@ exports.busiestVsQuietest = async (req, res, next) => {
 //* 3.Reports-> Services By Staff Per Week------------------------------------------------------------------
 
 exports.servicesByStaffPerWeek = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
+  const userId = req.params?.salon ?? req.user?.id
+  console.log('🚀 ~ exports.servicesByStaffPerWeek= ~ userId:', userId)
   const salon = await salonDetail.findOne({
     where: { userId },
     attributes: ['id'],
@@ -122,8 +123,10 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
         ),
         'color',
       ],
+      'salonDetailId',
     ],
   })
+
   const appointments = await employee.findAll({
     where: condition,
     attributes: [
