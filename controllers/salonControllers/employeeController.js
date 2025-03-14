@@ -254,6 +254,7 @@ exports.AddEmployee = async (req, res, next) => {
         approvedByAdmin: true,
         onlinePayments: true,
         coverImage: employeeInput?.image,
+        onlinePayments: false,
       })
 
       externalEmployeeSalonId = externalEmployeeSalon?.id

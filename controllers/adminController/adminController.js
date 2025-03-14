@@ -33,6 +33,10 @@ const {
   reason,
   subscriptions,
   faqs,
+  commissionPayout,
+  rentChairPayout,
+  rentChairEarning,
+  salaryPayout,
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -615,7 +619,7 @@ exports.employeeDetails = async (req, res, next) => {
           },
           {
             model: employeeWagesMethod,
-            attributes: [`id`, `value`],
+            attributes: [`id`, `value`, 'wagesMethodId'],
             include: {
               model: wagesMethod,
               attributes: ['methodName'],
@@ -707,9 +711,42 @@ exports.employeeDetails = async (req, res, next) => {
         attributes: [`total`, `tip`, 'on'],
       })
     : null
-
   const calculationsOnJob = Custom.calculateJobTotals(jobsData)
+  let earnings = calculationsOnJob.totalRevenue
+  let tip = calculationsOnJob.totalTip
+  if (employeeData?.employee?.employeeWagesMethod?.wagesMethodId) {
+    const wagesid = employeeData?.employee?.employeeWagesMethod?.wagesMethodId
+    let employeeeEarning, employeeTip
+
+    if (wagesid == 1) {
+      employeeeEarning = await commissionPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+      employeeTip = await commissionPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+    } else if (wagesid == 2) {
+      employeeeEarning = await salaryPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+      employeeTip = await salaryPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+    } else if (wagesid == 3) {
+      employeeeEarning = await rentChairPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+      employeeTip = await rentChairPayout.sum('amount', {
+        where: { employeeId: employeeData?.employee?.id },
+      })
+    }
+    tip = employeeTip
+    earnings = employeeeEarning
+  }
+
   const output = {
+    tip,
+    earnings,
     employee: employeeData,
     salon: salonData,
     revenue: calculationsOnJob,
