@@ -723,21 +723,21 @@ exports.employeeDetails = async (req, res, next) => {
       employeeeEarning = await commissionPayout.sum('amount', {
         where: { employeeId: employeeData?.employee?.id },
       })
-      employeeTip = await commissionPayout.sum('amount', {
+      employeeTip = await commissionPayout.sum('tip', {
         where: { employeeId: employeeData?.employee?.id },
       })
     } else if (wagesid == 2) {
       employeeeEarning = await salaryPayout.sum('amount', {
         where: { employeeId: employeeData?.employee?.id },
       })
-      employeeTip = await salaryPayout.sum('amount', {
+      employeeTip = await salaryPayout.sum('tip', {
         where: { employeeId: employeeData?.employee?.id },
       })
     } else if (wagesid == 3) {
       employeeeEarning = await rentChairPayout.sum('amount', {
         where: { employeeId: employeeData?.employee?.id },
       })
-      employeeTip = await rentChairPayout.sum('amount', {
+      employeeTip = await rentChairPayout.sum('tip', {
         where: { employeeId: employeeData?.employee?.id },
       })
     }
