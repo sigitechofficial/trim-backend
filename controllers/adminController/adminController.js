@@ -716,7 +716,8 @@ exports.employeeDetails = async (req, res, next) => {
   let tip = calculationsOnJob.totalTip
   if (employeeData?.employee?.employeeWagesMethod?.wagesMethodId) {
     const wagesid = employeeData?.employee?.employeeWagesMethod?.wagesMethodId
-    let employeeeEarning, employeeTip
+    let employeeeEarning = 0,
+      employeeTip = 0
 
     if (wagesid == 1) {
       employeeeEarning = await commissionPayout.sum('amount', {

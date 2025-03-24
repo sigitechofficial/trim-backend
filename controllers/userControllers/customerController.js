@@ -1569,6 +1569,11 @@ exports.bookAppointment = async (req, res, next) => {
 
 exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   //Partial payment upfront
+  console.log(
+    '🚀 ~ exports.captureUpFrontPaymentInfo= ~ !req.body.onlinePayments:',
+    req.body,
+  )
+
   if (!req.body.onlinePayments)
     throw new AppError('Salon does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)

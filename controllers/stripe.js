@@ -175,7 +175,7 @@ async function createPaymentIntend(amount, customerId, paymentMethodId) {
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: convertToCents(amount),
-      currency: 'usd',
+      currency: 'gbp',
       payment_method: paymentMethodId,
       customer: customerId,
       capture_method: 'manual',
