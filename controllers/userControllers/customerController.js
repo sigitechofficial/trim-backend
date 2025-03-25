@@ -189,7 +189,7 @@ exports.emailtesting = async (req, res, next) => {
   // //   ],
   // // })
 
-  return res.status(200).json(response({ data: { endpoint } }))
+  return res.status(200).json(response({ data: {} }))
 }
 
 //* DEMO. Notification Testing ----------------------
