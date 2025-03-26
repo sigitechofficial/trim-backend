@@ -2264,6 +2264,7 @@ exports.salonAvailability = async (req, res, next) => {
 
 /*
               4.Get Job Data
+              
       ________________________________________
 */
 exports.salonServices = async (req, res, next) => {

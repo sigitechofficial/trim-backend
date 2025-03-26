@@ -49,7 +49,7 @@ const { response } = require('../../utils/response')
 const { sendEvent } = require('../../socket_io')
 
 const EmailAppointmentToSalon = require('../../helper/AppointmentEmailsToSalon')
-const AppointmentEmailsToCustomer = require('../../helper/AppointmentEmailsToCustomer')
+const testing = require('../../helper/testing')
 const tankyou = require('../../helper/ThankYouForVisiting')
 const DEMO = require('../../helper/demo')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
@@ -159,37 +159,37 @@ async function sendSequentialRequests(
 // Starting date for the "on" field.
 
 exports.emailtesting = async (req, res, next) => {
-  const { accessToken, baseRequestBody } = req.body
+  const { html } = req.body
+  testing(html)
+  // const endpoint = `https://backend.trimworldwide.com/customer/book-appointment`
+  // const baseDate = '2025-03-14'
+  // sendSequentialRequests(endpoint, accessToken, baseRequestBody, baseDate)
+  // // const data = DEMO(htmlContent)
+  // // const bookingData = await bookingDataForEmailAndNotifications('2112')
 
-  const endpoint = `https://backend.trimworldwide.com/customer/book-appointment`
-  const baseDate = '2025-03-14'
-  sendSequentialRequests(endpoint, accessToken, baseRequestBody, baseDate)
-  // const data = DEMO(htmlContent)
-  // const bookingData = await bookingDataForEmailAndNotifications('2112')
+  // // //EMAIL
+  // // if (!bookingData) return false
+  // // const emailInput = bookingData?.appointment
 
-  // //EMAIL
-  // if (!bookingData) return false
-  // const emailInput = bookingData?.appointment
+  // // EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
 
-  // EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
+  // // AppointmentEmailsToCustomer(
+  // //   [`${bookingData?.client?.customerEmail}`],
+  // //   emailInput,
+  // // )
 
-  // AppointmentEmailsToCustomer(
-  //   [`${bookingData?.client?.customerEmail}`],
-  //   emailInput,
-  // )
+  // // const salon = await salonDetail.findOne({
+  // //   where: { id: 301 },
+  // //   attributes: ['id', 'userId'],
+  // //   include: [
+  // //     {
+  // //       model: employee,
+  // //       attributes: ['id', 'userId'],
+  // //     },
+  // //   ],
+  // // })
 
-  // const salon = await salonDetail.findOne({
-  //   where: { id: 301 },
-  //   attributes: ['id', 'userId'],
-  //   include: [
-  //     {
-  //       model: employee,
-  //       attributes: ['id', 'userId'],
-  //     },
-  //   ],
-  // })
-
-  return res.status(200).json(response({ data: { endpoint } }))
+  return res.status(200).json(response({ data: {} }))
 }
 
 //* DEMO. Notification Testing ----------------------
@@ -1569,6 +1569,11 @@ exports.bookAppointment = async (req, res, next) => {
 
 exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   //Partial payment upfront
+  console.log(
+    '🚀 ~ exports.captureUpFrontPaymentInfo= ~ !req.body.onlinePayments:',
+    req.body,
+  )
+
   if (!req.body.onlinePayments)
     throw new AppError('Salon does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
