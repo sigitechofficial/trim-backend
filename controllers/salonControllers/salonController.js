@@ -308,9 +308,15 @@ exports.accountAdded = async (req, res, next) => {
   })
 
   let msg = 'Information Incomplete account not added.'
+  let status = '2'
   const isConnectAccountComplete = salonData?.connectAccountId
-    ? Stripe.isConnectAccountComplete(salonData?.connectAccountId)
+    ? await Stripe.isConnectAccountComplete(salonData?.connectAccountId)
     : false
+
+  console.log(
+    '🚀 ~ exports.accountAdded= ~ isConnectAccountComplete:',
+    isConnectAccountComplete,
+  )
 
   if (isConnectAccountComplete) {
     await wallet.update(
@@ -325,9 +331,16 @@ exports.accountAdded = async (req, res, next) => {
       { where: { userId } },
     )
     msg = `Account Connected Successfully!`
+    status = '1'
   }
 
-  return res.json(returnFunction('1', msg, {}, ''))
+  if (req.body?.fromNext) status = '1'
+  console.log(
+    '🚀 ~ exports.accountAdded= ~ req.body.fromNext:',
+    req.body?.fromNext,
+  )
+
+  return res.json(returnFunction(status, msg, {}, ''))
 }
 /*
             4.Salon Timing 
@@ -720,6 +733,13 @@ exports.salonProfile = async (req, res, next) => {
   //         ? ''
   //         : Convert.convertTo12HourFormat(timeSlot.closingTime)
   // })
+
+  const link = salonData?.connectAccountId
+    ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
+    : ''
+
+  const output = JSON.parse(JSON.stringify(salonData))
+  output.stripeDashboardlink = link
   return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
 }
 /*

@@ -1039,7 +1039,29 @@ async function deleteCustomer(customerId, type) {
   }
 }
 
+async function retrieveConnectAccount(accountId) {
+  try {
+    const account = await stripe.accounts.retrieve(accountId)
+    return account
+  } catch (error) {
+    console.error(error)
+    throw new AppError(`${error.message}`, 200)
+  }
+}
+
+async function createStripeLoginLink(accountId) {
+  try {
+    const loginLink = await stripe.accounts.createLoginLink(accountId)
+    return loginLink.url
+  } catch (error) {
+    console.error('Error creating login link:', error)
+    throw error
+  }
+}
+
 module.exports = {
+  createStripeLoginLink,
+  retrieveConnectAccount,
   updateSubscriptionPaymentMethod,
   sessionCheckoutPaymnet,
   // customer
