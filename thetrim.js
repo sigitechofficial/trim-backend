@@ -111,7 +111,7 @@ process.on('SIGTERM', gracefulShutdown)
 process.on('SIGINT', gracefulShutdown)
 
 // Start the server
-server.listen(serverPort, host, (err) => {
+server.listen(serverPort, (err) => {
   if (err) throw err
   console.log(`Server is listening on :http://${serverPort}`)
 })
