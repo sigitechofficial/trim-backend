@@ -1,5 +1,5 @@
 // server.js
-
+const path = require('path')
 const express = require('express')
 const dotenv = require('dotenv')
 const bodyParser = require('body-parser')
@@ -30,6 +30,9 @@ const app = express()
 const server = require('http').createServer(app)
 
 // Middleware setup
+app.use('/Public', express.static(path.join(__dirname, 'Public')))
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cors())
 app.use(morgan('dev')) // Added for logging
 
