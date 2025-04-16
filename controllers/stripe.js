@@ -1055,7 +1055,7 @@ async function createStripeLoginLink(accountId) {
     return loginLink.url
   } catch (error) {
     console.error('Error creating login link:', error)
-    throw error
+    return null
   }
 }
 

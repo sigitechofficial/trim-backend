@@ -734,13 +734,14 @@ exports.salonProfile = async (req, res, next) => {
   //         : Convert.convertTo12HourFormat(timeSlot.closingTime)
   // })
 
-  const link = salonData?.connectAccountId
-    ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
-    : ''
-
-  const output = JSON.parse(JSON.stringify(salonData))
-  output.stripeDashboardlink = link
-  return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+  let link = salonData?.connectAccountId
+  ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
+  : ''
+  
+if(!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
+const output = JSON.parse(JSON.stringify(salonData))
+output.stripeDashboardlink = link
+return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
 }
 /*
             4.Salon Gallery Images 
