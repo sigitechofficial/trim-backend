@@ -138,7 +138,14 @@ exports.login = async (req, res, next) => {
   }
 
   const features = await feature.findAll({
-    attributes: [`id`, `title`, `key`],
+    attributes: [`id`, `title`, `key`,
+       [
+      literal(
+        `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${User?.roleId||0} LIMIT 1)`,
+      ),
+      'access',
+    ]
+  ],
   })
   // check Device Token
   const found = User.deviceTokens.find((ele) => ele.tokenId === dvToken)
@@ -1862,32 +1869,16 @@ exports.addRoles = async (req, res, next) => {
   const data = await role.create({ name, status: true })
   // manipulating to our desired format
   let bulkArray = []
+
   permissionRole.map((ele) => {
-    if (ele.permissions.create === true)
+    if (ele.permissions.access === true)
       bulkArray.push({
-        permissionType: 'create',
-        featureId: ele.id,
-        roleId: data.id,
-      })
-    if (ele.permissions.read === true)
-      bulkArray.push({
-        permissionType: 'read',
-        featureId: ele.id,
-        roleId: data.id,
-      })
-    if (ele.permissions.update === true)
-      bulkArray.push({
-        permissionType: 'update',
-        featureId: ele.id,
-        roleId: data.id,
-      })
-    if (ele.permissions.delete === true)
-      bulkArray.push({
-        permissionType: 'delete',
+        permissionType: true,
         featureId: ele.id,
         roleId: data.id,
       })
   })
+
   await permission.bulkCreate(bulkArray)
 
   return res.status(200).json(
@@ -1923,14 +1914,9 @@ exports.updateRole = async (req, res, next) => {
   // manipulating to our desired format
   let bulkArray = []
   permissionRole.map((ele) => {
-    if (ele.permissions.create === true)
-      bulkArray.push({ permissionType: 'create', featureId: ele.id, roleId })
-    if (ele.permissions.read === true)
-      bulkArray.push({ permissionType: 'read', featureId: ele.id, roleId })
-    if (ele.permissions.update === true)
-      bulkArray.push({ permissionType: 'update', featureId: ele.id, roleId })
-    if (ele.permissions.delete === true)
-      bulkArray.push({ permissionType: 'delete', featureId: ele.id, roleId })
+    if (ele.permissions.access === true)
+      bulkArray.push({ permissionType: true, featureId: ele.id, roleId })
+    
   })
 
   permission.bulkCreate(bulkArray)
@@ -1956,19 +1942,24 @@ exports.roleDetails = async (req, res, next) => {
   //return res.json(permissionData)
   const featureData = await feature.findAll({
     where: { status: true },
-    attributes: ['id', 'title'],
+    attributes: ['id', 'title', [
+      literal(
+        `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${roleId||0} LIMIT 1)`,
+      ),
+      'access',
+    ]],
   })
 
-  let permissionType = ['create', 'read', 'update', 'delete']
-  const employeePermissions = FormatPermissions(
-    featureData,
-    permissionData,
-    permissionType,
-  )
+  // let permissionType = ['create', 'read', 'update', 'delete']
+  // const employeePermissions = FormatPermissions(
+  //   featureData,
+  //   permissionData,
+  //   permissionType,
+  // )
 
   return res.json(
     response({
-      data: { name: roleData.name, permissionRole: employeePermissions },
+      data: { name: roleData.name, permissionRole: featureData },
     }),
   )
 }

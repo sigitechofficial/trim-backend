@@ -1,9 +1,9 @@
 module.exports = (sequelize, DataTypes) =>{
   const permission = sequelize.define('permission', {
       permissionType: {
-          type: DataTypes.STRING(),
+          type: DataTypes.BOOLEAN,
           allowNull: true,
-          defaultValue: "",
+          defaultValue: false,
       },
   });
   return permission;
