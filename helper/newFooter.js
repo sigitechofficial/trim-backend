@@ -7,7 +7,7 @@ const supportNumber = '017874854624'
 exports.newFooter = `<tr>
             <td style="padding: 20px; text-align: center;">
                 <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px;">
-                    If you have any questions or need help, please check our FAQ or email <a href="mailto:${supportEmail}" style="color: black; text-decoration: none;">${supportEmail}</a>.
+                    Unsure about how to use Trim, check out our FAQ.
                 </div>
             </td>
         </tr>
@@ -15,9 +15,6 @@ exports.newFooter = `<tr>
             <td align="center" style="padding: 20px;">
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                     <tr>
-                        <td style="padding: 0 4px;">
-                            <a href="https://www.linkedin.com" target="_blank"><img src="cid:linkedin" alt="LinkedIn" style="width: 32px; height: 32px; display: block;"></a>
-                        </td>
                         <td style="padding: 0 4px;">
                             <a href="https://www.facebook.com" target="_blank"><img src="cid:facebook" alt="Facebook" style="width: 32px; height: 32px; display: block;"></a>
                         </td>
@@ -43,15 +40,18 @@ exports.newFooter = `<tr>
                 </div>
             </td>
         </tr>
-        <tr>
+        
+    </table>
+</body>
+</html>
+`
+
+
+{/* <tr>
             <td align="center" style="padding: 20px;">
                 <div style="font-size: 16px; font-family: 'Work Sans', sans-serif; color: rgba(0, 0, 0, 0.6);">
                     Powered by
                 </div>
                 <img src="cid:logo" alt="Powered by Trim" style="width: 119px; height: 40px; margin-top: 10px;">
             </td>
-        </tr>
-    </table>
-</body>
-</html>
-`
+        </tr> */}

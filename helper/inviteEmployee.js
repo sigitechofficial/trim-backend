@@ -9,6 +9,9 @@ const { newFooter } = require('./newFooter')
 module.exports = function (to = [], data) {
   const greetings = `Hi ${data?.name || ''}, you’re invited to join ${data?.salonName} on Trim Business!`
   let subject = `Hi ${data?.name || ''} welcome to trim, We're Glad to Have You!`
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + 7);
+  const formattedExpiryDate = expiryDate.toDateString();
 
   transporter.sendMail(
     {
@@ -81,7 +84,17 @@ module.exports = function (to = [], data) {
                       </div>
                   </td>
               </tr>
-
+              <tr>
+                  <td style="padding-top: 20px;padding-left: 20px;">
+                  <p>Once you've logged in please change the password so nobody else can access your account </p>
+                  </td>
+              </tr>
+              <tr>
+                 <td style="padding-top: 10px;padding-left: 20px;">
+                  <p>Invite expires on ${formattedExpiryDate} </p>
+                  </td>
+              </tr>
+              
        ${newFooter}
       `,
     },
