@@ -125,17 +125,18 @@ module.exports = function (to, data, state = 'book') {
     contact: `${data?.user?.countryCode || 'xxx-'}${data?.user?.phoneNum || 'xxxxxxxxxx'}`,
   }
   // style="text-decoration: none;"
-  let heading = `Appointment confirmed`
-  let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
+  let heading = `Booking confirmed`
+  // let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
+  let description = `The following appointment has been booked:`
   let subject = `Appointment confirmed ref #${data?.id}.`
 
   if (state === 'cancel') {
     subject = `Booking ref #${data.id} has been cancelled!.`
-    heading = `Appointment has been cancelled`
+    heading = `Booking has been cancelled`
     description = `Appointment was scheduled for ${date} with ${client?.name}`
   } else if (state === 'reschudle') {
     subject = `Booking ref #${data.id} has been rescheduled!`
-    heading = `Appointment has been update`
+    heading = `Booking has been update`
     description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name}.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} has been completed!`

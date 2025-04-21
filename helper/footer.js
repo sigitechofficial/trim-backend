@@ -70,7 +70,7 @@ width="100%"
                 "
               >
                 <p>
-                  If you have any questions or need help, please check our FAQ or email <a href="mailto:${supportEmail}" style="color: black; text-decoration: none;">${supportEmail}</a>.
+                  Unsure about how to use Trim, check out our FAQ</a>.
                 </p>
               </div>
               <table
@@ -152,23 +152,6 @@ width="100%"
                                   border: 0;
                                 "
                                 title="Instagram"
-                                width="32"
-                            /></a>
-                          </td>
-                          <td style="padding: 0 2px 0 2px">
-                            <a
-                              href="https://www.linkedin.com/"
-                              target="_blank"
-                              ><img
-                                alt="LinkedIn"
-                                height="32"
-                                src="cid:linkedin"
-                                style="
-                                  display: block;
-                                  height: auto;
-                                  border: 0;
-                                "
-                                title="LinkedIn"
                                 width="32"
                             /></a>
                           </td>
@@ -343,99 +326,6 @@ width="100%"
                       ${copyRight}
                       </p>
                     </div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </td>
-  </tr>
-</tbody>
-</table>
-
-<table
-align="center"
-border="0"
-cellpadding="0"
-cellspacing="0"
-class="row row-9"
-role="presentation"
-width="100%"
->
-<div
-  class="spacer_block block-1"
-  style="height: 10px; line-height: 30px; font-size: 1px"
->
-   
-</div>
-<tbody>
-  <tr>
-    <td>
-      <table
-        align="center"
-        border="0"
-        cellpadding="0"
-        cellspacing="0"
-        class="row-content stack"
-        role="presentation"
-        style="
-          border-radius: 0;
-          color: #000;
-          width: 500px;
-          margin: 0 auto;
-        "
-        width="500"
-      >
-        <tbody>
-          <tr>
-            <td
-              class="column column-1"
-              style="
-                font-weight: 400;
-                text-align: left;
-                padding-bottom: 5px;
-                padding-top: 5px;
-                vertical-align: top;
-                border-top: 0px;
-                border-right: 0px;
-                border-bottom: 0px;
-                border-left: 0px;
-              "
-              width="100%"
-            >
-              <table
-                border="0"
-                cellpadding="0"
-                cellspacing="0"
-                class="heading_block block-1"
-                role="presentation"
-                width="100%"
-              >
-                <tr>
-                  <td
-                    class="pad"
-                    style="text-align: center; width: 100%"
-                  >
-                    <h1
-                      style="
-                        margin: 0;
-                        color: #00000099;
-                        direction: ltr;
-                        font-family: Chivo, sans-serif;
-                        font-size: 16px;
-                        font-weight: 400;
-                        letter-spacing: normal;
-                        text-align: center;
-                        margin-top: 0;
-                        margin-bottom: 0;
-                      "
-                    >
-                      <span class="tinyMce-placeholder"
-                        >Powered by</span
-                      >
-                    </h1>
                   </td>
                 </tr>
               </table>
