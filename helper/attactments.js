@@ -25,11 +25,6 @@ function attachments() {
       path: __dirname + '/images/facebook.png',
       cid: 'facebook',
     },
-    linkedin: {
-      filename: 'linkedin.png',
-      path: __dirname + '/images/linkedin.png',
-      cid: 'linkedin',
-    },
     forgotPassword: {
       filename: 'forgotPassword.png',
       path: __dirname + '/images/forgotPassword.png',

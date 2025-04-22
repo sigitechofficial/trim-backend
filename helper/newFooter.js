@@ -40,6 +40,14 @@ exports.newFooter = `<tr>
                 </div>
             </td>
         </tr>
+        <tr>
+            <td align="center" style="padding: 20px;">
+                <div style="font-size: 16px; font-family: 'Work Sans', sans-serif; color: rgba(0, 0, 0, 0.6);">
+                    Powered by
+                </div>
+                <img src="cid:logo" alt="Trim" style="width: 119px; height: 40px; margin-top: 10px;">
+            </td>
+        </tr>
         
     </table>
 </body>
@@ -47,11 +55,3 @@ exports.newFooter = `<tr>
 `
 
 
-{/* <tr>
-            <td align="center" style="padding: 20px;">
-                <div style="font-size: 16px; font-family: 'Work Sans', sans-serif; color: rgba(0, 0, 0, 0.6);">
-                    Powered by
-                </div>
-                <img src="cid:logo" alt="Powered by Trim" style="width: 119px; height: 40px; margin-top: 10px;">
-            </td>
-        </tr> */}
