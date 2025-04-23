@@ -187,6 +187,17 @@ exports.addServieType = async (req, res, next) => {
       serviceOrder:input.actualOrder,
     },{where:{serviceOrder:input.serviceOrder}})
   }
+
+  const findServiceType=await serviceType.findOne({
+    where:{
+      typeName:input.typeName,
+      deleted:0
+    }
+  })
+
+  if(findServiceType){
+    throw new appError("Service Already Exists  &&  Active")
+  }
   const data = await serviceType.create(input)
 
   return res.status(200).json(
@@ -202,7 +213,7 @@ exports.addServieType = async (req, res, next) => {
 exports.fetchServiceTypes = async (req, res, next) => {
   const data = await serviceType.findAll({
     where: { deleted: false },
-    attributes: ['id', 'typeName', 'image', 'status', 'createdAt'],
+    attributes: ['id', 'typeName', 'image', 'serviceOrder','status', 'createdAt'],
     order: [['id', 'DESC']],
   })
 
@@ -218,7 +229,7 @@ exports.fetchServiceTypes = async (req, res, next) => {
 exports.updateServiceTypes = async (req, res, next) => {
   if (!req.params.id) throw new AppError(`Invalid request format`, 200)
   const { id } = req.params
-  console.log('🚀 ~ exports.updateServiceTypes= ~ id:', id)
+  console.log('ðŸš€ ~ exports.updateServiceTypes= ~ id:', id)
   const input = req.body
   if (req.file) {
     const tmpPath = req.file.path
@@ -227,11 +238,25 @@ exports.updateServiceTypes = async (req, res, next) => {
   } else {
     delete input.image
   }
-  console.log('🚀 ~ exports.updateServiceTypes= ~ input:', input)
+  console.log('ðŸš€ ~ exports.updateServiceTypes= ~ input:', input)
+
+  const findServiceType=await serviceType.findOne({
+    where:{
+      serviceOrder:input.serviceOrder,
+      deleted:0
+    }
+  })
+
+  if(findServiceType){
+    throw new appError("Service Already Exists  &&  Active")
+  }
+
   if(input.serviceOrder!=input.newOrder){
     await serviceType.update({
       serviceOrder:input.serviceOrder
-    },{where:{serviceOrder:input.newOrder}})
+    },{where:{
+      serviceOrder:input.newOrder
+    }})
     input.serviceOrder=input.newOrder
   }
 
@@ -570,7 +595,7 @@ exports.fecthSalons = async (req, res, next) => {
 //* 1.Fetch All Salons ---------------------(send stickers include) sendSticker
 
 exports.updateSalonDetails = async (req, res, next) => {
-  console.log('🚀 ~ exports.updateSalonDetails= ~ req.body:', req.body)
+  console.log('ðŸš€ ~ exports.updateSalonDetails= ~ req.body:', req.body)
   let condition={}
   if(req.params?.salon) condition.id=req.params.salon
   else if(req.body?.ids) condition.id=req.body.ids
@@ -585,6 +610,7 @@ exports.updateSalonDetails = async (req, res, next) => {
     }),
   )
 }
+
 
 //* 1.Fetch All Salons For Filters ---------------------
 

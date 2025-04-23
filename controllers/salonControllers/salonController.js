@@ -1187,6 +1187,8 @@ exports.cancelActiveSubscription = async (req, res, next) => {
     }
     // `subscriptionId`, `name`, `amountPaid`, `priceId`, `teamSize`, `reason`,
     await cancelledSubscriptions.create(input)
+    // salonData.approvedByAdmin = false;
+    // await salonData.save()
     // cancelledSubscriptions.salonData.subscriptionPlan = null
     // await salonData.save()
   }
