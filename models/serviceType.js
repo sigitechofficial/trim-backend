@@ -8,11 +8,11 @@ module.exports = (sequelize, DataTypes) => {
       typeName: {
         type: DataTypes.STRING(),
         allowNull: false,
-        unique: {
-          //not needed
-          args: true,
-          msg: 'This service-type is already exists.',
-        },
+        // unique: {
+        //   //not needed
+        //   args: true,
+        //   msg: 'This service-type is already exists.',
+        // },
       },
       image: {
         type: DataTypes.STRING(),
