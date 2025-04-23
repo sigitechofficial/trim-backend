@@ -1,3 +1,5 @@
+const { type } = require("os")
+
 // serviceType.js
 module.exports = (sequelize, DataTypes) => {
   const serviceType = sequelize.define(
@@ -20,6 +22,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: true,
         defaultValue: true,
+      },
+      serviceOrder:{
+        type:DataTypes.INTEGER,
+        allowNull:true,
       },
       deleted: {
         type: DataTypes.BOOLEAN,

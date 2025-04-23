@@ -75,7 +75,6 @@ function attachments() {
       attachment.facebook,
       attachment.twitter,
       attachment.instagram,
-      attachment.linkedin,
     ],
     // in-case we have other emails
     attachment,

@@ -155,6 +155,12 @@ router.put(
   '/salon-update/:salon',
   protect,
   catchAsync(adminController.updateSalonDetails),
+  
+)
+router.put(
+  '/salon-update',
+  protect,
+  catchAsync(adminController.updateSalonDetails),
 )
 router.get('/salon-view', protect, catchAsync(adminController.fecthSalons))
 router.get(
