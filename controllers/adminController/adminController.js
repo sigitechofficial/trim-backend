@@ -182,6 +182,11 @@ exports.addServieType = async (req, res, next) => {
   } else {
     throw new AppError('Image is required. Please upload Image', 200)
   }
+  if(input.serviceOrder<input.actualOrder){
+    await serviceType.update({
+      serviceOrder:input.actualOrder,
+    },{where:{serviceOrder:input.serviceOrder}})
+  }
   const data = await serviceType.create(input)
 
   return res.status(200).json(
@@ -223,6 +228,12 @@ exports.updateServiceTypes = async (req, res, next) => {
     delete input.image
   }
   console.log('🚀 ~ exports.updateServiceTypes= ~ input:', input)
+  if(input.serviceOrder!=input.newOrder){
+    await serviceType.update({
+      serviceOrder:input.serviceOrder
+    },{where:{serviceOrder:input.newOrder}})
+    input.serviceOrder=input.newOrder
+  }
 
   const [rows] = await serviceType.update(input, { where: { id } })
 
@@ -560,8 +571,11 @@ exports.fecthSalons = async (req, res, next) => {
 
 exports.updateSalonDetails = async (req, res, next) => {
   console.log('🚀 ~ exports.updateSalonDetails= ~ req.body:', req.body)
+  let condition={}
+  if(req.params?.salon) condition.id=req.params.salon
+  else if(req.body?.ids) condition.id=req.body.ids
   salonDetail.update(req.body, {
-    where: { id: req.params?.salon },
+    where: condition,
   })
 
   return res.status(200).json(
