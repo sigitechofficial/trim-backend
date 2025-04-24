@@ -240,17 +240,6 @@ exports.updateServiceTypes = async (req, res, next) => {
   }
   console.log('ðŸš€ ~ exports.updateServiceTypes= ~ input:', input)
 
-  const findServiceType=await serviceType.findOne({
-    where:{
-      serviceOrder:input.serviceOrder,
-      deleted:0
-    }
-  })
-
-  if(findServiceType){
-    throw new appError("Service Already Exists  &&  Active")
-  }
-
   if(input.serviceOrder!=input.newOrder){
     await serviceType.update({
       serviceOrder:input.serviceOrder
@@ -2302,6 +2291,25 @@ exports.softDelete = (Model) => async (req, res, next) => {
     { deleted: true },
     { where: { id } },
   )
+  if(updatedCount === 0){
+    return res.status(200).json(
+      response({ message: 'Record not found or already deleted' })
+    );
+  }
+  const records=await Model.findAll({
+    where:{
+      deleted:false,
+      serviceOrder:{[Op.ne]:null}
+    },
+    order:[['serviceOrder','ASC']]
+  })
+
+  const updateRecords=records.map((record,index) =>
+    record.update({serviceOrder:index+1})
+  );
+
+  await Promise.all(updateRecords)
+
   res.status(200).json(
     response({
       message: 'Service type deleted successfully',

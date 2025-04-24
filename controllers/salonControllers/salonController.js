@@ -292,7 +292,7 @@ exports.createOnboardingLink = async (req, res, next) => {
   const onboardingLink = await Stripe.createStripeAccountLink(account)
 
   return res.json(
-    returnFunction('1', 'Onboarding Link', { onboardingLink }, ''),
+    returnFunction('1', ' Stripe Onboarding Link', { onboardingLink }, ''),
   )
 }
 /*

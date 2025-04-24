@@ -364,7 +364,7 @@ exports.getEmployeeTiming = async (req, res, next) => {
           : Convert.convertTo12HourFormat(timeSlot.closingTime)
   })
   return res.json(
-    returnFunction('1', 'Employee Timing', { employeeTiming }, ''),
+    returnFunction('1', 'Opening Hours', { employeeTiming }, ''),
   )
 }
 /*
