@@ -124,7 +124,7 @@ router.get(
 )
 
 // CARDS
-router.post('/add-card', protect, catchAsync(appController.addCard))
+// router.post('/add-card', protect, catchAsync(appController.addCard))
 router.get('/view-cards', protect, catchAsync(appController.fetchCards))
 router.put('/detach-card/:pm', protect, catchAsync(appController.detachCard))
 

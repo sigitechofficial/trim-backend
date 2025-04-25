@@ -27,7 +27,7 @@ const createSendToken = (user, dvToken, statusCode, res) => {
   redis_Client.hSet(`trim${user.id}`, dvToken, token)
   res.status(statusCode).json({
     status: '1',
-    message: 'Success',
+    message: 'Loaded',
     data: {
       accessToken: token,
       userId: `${user.id}`,

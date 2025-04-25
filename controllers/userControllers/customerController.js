@@ -662,6 +662,7 @@ exports.salonDetails = async (req, res, next) => {
 
   return res.status(200).json(
     response({
+      message:"Data Loaded",
       data: {
         announcements: announcements,
         customerStatus,
@@ -1873,40 +1874,40 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
 //* 1.Stripe Add Card -----------------
 
-exports.addCard = async (req, res, next) => {
-  const { cardName, cardExpYear, cardExpMonth, cardNumber, cardCVC } = req.body
-  const customerID = req.user.id
-  const customer = await user.findByPk(customerID, {
-    attributes: ['firstName', 'lastName', 'email', 'stripeCustomerId'],
-  })
-  let customerId = null
-  if (!customer) throw new AppError('User not found!', 200)
-  if (!customer.stripeCustomerId) {
-    const fullName = `${customer.firstName} ${customer.lastName}`
-    const stripeCustomerId = await Stripe.addCustomer(fullName, customer.email)
-    await user.update({ stripeCustomerId }, { where: { id: customerID } })
-    customerId = stripeCustomerId
-  } else {
-    customerId = customer.stripeCustomerId
-  }
-  req.body.customerId = customerId
-  if (customerId === null) throw new AppError('Something Went Wrong', 200)
+// exports.addCard = async (req, res, next) => {
+//   const { cardName, cardExpYear, cardExpMonth, cardNumber, cardCVC } = req.body
+//   const customerID = req.user.id
+//   const customer = await user.findByPk(customerID, {
+//     attributes: ['firstName', 'lastName', 'email', 'stripeCustomerId'],
+//   })
+//   let customerId = null
+//   if (!customer) throw new AppError('User not found!', 200)
+//   if (!customer.stripeCustomerId) {
+//     const fullName = `${customer.firstName} ${customer.lastName}`
+//     const stripeCustomerId = await Stripe.addCustomer(fullName, customer.email)
+//     await user.update({ stripeCustomerId }, { where: { id: customerID } })
+//     customerId = stripeCustomerId
+//   } else {
+//     customerId = customer.stripeCustomerId
+//   }
+//   req.body.customerId = customerId
+//   if (customerId === null) throw new AppError('Something Went Wrong', 200)
 
-  // const cardData = await Stripe.addCard(
-  //   customerId,
-  //   cardName,
-  //   cardExpYear,
-  //   cardExpMonth,
-  //   cardNumber,
-  //   cardCVC);
+//   // const cardData = await Stripe.addCard(
+//   //   customerId,
+//   //   cardName,
+//   //   cardExpYear,
+//   //   cardExpMonth,
+//   //   cardNumber,
+//   //   cardCVC);
 
-  const cardData = await Stripe.addCard(req.body)
-  const output = response({
-    message: 'Card Added successfully',
-    data: { stripePaymentId: cardData },
-  })
-  return res.status(200).json(output)
-}
+//   const cardData = await Stripe.addCard(req.body)
+//   const output = response({
+//     message: 'Card Added successfully',
+//     data: { stripePaymentId: cardData },
+//   })
+//   return res.status(200).json(output)
+// }
 
 /*
  * 2.Get Cards   ___________________________________
