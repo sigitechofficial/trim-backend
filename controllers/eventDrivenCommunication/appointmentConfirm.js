@@ -47,7 +47,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
     }
     const fullName = `${emailInput.user.firstName} ${emailInput.user.lastName}`
     const salonNotification = {
-      title: `New Appointment Alert`,
+      title: `New Booking Alert`,
       body: `A new appointment has been booked with ${fullName} on ${dateTime}.`,
     }
 
