@@ -11,7 +11,7 @@ SET
 
 -- Dumping Data into user Types
 INSERT INTO
-    `usertypes` (`id`, `name`, `createdAt`, `updatedAt`)
+    `userTypes` (`id`, `name`, `createdAt`, `updatedAt`)
 VALUES
     (
         1,
@@ -39,7 +39,7 @@ VALUES
     );
 -- Dumping Data into user Types
 INSERT INTO
-    `servicetype` (`id`, `typeName`, `createdAt`, `updatedAt`)
+    `serviceTypes` (`id`, `typeName`, `createdAt`, `updatedAt`)
 VALUES
     (
         1,
@@ -65,86 +65,19 @@ VALUES
         '2022-07-04 17:21:11',
         '2022-07-04 17:21:11'
     );
--- Dumping into users (guest user)
--- INSERT INTO
---     `users` (`id`, `email`,`countryCode`, `createdAt`, `updatedAt`)
--- VALUES
---     (
---         1,
---         'guestuser@gmail.com',
---         NULL,
---         '2022-07-04 17:21:11',
---         '2022-07-04 17:21:11'
-        
---     );
+-- Dumping into users (Admin user)
+INSERT INTO `users` (`id`, `firstName`, `lastName`, `password`, `email`, `countryCode`, `phoneNum`, `status`, `verifiedAt`, `stripeCustomerId`, `dvToken`, `image`, `deletedAt`, `signedFrom`, `createdAt`, `updatedAt`, `userTypeId`, `roleId`, `deleted`, `isExternalEmployee`) VALUES
+(1, 'Admin', '', '$2a$12$OzUvzIEruX3UWOgjwYTae.eb0GhMXliJP1/lD7uNU5IJvx282QKa6', 'admin@gmail.com', '+92', '9933932903', 1, '2023-12-14 10:53:52', '', '', '', NULL, 'email', '2023-12-11 10:15:29', '2025-01-03 10:41:09', 4, NULL, 0, 0);
 
---
--- Dumping data for table `links`
---
-INSERT INTO
-    `links` (
-        `id`,
-        `title`,
-        `key`,
-        `link`,
-        `status`,
-        `createdAt`,
-        `updatedAt`
-    )
-VALUES
-    (
-        1,
-        'Privacy Policy',
-        'privacyPolicy',
-        'https://trim.com/privacy.html',
-        1,
-        '2023-02-15 15:26:52',
-        '2023-02-15 15:26:52'
-    ),
-    (
-        2,
-        'FAQs',
-        'FAQ',
-        'https://trim.com',
-        1,
-        '2023-02-15 15:26:52',
-        '2023-02-15 15:26:52'
-    );
 
 --
 -- Dumping data for table `supports`
 --
-INSERT INTO
-    `supports` (
-        `id`,
-        `title`,
-        `key`,
-        `value`,
-        `status`,
-        `createdAt`,
-        `updatedAt`
-    )
-VALUES
-    (
-        1,
-        'email',
-        'support_email',
-        'support@gmail.com',
-        1,
-        '2023-02-06 10:51:06',
-        '2023-04-13 10:42:30'
-    ),
-    (
-        2,
-        'phone',
-        'support_phone',
-        '+923117860111',
-        1,
-        '2023-02-06 10:51:06',
-        '2023-03-01 11:30:24'
-    );
+INSERT INTO `helpSupports` (`id`, `email`, `countryCode`, `phoneNum`, `address`, `createdAt`, `updatedAt`) VALUES
+(1, 'support@trimworldwide.co.uk', '92', '2983909231', '123 Lane park, London', '2024-02-14 10:18:11', '2025-04-22 09:50:23');
 
--- Dumping data for table `supports`
+--
+-- Dumping data for table `wagesMethods`
 --
 INSERT INTO
     `wagesMethods` (

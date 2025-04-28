@@ -2927,6 +2927,30 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
   return res.status(200).json(output)
 }
 
+
+//Online Payment Key update
+exports.updateOnlibePayment=async(req,res,next) =>{
+  const{salonDetailId,onlinePayments}=req.body
+
+  const findSaloonDetail=await salonDetail.findOne({
+    where:{
+      id:salonDetailId
+    }
+  })
+
+  if(findSaloonDetail.length ===0){
+    throw new appError("Saloon Detail Not Exists")
+  }
+
+  await salonDetail.update({
+    onlinePayments,
+  },{where:{id:salonDetailId}})
+
+  return res.json(returnFunction("1",'Updated SucessFully',{},""))
+}
+
+
+
 // Not using
 exports.markAppointmentAscancel = async (req, res, next) => {
   const { bookingId } = req.params
