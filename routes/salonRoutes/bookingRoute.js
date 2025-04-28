@@ -95,4 +95,10 @@ router.post(
   catchAsync(bookingsController.calendarAppointments),
 )
 
+
+router.patch(
+  '/updateOnlibePayment',
+  catchAsync(bookingsController.updateOnlibePayment),
+)
+
 module.exports = router

@@ -1403,9 +1403,11 @@ exports.throwNotifications = async (req, res, next) => {
   let to = []
   const condition = { status: true, verifiedAt: { [Op.not]: null } }
   if (sendTo === 'customer') condition.userTypeId = 1
-  if (sendTo === 'salon') condition.userTypeId = 2
+  if (sendTo === 'shop') condition.userTypeId = 2
   if (sendTo === 'employee') condition.userTypeId = 3
   if (sendTo === 'all') condition.userTypeId = [1, 2, 3]
+  
+    console.log('Sending To: ======================>>>>>>>>>>>>>', sendTo);
 
   const data = await user.findAll({
     where: condition,
@@ -1417,15 +1419,19 @@ exports.throwNotifications = async (req, res, next) => {
       attributes: ['tokenId'],
     },
   })
+  // console.log('data To: ======================>>>>>>>>>>>>>', data);
   //return res.json(senderData)
   const senderData = data.map((ele) => {
     ele.deviceTokens.map((token) => {
       if (token.tokenId != null) to.push(token.tokenId)
     })
   })
+  
+     //console.log('senderData To: ======================>>>>>>>>>>>>>', senderData);
+
 
   let notification = { title, body }
-  ThrowNotification(to, notification, sendTo, 'admin')
+  ThrowNotification(to, notification,{}, sendTo, 'admin')
 
   let dt = new Date()
 
