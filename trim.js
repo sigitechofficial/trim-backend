@@ -1,13 +1,30 @@
 // server.js
+require('dotenv').config()
 const path = require('path')
 const express = require('express')
-const dotenv = require('dotenv')
 const bodyParser = require('body-parser')
 const cors = require('cors')
 const morgan = require('morgan') // Added for logging
 const { initializeWebSocket } = require('./socket_io')
 const db = require('./models')
 const errorHandler = require('./middlewares/errorHandler')
+
+
+
+const Sentry = require("@sentry/node");
+
+Sentry.init({
+    dsn: "https://86ceec125b7efa1a86a6d53395f48251@o4509225538224128.ingest.de.sentry.io/4509236127858768",
+    environment:process.env.NODE_ENV || 'production',
+    sendDefaultPii: true,
+  });
+
+  console.log('Sentry environment:', process.env.NODE_ENV);
+
+const app = express()
+const server = require('http').createServer(app)
+app.use(Sentry.Handlers.requestHandler())
+
 
 // Importing routes
 const salonAuth = require('./routes/salonRoutes/authRoute')
@@ -24,12 +41,12 @@ const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
 
 // Load environment variables
-dotenv.config({ path: '../.env' })
 
-const app = express()
-const server = require('http').createServer(app)
+
 
 // Middleware setup
+// Use bodyParser.raw for webhooks to receive raw body (application/json)
+app.use('/webhook', bodyParser.raw({ type: 'application/json' }), webhookRoute)
 app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
@@ -37,7 +54,7 @@ app.use(cors())
 app.use(morgan('dev')) // Added for logging
 
 // General routes use express.json() for parsing JSON bodies
-app.use('/salon/v1/auth', express.json(), salonAuth)
+app.use('/salon/v1/auth',express.json(), salonAuth)
 app.use('/salon/v1', express.json(), salonRegistration)
 app.use('/salon/v1/employee', express.json(), employeeRoute)
 app.use('/salon/v1/bookings', express.json(), bookingRoute)
@@ -49,11 +66,13 @@ app.use('/performance-dashboard', express.json(), performanceRoute)
 app.use('/payout', express.json(), payoutRoute)
 app.use('/new-reports', express.json(), newReportsRoute)
 
-// Use bodyParser.raw for webhooks to receive raw body (application/json)
-app.use('/webhook', bodyParser.raw({ type: 'application/json' }), webhookRoute)
+
 
 // Initialize WebSockets once
 initializeWebSocket(server)
+
+
+app.use(Sentry.Handlers.errorHandler());
 
 // Handle undefined routes
 app.use((req, res, next) => {

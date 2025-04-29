@@ -2937,17 +2937,19 @@ exports.updateOnlibePayment=async(req,res,next) =>{
       id:salonDetailId
     }
   })
+  console.log("findSaloonDetail ----------->",findSaloonDetail)
 
-  if(findSaloonDetail.length ===0){
+  if(!findSaloonDetail){
     throw new appError("Saloon Detail Not Exists")
   }
 
   await salonDetail.update({
-    onlinePayments,
+    onlinePayments:onlinePayments,
   },{where:{id:salonDetailId}})
 
   return res.json(returnFunction("1",'Updated SucessFully',{},""))
 }
+
 
 
 

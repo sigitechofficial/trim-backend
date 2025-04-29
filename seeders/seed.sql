@@ -67,7 +67,7 @@ VALUES
     );
 -- Dumping into users (Admin user)
 INSERT INTO `users` (`id`, `firstName`, `lastName`, `password`, `email`, `countryCode`, `phoneNum`, `status`, `verifiedAt`, `stripeCustomerId`, `dvToken`, `image`, `deletedAt`, `signedFrom`, `createdAt`, `updatedAt`, `userTypeId`, `roleId`, `deleted`, `isExternalEmployee`) VALUES
-(1, 'Admin', '', '$2a$12$OzUvzIEruX3UWOgjwYTae.eb0GhMXliJP1/lD7uNU5IJvx282QKa6', 'admin@gmail.com', '+92', '9933932903', 1, '2023-12-14 10:53:52', '', '', '', NULL, 'email', '2023-12-11 10:15:29', '2025-01-03 10:41:09', 4, NULL, 0, 0);
+(1, 'Admin', '', '$2a$08$p9YCuWEiYpbZES/e8k5z2.B9IzPeopfRcDMjAvxpuor9A2eka1ejK', 'admin@gmail.com', '+92', '9933932903', 1, '2023-12-14 10:53:52', '', '', '', NULL, 'email', '2023-12-11 10:15:29', '2025-01-03 10:41:09', 4, NULL, 0, 0);
 
 
 --
@@ -105,6 +105,18 @@ VALUES
         '2023-02-06 10:51:06',
         '2023-04-13 10:42:30'
     );
+
+
+--
+-- Dumping data for table `reasons`
+--
+
+INSERT INTO `reasons` (`id`, `reason`, `createdAt`, `updatedAt`, `type`, `status`, `deletedAt`) VALUES
+(1, 'Other', '2024-02-21 09:27:54', '2024-02-21 09:27:54', 'appointment', 1, NULL),
+(2, 'My own Choice', '2024-02-21 10:12:17', '2024-02-21 10:12:17', 'appointment', 1, NULL),
+(3, 'Other', '2024-12-05 10:13:14', '2024-12-05 10:13:14', 'subscription', 1, NULL),
+(4, 'The subscription is too expensive for me.', '2024-12-05 10:13:14', '2024-12-05 10:13:14', 'subscription', 1, NULL),
+(5, 'I no longer need this service', '2024-12-05 10:29:08', '2024-12-05 10:29:08', 'subscription', 1, NULL);
 
     -- seeders
     COMMIT;
