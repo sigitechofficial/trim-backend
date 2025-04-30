@@ -1,3 +1,4 @@
+require('dotenv').config
 const { STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY } = process.env
 const stripe = require('stripe')(STRIPE_SECRET_KEY)
 const { Op, literal, col, fn, where } = require('sequelize')
@@ -8,7 +9,14 @@ const { salonDetail, user, subscriptions } = require('../../models')
 
 // const subscriptions = require('../models/subscriptions')
 const DEMO = require('../../helper/demo')
-const endpointSecret = `whsec_4UTYsBGVUlQ2Ej4TKuvdNxGn0lvcuOxu`
+let endpointSecret;
+
+if(process.env.NODE_ENV==='test'){
+  endpointSecret=process.env.stage_signature
+}else{
+  endpointSecret=process.env.live_signature
+}
+console.log("🚀 ~ endpointSecret:", endpointSecret)
 
 exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
   const sig = req.headers['stripe-signature']
