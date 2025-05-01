@@ -229,13 +229,13 @@ exports.choosePlan = async (req, res, next) => {
     await salonData.save()
   }
   const DT = new Date()
-  ;(salonData.approvedByAdmin = true),
-    (salonData.registrationDate = dateManipulation.stampToDate(
-      subscription.current_period_start,
-    )),
-    (salonData.registrationExpiryDate = dateManipulation.stampToDate(
-      subscription.current_period_end,
-    ))
+    ; (salonData.approvedByAdmin = true),
+      (salonData.registrationDate = dateManipulation.stampToDate(
+        subscription.current_period_start,
+      )),
+      (salonData.registrationExpiryDate = dateManipulation.stampToDate(
+        subscription.current_period_end,
+      ))
   salonData.subscriptionPlan = subscription.id
   await salonData.save()
   const check = await wallet.findOne({
@@ -733,15 +733,24 @@ exports.salonProfile = async (req, res, next) => {
   //         ? ''
   //         : Convert.convertTo12HourFormat(timeSlot.closingTime)
   // })
+  if (salonData?.connectAccountId) {
+    let link = salonData?.connectAccountId
+      ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
+      : ''
 
-  let link = salonData?.connectAccountId
-  ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
-  : ''
-  
-if(!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
-const output = JSON.parse(JSON.stringify(salonData))
-output.stripeDashboardlink = link
-return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+    console.log("LINK ------------------------------------------------------...", link)
+
+    if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
+    const output = JSON.parse(JSON.stringify(salonData))
+    output.stripeDashboardlink = link
+    return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+
+  } else {
+    const output = JSON.parse(JSON.stringify(salonData))
+    return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+
+  }
+
 }
 /*
             4.Salon Gallery Images 
@@ -971,13 +980,13 @@ exports.addMultipleCategories = async (req, res, next) => {
   finalInput =
     categoriesExist.length > 0
       ? finalInput.filter(
-          (salonItem) =>
-            !categoriesExist.some(
-              (existItem) =>
-                existItem.categoryName.toLowerCase() ==
-                salonItem.categoryName.toLowerCase(),
-            ),
-        )
+        (salonItem) =>
+          !categoriesExist.some(
+            (existItem) =>
+              existItem.categoryName.toLowerCase() ==
+              salonItem.categoryName.toLowerCase(),
+          ),
+      )
       : finalInput
 
   if (finalInput.length > 0) await category.bulkCreate(finalInput)
@@ -1920,8 +1929,8 @@ exports.saleDetails = async (req, res, next) => {
   const remainingAmount =
     bookingData.status === 'save-unpaid'
       ? parseFloat(
-          (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2),
-        )
+        (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2),
+      )
       : 0.0
 
   const employees = await Promise.all(promises)
@@ -2587,8 +2596,8 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
     customerIds =
       clientList && clientList.length > 0
         ? clientList?.map((ele) => {
-            return ele?.customerId
-          })
+          return ele?.customerId
+        })
         : []
     req.body.ids = customerIds
     // return res.json(req.body.ids)
@@ -2620,12 +2629,12 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
         const notificationInput =
           userIds.length > 0
             ? userIds.map((id) => ({
-                userId: id,
-                type: 'permotional',
-                at: Date.now(),
-                title: Notification.title,
-                body: Notification.body,
-              }))
+              userId: id,
+              type: 'permotional',
+              at: Date.now(),
+              title: Notification.title,
+              body: Notification.body,
+            }))
             : []
 
         if (notificationInput.length > 0)

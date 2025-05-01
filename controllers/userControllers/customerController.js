@@ -2236,15 +2236,18 @@ exports.applyCoupon = async (req, res, next) => {
     },
   )
   const { salonId, promoCode } = req.body
+  console.log("req.body==================>",req.body)
   let data = await coupon.findOne({
-    where: {
-      promoCode,
-      salonDetailId: salonId,
-      till: { [Op.lte]: currentDay.currentDateOnly },
-      from: { [Op.gte]: currentDay.currentDateOnly },
-    },
-    attributes: [`id`, `promoCode`, `type`, `status`, `value`],
-  })
+  where: {
+    promoCode,
+    salonDetailId: salonId,
+    from: { [Op.lte]: currentDay.currentDateOnly },
+    till: { [Op.gte]: currentDay.currentDateOnly },
+  },
+  attributes: [`id`, `promoCode`, `type`, `status`, `value`, `limit`],
+});
+  
+  console.log("data===============================>>>>>>",data)
 
   if (!data) throw new AppError('Invalid promo code', 200)
   if (data.status === 'expire') throw new AppError('Promo code Exprie.', 200)
@@ -2252,8 +2255,8 @@ exports.applyCoupon = async (req, res, next) => {
   if (data?.limit == null || data?.limit < 1) {
     const exist = await booking.findOne({
       where: {
-        userId: req.user?.id,
-        couponId: data?.id,
+        customerId: req.user?.id,
+        //couponId: data?.id,
         salonDetailId: salonId,
       },
     })
@@ -2269,6 +2272,7 @@ exports.applyCoupon = async (req, res, next) => {
   const output = response({ message: 'success', data: { promoCode: data } })
   return res.status(200).json(output)
 }
+
 
 //~ Reschedule & cancel
 
