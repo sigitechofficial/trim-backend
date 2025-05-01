@@ -127,7 +127,7 @@ module.exports = function (to, data, state = 'book') {
   let badgeColor = '#176600'
   let badgeImageSrc = 'cid:confirm'
 
-  const deeplink = `https://backend.trimworldwide.com/appointmentDetail?id=${data.id}`
+  const deeplink = `https://trimworldwide.com/appointmentDetail?id=${data.id}`
 
   let emailTitle = `Hi ${client.name}, your booking is confirmed!`
   let subject = `Your booking ref #${data.id} is confirmed!.`
