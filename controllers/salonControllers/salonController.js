@@ -1034,8 +1034,20 @@ exports.updateCategory = async (req, res, next) => {
 }
 
 exports.changeCategoryStatus = async (req, res, next) => {
-  const { status } = req.body
+  const { status,salonDetailId } = req.body
+  console.log(" req.body------------------->>>", req.body)
   const { id } = req.params
+    const activeCategoryCount = await category.count({
+    where: {
+      salonDetailId,
+      status: true,
+    },
+  })
+  console.log("🚀 ~ exports.changeCategoryStatus= ~ salonIdFound:", activeCategoryCount)
+  if (!status && activeCategoryCount <= 1) {
+    throw new appError("Salon must have one Category Associated with it",200)
+  }
+
   await category.update(
     { status },
     {

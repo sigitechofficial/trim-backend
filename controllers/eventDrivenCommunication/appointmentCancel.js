@@ -119,6 +119,11 @@ exports.cancelByCustomer = async (bookingId) => {
         'cancel',
       )
     }
+    EmailAppointmentToSalon(
+      [`${bookingData?.salon?.salonEmail}`],
+      appointment,
+      'cancel',
+    )
     const socketInput = {
       event: 'complete-appointment',
       data: { id: bookingId * 1 },
