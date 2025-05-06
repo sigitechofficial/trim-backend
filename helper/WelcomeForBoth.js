@@ -7,8 +7,8 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (to, name, sentTo = 'salon') {
-  let firstParagraph = `Congratulations and welcome to Trim! We're thrilled to have you on board, and we appreciate you choosing our platform to showcase and manage your salon services.
-  <br /><br />Your account has been successfully created, and you can now start exploring the full range of features we offer to enhance your salon's online presence and streamline your booking processes.`
+  let firstParagraph = `You've now signed up, next step is to make sure all your services and <br/> categories are up to date, so people know exactly what you can do.<br /><br />
+There's a lot of different tools to use in Trim Business, after a few bookings have a look at the Shop Performance section to see how your shop is performing.`
 
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
 
@@ -281,7 +281,7 @@ module.exports = function (to, name, sentTo = 'salon') {
                                   <h1
                                     style="
                                       margin: 0;
-                                      color: #12466f;
+                                      color: #000000;
                                       direction: ltr;
                                       font-family: Chivo, sans-serif;
                                       font-size: 30px;
