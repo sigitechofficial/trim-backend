@@ -36,27 +36,27 @@ const signTocken = (id, dvToken) => {
 
 const defaultAccess = [
   {
-    access: 'Reschedule\nAppointments',
+    access: 'Reschedule\nbookings',
     key: 'appointments',
     level: 'none',
   },
   {
-    access: 'Team\nMember',
+    access: 'Team member\nmanagement',
     key: 'teamMember',
     level: 'none',
   },
   {
-    access: 'Can Book\nAppointments',
+    access: 'Can add\nbookings',
     key: 'bookAppointments',
     level: 'none',
   },
   {
-    access: 'Can Apply Discounts\nTo Appointments',
+    access: 'Can apply discounts',
     key: 'applyDiscount',
     level: 'none',
   },
   {
-    access: 'Clients',
+    access: 'Customer information',
     key: 'client',
     level: 'none',
   },
@@ -66,25 +66,25 @@ const defaultAccess = [
     level: 'none',
   },
   {
-    access: 'Client\nFeedback',
+    access: 'Customer\nfeedback',
     key: 'feedback',
     level: 'none',
   },
   {
-    access: 'Manage\nDeals',
+    access: 'Coupons',
     key: 'manageDeals',
     level: 'none',
   },
   {
-    access: 'Update\nSalon profile',
+    access: 'Shop profile',
     key: 'updateProfile',
     level: 'none',
   },
   {
-    access: 'Send\nNotification',
+    access: 'Send\nnotifications',
     key: 'sendNotification',
     level: 'none',
-  },
+  }
 ]
 // [
 //   literal(

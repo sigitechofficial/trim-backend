@@ -858,27 +858,27 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
   if (!accesslevels || accesslevels.length < 1) {
     accesslevels = [
       {
-        access: 'Reschedule\nAppointments',
+        access: 'Reschedule\nbookings',
         key: 'appointments',
         level: 'none',
       },
       {
-        access: 'Team\nMember',
+        access: 'Team member\nmanagement',
         key: 'teamMember',
         level: 'none',
       },
       {
-        access: 'Can Book\nAppointments',
+        access: 'Can add\nbookings',
         key: 'bookAppointments',
         level: 'none',
       },
       {
-        access: 'Can Apply Discounts\nTo Appointments',
+        access: 'Can apply discounts',
         key: 'applyDiscount',
         level: 'none',
       },
       {
-        access: 'Clients',
+        access: 'Customer information',
         key: 'client',
         level: 'none',
       },
@@ -888,15 +888,25 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
         level: 'none',
       },
       {
-        access: 'Client\nFeedback',
+        access: 'Customer\nfeedback',
         key: 'feedback',
         level: 'none',
       },
       {
-        access: 'Manage\nDeals',
+        access: 'Coupons',
         key: 'manageDeals',
         level: 'none',
       },
+      {
+        access: 'Shop profile',
+        key: 'updateProfile',
+        level: 'none',
+      },
+      {
+        access: 'Send\nnotifications',
+        key: 'sendNotification',
+        level: 'none',
+      }
     ]
   }
 
