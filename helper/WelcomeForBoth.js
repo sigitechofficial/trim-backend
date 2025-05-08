@@ -13,6 +13,7 @@ There's a lot of different tools to use in Trim Business, after a few bookings h
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
 
   let greetings = `Dear ${name}!`
+  
   let subject = `${greetings} welcome to trim, We're Glad to Have You!`
   if (sentTo == 'customer') {
     firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!.
