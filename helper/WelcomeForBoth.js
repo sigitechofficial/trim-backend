@@ -17,8 +17,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
 
   let subject = `${greetings} welcome to trim, We're Glad to Have You!`
   if (sentTo == 'customer') {
-    firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!.
-    <br /><br />Your account has been successfully created, and you're now ready to explore the world of beauty and wellness at your fingertips.`
+    firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!<br /> <br />`
 
     secondParagraph = `Thank you for choosing Trim! We're here to make your salon experience enjoyable and effortless.`
     greetings = `Hi ${name}!`
@@ -56,6 +55,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
       body {
         margin: 0;
         padding: 0;
+        font-family: Chivo, sans-serif
       }
 
       a[x-apple-data-detectors] {
