@@ -66,6 +66,7 @@ width="100%"
                   font-size: 14px;
                   font-weight: 400;
                   letter-spacing: 0px;
+                  padding-left: 12px;
                 "
               >
                 <p>

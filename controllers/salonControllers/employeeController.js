@@ -838,7 +838,7 @@ exports.fetchAccesslevels = async (req, res, next) => {
     },
     attributes: { exclude: ['createdAt', 'updatedAt', 'employeeId'] },
   })
-  return res.json(returnFunction('1', 'success', { accesslevels }, ''))
+  return res.json(returnFunction('1', 'Loaded', { accesslevels }, ''))
 }
 
 //*8.Fecth Default Accesslevels
