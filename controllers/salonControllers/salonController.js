@@ -1044,6 +1044,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
     },
   })
   console.log("🚀 ~ exports.changeCategoryStatus= ~ salonIdFound:", activeCategoryCount)
+  
   if (!status && activeCategoryCount <= 1) {
     throw new appError("Salon must have one Category Associated with it",200)
   }
