@@ -1066,7 +1066,7 @@ exports.session = async (req, res, next) => {
   if (User.salonDetails.length === 0) {
     return res.status(200).json({
       status: '2',
-      message: 'User Login successfully!',
+      message: 'Login successfully!',
       data: {
         userId: `${User.id}`,
         image: `${User.image}`,
@@ -1139,7 +1139,7 @@ exports.session = async (req, res, next) => {
 
   return res.status(200).json({
     status: isAllDataAvailable && hasEmployee ? '1' : '2',
-    message: 'User Login successfully!',
+    message: 'Login successfully!',
     data: {
       userId: `${User.id}`,
       image: `${User.image}`,
@@ -1219,7 +1219,7 @@ exports.employeeSession = async (req, res, next) => {
 
   const response = {
     status: '1',
-    message: 'User Login successfully!',
+    message: 'Login successfully!',
     data: {
       userId: User.id,
       image: User.image,

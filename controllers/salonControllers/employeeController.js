@@ -273,7 +273,7 @@ exports.AddEmployee = async (req, res, next) => {
       })
 
       cancellationPolicy.create({
-        hoursBeforeBooking: 12,
+        hoursBeforeBooking: 72,
         refundPercentage: 0,
         salonDetailId: externalEmployeeSalon?.id,
       })
