@@ -7,7 +7,7 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (OTP, data, type) {
-  let subText = 'Reset Passowrd';
+  let subText = 'Reset Password';
   let preOtpText = `We found a request for forgot password.
   Its okay! its happens. Use this OTP for
   reset your password.`
@@ -58,6 +58,7 @@ module.exports = function (OTP, data, type) {
         body {
           margin: 0;
           padding: 0;
+          font-family: Chivo, sans-serif
         }
   
         a[x-apple-data-detectors] {
@@ -516,89 +517,12 @@ module.exports = function (OTP, data, type) {
                                         text-align: left;
                                       "
                                     >
-                                      <p style="margin: 0">
-                                        ${preOtpText}
-                                      </p>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                                      <p style="line-height:15px">
+                                        ${preOtpText} <br/> ${postOtpText}
 
-                                <table
-                align="center"
-                border="0"
-                cellpadding="0"
-                cellspacing="0"
-                class="row row-6"
-                role="presentation"
-                width="100%"
-              >
-                <tbody>
-                  <tr>
-                    <td>
-                      <table
-                        align="center"
-                        border="0"
-                        cellpadding="0"
-                        cellspacing="0"
-                        class="row-content stack"
-                        role="presentation"
-                        style="
-                          border-radius: 0;
-                          color: #000;
-                          width: 500px;
-                          margin: 0 auto;
-                        "
-                        width="500"
-                      >
-                        <tbody>
-                          <tr>
-                            <td
-                              class="column column-1"
-                              style="
-                                font-weight: 400;
-                                text-align: left;
-                                vertical-align: top;
-                                border-top: 0px;
-                                border-right: 0px;
-                                border-bottom: 0px;
-                                border-left: 0px;
-                              "
-                              width="100%"
-                            >
-                              <table
-                                border="0"
-                                cellpadding="10"
-                                cellspacing="0"
-                                class="paragraph_block block-2"
-                                role="presentation"
-                                style="word-break: break-word"
-                                width="100%"
-                              >
-                                <tr>
-                                  <td>
-                                    <div
-                                      style="
-                                        color: #000000cc;
-                                        direction: ltr;
-                                        font-family: Chivo, sans-serif;
-                                        font-size: 16px;
-                                        font-weight: 400;
-                                        letter-spacing: 0px;
-                                        text-align: left;
-                                      "
-                                    >
-                                      <p style="margin: 0">
-                                        ${postOtpText}
                                       </p>
+
+                                      
                                     </div>
                                   </td>
                                 </tr>
@@ -611,7 +535,6 @@ module.exports = function (OTP, data, type) {
                   </tr>
                 </tbody>
               </table>
-  
               <table align="center" role="presentation" cellpadding="0" cellspacing="0" style="margin: 20px auto;">
                 <tr>
                   <td style="padding: 8px;">

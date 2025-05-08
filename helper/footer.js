@@ -70,7 +70,7 @@ width="100%"
                 "
               >
                 <p>
-                  Unsure about how to use Trim, check out our FAQ</a>.
+                  Unsure about how to use Trim, look up our FAQs.</a>.
                 </p>
               </div>
               <table
