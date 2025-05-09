@@ -129,7 +129,7 @@ exports.addSalonDetail = async (req, res, next) => {
   })
 
   await employee.create({
-    position: 'Salon Owner',
+    position: 'Owner',
     userId,
     salonDetailId: newEntry.id,
     isOwner: true,

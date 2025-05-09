@@ -65,7 +65,7 @@ exports.cancelBySalon = async (bookingId) => {
 
     const customerNotification = {
       title: `Appointment Cancellation`,
-      body: `We regret to inform you that your appointment on ${dateTime} has been cancelled. Please contact us to reschedule.`,
+      body: `We regret to inform you that your appointment on ${dateTime} has been cancelled.`,
     }
 
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
@@ -149,7 +149,7 @@ exports.cancelByCustomer = async (bookingId) => {
 
     const customerNotification = {
       title: `Appointment Cancellation`,
-      body: `We regret to inform you that your appointment on ${dateTime} has been cancelled. Please contact us to reschedule.`,
+      body: `We regret to inform you that your appointment on ${dateTime} has been cancelled.`,
     }
 
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
