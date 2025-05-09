@@ -105,7 +105,25 @@ width="100%"
                       >
                         <tr>
                           <td style="padding: 0 2px 0 2px">
-                            <a
+                          <a
+                              href="https://instagram.com/"
+                              target="_blank"
+                              ><img
+                                alt="Instagram"
+                                height="32"
+                                src="cid:instagram"
+                                style="
+                                  display: block;
+                                  height: auto;
+                                  border: 0;
+                                "
+                                title="Instagram"
+                                width="32"
+                            /></a>
+                            
+                          </td>
+                          <td style="padding: 0 2px 0 2px">
+                          <a
                               href="https://www.facebook.com/"
                               target="_blank"
                               ><img
@@ -135,23 +153,6 @@ width="100%"
                                   border: 0;
                                 "
                                 title="Twitter"
-                                width="32"
-                            /></a>
-                          </td>
-                          <td style="padding: 0 2px 0 2px">
-                            <a
-                              href="https://instagram.com/"
-                              target="_blank"
-                              ><img
-                                alt="Instagram"
-                                height="32"
-                                src="cid:instagram"
-                                style="
-                                  display: block;
-                                  height: auto;
-                                  border: 0;
-                                "
-                                title="Instagram"
                                 width="32"
                             /></a>
                           </td>
