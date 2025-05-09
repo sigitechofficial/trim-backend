@@ -9,7 +9,8 @@ const EmailAppointmentToSalon = require('../../helper/AppointmentEmailsToSalon')
 const { employeeForSocket } = require('../../utils/socketUtilities')
 const ThankYouForVisiting = require('../../helper/ThankYouForVisiting')
 
-const { CURRENCY_UNIT } = process.env
+const  CURRENCY_UNIT  = process.env.CURRENCY_UNIT
+console.log("🚀 ~ CURRENCY_UNIT:", CURRENCY_UNIT)
 
 const {
   bookingDataForEmailAndNotifications,

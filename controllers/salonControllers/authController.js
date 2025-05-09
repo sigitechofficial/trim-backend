@@ -292,7 +292,7 @@ exports.signup = async (req, res, next) => {
       upperCaseAlphabets: false,
       specialChars: false,
     })
-    EmailResetPasswordOtpToAll(OTP, userExist, 'verification')
+    EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
     const found = userExist.deviceTokens.find((ele) => ele.tokenId === dvToken)
     if (!found)
       await deviceToken.create({
@@ -369,7 +369,7 @@ exports.signup = async (req, res, next) => {
       specialChars: false,
     })
     //return res.json(OTP)
-    EmailResetPasswordOtpToAll(OTP, newUser, 'verification')
+    EmailResetPasswordOtpToAll(OTP, newUser, 'verification','salon')
 
     let DT = new Date()
 
@@ -417,7 +417,7 @@ exports.resendOTP = async (req, res, next) => {
     specialChars: false,
   })
   //return res.json(OTP)
-  EmailResetPasswordOtpToAll(OTP, userExist, 'verification')
+  EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
   let DT = new Date()
   if (!otpData) {
     await otpVerification.create({
@@ -841,7 +841,7 @@ exports.forgotPassword = async (req, res, next) => {
   })
 
   //return res.json(OTP)
-  EmailResetPasswordOtpToAll(OTP, userData, 'forgetPassword')
+  EmailResetPasswordOtpToAll(OTP, userData, 'forgetPassword','salon')
   let DT = new Date()
   let otpData = { id: 0 }
   if (userData.otpVerification != null) {
