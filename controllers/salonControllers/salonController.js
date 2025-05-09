@@ -2385,7 +2385,17 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     await user.update({ stripeCustomerId }, { where: { id: salon.id } })
   }
 
-  const price = await Stripe.getPriceById('price_1Qwj3FCmsFtCbz25grLeLSn0')
+  let priceId;
+
+if(process.env.NODE_ENV==='test'){
+  priceId=process.env.stage_PriceId
+}else{
+  priceId=process.env.live_price_Id
+}
+
+console.log("priceId--------------->>>",priceId);
+
+  const price = await Stripe.getPriceById(priceId)
   const setupIntent = await Stripe.setupIntent(stripeCustomer)
   const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
 
