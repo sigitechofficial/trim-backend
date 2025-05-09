@@ -181,7 +181,7 @@ exports.signup = async (req, res, next) => {
       specialChars: false,
     })
 
-    EmailResetPasswordOtpToAll(OTP, userExist, 'verification')
+    EmailResetPasswordOtpToAll(OTP, userExist, 'verification','customer')
 
     const DT = new Date()
     const otpData = await otpVerification.create({
@@ -349,7 +349,7 @@ exports.requestOtp = async (req, res, next) => {
   if (req.body.email) condition.email = req.body.email
   if (req.body.userId) condition.id = req.body.userId
   let mailType = 'verification'
-  if (req.body.email) mailType = 'resetPassword'
+  if (req.body.email) mailType = 'forgetPassword'
   const userData = await user.findOne({
     where: condition,
     include: { model: otpVerification, attributes: ['id'] },
@@ -369,7 +369,7 @@ exports.requestOtp = async (req, res, next) => {
 
   //return res.json(OTP)
 
-  EmailResetPasswordOtpToAll(OTP, userData, mailType)
+  EmailResetPasswordOtpToAll(OTP, userData, mailType,'customer')
 
   let DT = new Date()
 
