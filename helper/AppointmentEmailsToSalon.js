@@ -127,7 +127,7 @@ module.exports = function (to, data, state = 'book') {
   // style="text-decoration: none;"
   let heading = `Booking confirmed`
   // let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
-  let description = `The following appointment has been booked:`
+  let description = `The following appointment has been made:`
   let subject = `Appointment confirmed ref #${data?.id}.`
 
   if (state === 'cancel') {
