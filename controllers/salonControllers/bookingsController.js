@@ -612,7 +612,7 @@ exports.bookingDetails = async (req, res, next) => {
     attributes: ['id'],
   })
   const { bookingId } = req.body
-  console.log('🚀 ~ exports.bookingDetails= ~ bookingId:', bookingId)
+  console.log('ðŸš€ ~ exports.bookingDetails= ~ bookingId:', bookingId)
   let bookings = []
   const bookingData = await booking.findByPk(bookingId, {
     include: [
@@ -659,8 +659,8 @@ exports.bookingDetails = async (req, res, next) => {
   })
 
   console.log(
-    '🚀 ~ exports.bookingDetails= ~ bookingData:',
-    // JSON.parse(JSON.stringify(bookingData)),
+    'ðŸš€ ~ exports.bookingDetails= ~ bookingData:',
+    JSON.parse(JSON.stringify(bookingData)),
   )
 
   // return res.json(bookingData)
@@ -669,19 +669,25 @@ exports.bookingDetails = async (req, res, next) => {
     cardDetails = await Stripe.retrievePaymentMethod(bookingData.stripeCardId)
   }
   let customerStatus = 'active'
-
-  const isblocked = await blockCustomer.findOne({
+  
+  if(bookingData?.customerId){
+      const isblocked = await blockCustomer.findOne({
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['id'],
   })
-
-  const notes = await clientNotes.findOne({
+  
+   if (isblocked) customerStatus = 'block'
+  }
+  let notes
+  if(bookingData?.customerId){
+      notes = await clientNotes.findOne({
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['customerNote'],
   })
+  }
+  
 
-  if (isblocked) customerStatus = 'block'
-
+ 
   let services = []
   let startTime, endTime
   bookingData.jobs.map((ele) => {
