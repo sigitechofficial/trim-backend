@@ -16,6 +16,9 @@ exports.newFooter = `<tr>
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                     <tr>
                         <td style="padding: 0 4px;">
+                            <a href="https://www.tiktok.com/en/" target="_blank"><img src="cid:tiktok" alt="Tiktok" style="width: 32px; height: 32px; display: block;"></a>
+                        </td>
+                        <td style="padding: 0 4px;">
                             <a href="https://instagram.com" target="_blank"><img src="cid:instagram" alt="Instagram" style="width: 32px; height: 32px; display: block;"></a>
                         </td>
                         <td style="padding: 0 4px;">

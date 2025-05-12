@@ -106,6 +106,24 @@ width="100%"
                         <tr>
                           <td style="padding: 0 2px 0 2px">
                           <a
+                              href="https://www.tiktok.com/en/"
+                              target="_blank"
+                              ><img
+                                alt="Tiktok"
+                                height="32"
+                                src="cid:tiktok"
+                                style="
+                                  display: block;
+                                  height: auto;
+                                  border: 0;
+                                "
+                                title="Instagram"
+                                width="32"
+                            /></a>
+                            
+                          </td>
+                          <td style="padding: 0 2px 0 2px">
+                          <a
                               href="https://instagram.com/"
                               target="_blank"
                               ><img
