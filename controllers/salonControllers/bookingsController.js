@@ -612,7 +612,7 @@ exports.bookingDetails = async (req, res, next) => {
     attributes: ['id'],
   })
   const { bookingId } = req.body
-  console.log('ðŸš€ ~ exports.bookingDetails= ~ bookingId:', bookingId)
+  console.log('Ã°Å¸Å¡â‚¬ ~ exports.bookingDetails= ~ bookingId:', bookingId)
   let bookings = []
   const bookingData = await booking.findByPk(bookingId, {
     include: [
@@ -659,7 +659,7 @@ exports.bookingDetails = async (req, res, next) => {
   })
 
   console.log(
-    'ðŸš€ ~ exports.bookingDetails= ~ bookingData:',
+    'Ã°Å¸Å¡â‚¬ ~ exports.bookingDetails= ~ bookingData:',
     JSON.parse(JSON.stringify(bookingData)),
   )
 
@@ -670,7 +670,7 @@ exports.bookingDetails = async (req, res, next) => {
   }
   let customerStatus = 'active'
   
-  if(bookingData?.customerId){
+  if(bookingData?.customerId && salon?.id){
       const isblocked = await blockCustomer.findOne({
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['id'],
@@ -678,8 +678,10 @@ exports.bookingDetails = async (req, res, next) => {
   
    if (isblocked) customerStatus = 'block'
   }
-  let notes
-  if(bookingData?.customerId){
+  
+  
+  let notes;
+  if(bookingData.customerId && salon?.id ){
       notes = await clientNotes.findOne({
     where: { userId: bookingData.customerId, salonDetailId: salon.id },
     attributes: ['customerNote'],

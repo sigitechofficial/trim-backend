@@ -1,3 +1,5 @@
+const path = require("path")
+
 function attachments() {
   const attachment = {
     logo: {
@@ -24,6 +26,11 @@ function attachments() {
       filename: 'facebook.png',
       path: __dirname + '/images/facebook.png',
       cid: 'facebook',
+    },
+    tiktok:{
+      filename:'tiktok.png',
+      path: __dirname + '/images/tiktok.png',
+      cid: 'tiktok'
     },
     forgotPassword: {
       filename: 'forgotPassword.png',
@@ -75,6 +82,7 @@ function attachments() {
       attachment.facebook,
       attachment.twitter,
       attachment.instagram,
+      attachment.tiktok
     ],
     // in-case we have other emails
     attachment,
