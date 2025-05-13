@@ -1077,7 +1077,7 @@ module.exports = function (to, data, state = 'book') {
                                           "
                                         >
                                           <p style="margin: 0">
-                                            <span style="color: #12466f"
+                                            <span style="color:rgb(0, 0, 0)"
                                               >${description}</span
                                             >
                                             

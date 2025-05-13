@@ -62,11 +62,11 @@ width="100%"
                 style="
                   color: #292929;
                   direction: ltr;
-                  font-family: Chivo, sans-serif, sans-serif;
-                  font-size: 14px;
+                  font-family: Chivo, sans-serif;
+                  font-size: 16px;
                   font-weight: 400;
                   letter-spacing: 0px;
-                  padding-left: 12px;
+                  padding-left: 10px;
                 "
               >
                 <p>
@@ -431,7 +431,6 @@ width="100%"
                                 display: block;
                                 height: auto;
                                 border: 0;
-                          
                               "
                               title="Facebook"
                               width="125px"

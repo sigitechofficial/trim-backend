@@ -82,7 +82,7 @@ module.exports = function (to, data, state = 'book') {
                     <td>
                       <div
                         style="
-                          color: #000000cc;
+                          color:rgba(0, 0, 0, 0.8);
                           direction: ltr;
                           font-family: Chivo, sans-serif;
                           font-size: 14px;
@@ -91,7 +91,7 @@ module.exports = function (to, data, state = 'book') {
                           text-align: left;
                         "
                       >
-                        <p style="margin: 0; color: #000000">
+                        <p style="margin: 0; font-weight: bold; color:rgb(0, 0, 0)">
                           ${ele?.service?.serviceName} ${employee}
                         </p>
                         <p style="margin: 0; color: #717171cc">
@@ -538,11 +538,11 @@ module.exports = function (to, data, state = 'book') {
                                       <td class="">
                                         <div
                                           style="
-                                            color: #292929;
+                                            color:rgb(0, 0, 0);
                                             direction: ltr;
                                             font-family: Chivo, sans-serif;
                                             font-size: 16px;
-                                            font-weight: 500;
+                                            font-weight: bold;
                                             letter-spacing: 0px;
                                             text-align: left;
                                           "
@@ -636,7 +636,7 @@ module.exports = function (to, data, state = 'book') {
                                           "
                                         >
                                           <p style="margin: 0">
-                                            ${description}
+                                            &#35;${description}
                                           </p>
                                         </div>
                                       </td>

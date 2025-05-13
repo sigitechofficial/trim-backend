@@ -59,7 +59,7 @@ module.exports = function (to = [], data) {
                   </td>
               </tr>
               <tr class="congrats-icon">
-                  <td align="start" style="padding: 0px;">
+                  <td align="center" style="padding: 20px;">
                       <div style="font-size: 60px; font-family: 'Work Sans', sans-serif">🎉</div>
                   </td>
               </tr>
@@ -82,12 +82,12 @@ module.exports = function (to = [], data) {
                   </td>
               </tr>
               <tr>
-                  <td style="padding-top: 20px;padding-left: 20px;">
-                  <p>Once you've logged on please change the password so nobody else can access your account. </p>
+                  <td style="padding-top: 20px;padding-left: 20px; font-family: Chivo, sans-serif; font-size: 16px;font-weight: 400;">
+                  <p>Once you've logged on please change the password so nobody <br/> else can access your account. </p>
                   </td>
               </tr>
               <tr>
-                 <td style="padding-top: 10px;padding-left: 20px;">
+                 <td style="padding-top: 10px;padding-left: 20px;  font-family: Chivo, sans-serif; font-size: 16px;font-weight: 400;">
                   <p>Invite expires on ${formattedExpiryDate} </p>
                   </td>
               </tr>
