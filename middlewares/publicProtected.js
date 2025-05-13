@@ -5,6 +5,7 @@ module.exports = async function publicProtected(req, res, next) {
   try {
     if (req.header('accessToken')){
       const validToken = verify(req.header('accessToken'), process.env.JWT_ACCESS_SECRET);
+      console.log(`🚀------URL------ > URL: ${req.url}`)
       req.user = validToken;
       console.log('🚀 ~ file: req.user:',req.user.id);
       next();

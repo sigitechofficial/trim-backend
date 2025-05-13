@@ -408,7 +408,7 @@ module.exports = function (to, input) {
                                       width: 400px;
                                     "
                                   >
-                                    ${input?.client?.fullName}, rate your experience with ${input?.salon?.salonName}
+                                    ${input?.client?.fullName}, rate your experience at ${input?.salon?.salonName}
                                   </h1>
                                 </td>
                               </tr>

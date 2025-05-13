@@ -1264,9 +1264,9 @@ module.exports = function (OTP, data, type, to) {
 
   if (type && type == 'forgetPassword' && (to == 'customer' || to == 'salon')) {
     let subText = 'Reset Password';
-    let preOtpText = `We received a request to reset your password, you'll need to use the code below in the App.`
+    let preOtpText = `We received a request to reset your password,<br/> you'll need to use the code below in the App.`
 
-    let postOtpText = `If  you didn't request this code, please ignore this email, your password won't change without inputting the code above.`
+    let postOtpText = `If  you didn't request this code, please ignore this email, your <br/> password won't change without inputting the code above.`
 
 
 
