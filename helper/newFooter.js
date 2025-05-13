@@ -32,9 +32,6 @@ exports.newFooter = `<tr>
                 <div style="margin-top: 20px; font-size: 16px; font-family: 'Switzer', sans-serif; font-weight: 600;">
                     Follow Us
                 </div>
-                <div style="margin-top: 10px; font-size: 14px; font-family: 'Switzer', sans-serif; font-weight: 500;">
-                    ${address}
-                </div>
                 <div style="margin-top: 5px; font-size: 13px; font-family: 'Switzer', sans-serif; font-weight: 400;">
                     ${copyRight}
                 </div>
