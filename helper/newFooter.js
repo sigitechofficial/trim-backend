@@ -5,9 +5,9 @@ const supportEmail = "support@trimworldwide.com";
 const supportNumber = "017874854624";
 
 exports.newFooter = `<tr>
-            <td style="padding: 20px; text-align: center;">
+            <td style="padding: 20px; text-align: left;">
                 <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px;">
-                    Unsure about how to use Trim, check out our FAQ.
+                    Unsure about how to use Trim, look up our FAQs.
                 </div>
             </td>
         </tr>

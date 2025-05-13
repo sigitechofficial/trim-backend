@@ -68,9 +68,6 @@ module.exports = function (to = [], data) {
                       <div style="text-align: center; color: black; font-size: 28px; font-family: 'Chivo', sans-serif; font-weight: 700;">
                         ${greetings}
                       </div>
-                      <div style="text-align: center; color: black; font-size: 17px; font-family: 'Work Sans', sans-serif; font-weight: 400; margin-top: 10px;">
-                          Trim is the UK's go-to platform for barbers
-                      </div>
                   </td>
               </tr>
               <tr>
@@ -86,7 +83,7 @@ module.exports = function (to = [], data) {
               </tr>
               <tr>
                   <td style="padding-top: 20px;padding-left: 20px;">
-                  <p>Once you've logged in please change the password so nobody else can access your account </p>
+                  <p>Once you've logged on please change the password so nobody else can access your account. </p>
                   </td>
               </tr>
               <tr>
