@@ -137,7 +137,7 @@ module.exports = function (to, data, state = 'book') {
   } else if (state === 'reschudle') {
     subject = `Booking ref #${data.id} has been rescheduled!`
     heading = `Booking has been updated`
-    description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name}.`
+    description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name} check.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} has been marked as complete.`
     heading = `Booking has been completed`
@@ -395,7 +395,7 @@ module.exports = function (to, data, state = 'book') {
                                         <h1
                                           style="
                                             margin: 0;
-                                            color: #12466f;
+                                            color:rgb(0, 0, 0);
                                             direction: ltr;
                                             font-family: Chivo, sans-serif;
                                             font-size: 30px;
