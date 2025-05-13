@@ -521,7 +521,7 @@ module.exports = function (OTP, data, type, to) {
                                         text-align: left;
                                       "
                                     >
-                                      <p style="line-height:15px">
+                                      <p style="line-height:18px">
                                         ${preOtpText} <br/> ${postOtpText}
 
                                       </p>
@@ -1079,7 +1079,7 @@ module.exports = function (OTP, data, type, to) {
                                       text-align: left;
                                     "
                                   >
-                                    <p style="line-height: 15px">
+                                    <p style="line-height: 18px">
                                       ${preOtpText}
                                    
                                     </p>
@@ -1233,7 +1233,7 @@ module.exports = function (OTP, data, type, to) {
                                       text-align: left;
                                     "
                                   >
-                                    <p style="line-height: 15px">
+                                    <p style="line-height: 18px">
                                       ${postOtpText}
                                     </p>
                                   </div>
@@ -1264,9 +1264,9 @@ module.exports = function (OTP, data, type, to) {
 
   if (type && type == 'forgetPassword' && (to == 'customer' || to == 'salon')) {
     let subText = 'Reset Password';
-    let preOtpText = `We received a request to reset your password,<br/> <br/> you'll need to use the code below in the App.`
+    let preOtpText = `We received a request to reset your password, you'll need to use <br/> <br/> the code below in the App.`
 
-    let postOtpText = `If  you didn't request this code, please ignore this email, your <br/> password won't change without inputting the code above.`
+    let postOtpText = `If  you didn't request this code, please ignore this email, your <br/> <br/> password won't change without inputting the code above.`
 
 
 
@@ -1768,7 +1768,7 @@ module.exports = function (OTP, data, type, to) {
                                       text-align: left;
                                     "
                                   >
-                                    <p style="line-height: 15px">
+                                    <p style="line-height: 18px">
                                       ${preOtpText}
                                     </p>
                                   </div>
@@ -1921,7 +1921,7 @@ module.exports = function (OTP, data, type, to) {
                                       text-align: left;
                                     "
                                   >
-                                    <p style="line-height: 15px">
+                                    <p style="line-height: 18px">
                                       ${postOtpText}
                                     </p>
                                   </div>
