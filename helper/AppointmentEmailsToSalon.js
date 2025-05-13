@@ -127,21 +127,21 @@ module.exports = function (to, data, state = 'book') {
   // style="text-decoration: none;"
   let heading = `Booking confirmed`
   // let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
-  let description = `The following appointment has been booked:`
+  let description = `The following booking has been made:`
   let subject = `Appointment confirmed ref #${data?.id}.`
 
   if (state === 'cancel') {
     subject = `Booking ref #${data.id} has been cancelled!.`
     heading = `Booking has been cancelled`
-    description = `Appointment was scheduled for ${date} with ${client?.name}`
+    description = `A booking was scheduled for ${date} with ${client?.name}, but has been cancelled.`
   } else if (state === 'reschudle') {
     subject = `Booking ref #${data.id} has been rescheduled!`
-    heading = `Booking has been update`
+    heading = `Booking has been updated`
     description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name}.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} has been marked as complete.`
     heading = `Booking has been completed`
-    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is now completed successfully.`
+    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> has been marked as complete.`
   } else if (state === 'noshow') {
     subject = `Booking ref #${data.id} marked as No-Show!`
     heading = `Appointment marked as No-Show`
@@ -626,7 +626,7 @@ module.exports = function (to, data, state = 'book') {
                                       <td>
                                         <div
                                           style="
-                                            color: #000000cc;
+                                            color:rgba(0, 0, 0, 0.8);
                                             direction: ltr;
                                             font-family: Chivo, sans-serif;
                                             font-size: 16px;
