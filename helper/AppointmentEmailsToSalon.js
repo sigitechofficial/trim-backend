@@ -636,7 +636,7 @@ module.exports = function (to, data, state = 'book') {
                                           "
                                         >
                                           <p style="margin: 0">
-                                            &#35;${description}
+                                            ${description}
                                           </p>
                                         </div>
                                       </td>
