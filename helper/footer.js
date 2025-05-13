@@ -67,10 +67,11 @@ width="100%"
                   font-weight: 400;
                   letter-spacing: 0px;
                   padding-left: 10px;
+                  text-align: left;
                 "
               >
                 <p>
-                  Unsure about how to use Trim, look up our FAQs.</a>.
+                  Unsure about how to use Trim, look up our FAQs.
                 </p>
               </div>
               <table
