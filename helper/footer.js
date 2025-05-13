@@ -66,7 +66,7 @@ width="100%"
                   font-size: 16px;
                   font-weight: 400;
                   letter-spacing: 0px;
-                  padding-left: 10px;
+                  padding-left: 0px;
                   text-align: left;
                 "
               >
