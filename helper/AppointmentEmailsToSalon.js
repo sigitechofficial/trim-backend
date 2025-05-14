@@ -114,6 +114,7 @@ module.exports = function (to, data, state = 'book') {
     return temp
   })
   jobs = jobs.join(' ')
+  let deeplink;
   const date = emailDateFormate(data.on, data.startTime)
   const salonName = data.salonDetail?.salonName || ''
   const address = data.salonDetail?.addressDB
@@ -129,6 +130,9 @@ module.exports = function (to, data, state = 'book') {
   // let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
   let description = `The following booking has been made:`
   let subject = `Appointment confirmed ref #${data?.id}.`
+  deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
+
+
 
   if (state === 'cancel') {
     subject = `Booking ref #${data.id} has been cancelled!.`
@@ -137,15 +141,17 @@ module.exports = function (to, data, state = 'book') {
   } else if (state === 'reschudle') {
     subject = `Booking ref #${data.id} has been rescheduled!`
     heading = `Booking has been updated`
-    description = `An appointment ref <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> is scheduled for ${date} with ${client?.name} check.`
+    deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
+    description = `An appointment ref ${data?.id} is scheduled for ${date} with ${client?.name} check.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} has been marked as complete.`
     heading = `Booking has been completed`
-    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> has been marked as complete.`
+    deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
+    description = `Booking reference ${data?.id} has been marked as complete.`
   } else if (state === 'noshow') {
     subject = `Booking ref #${data.id} marked as No-Show!`
     heading = `Appointment marked as No-Show`
-    description = `Booking reference <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a> was marked as a no-show. The client missed the scheduled appointment.`
+    description = `Booking reference ${data?.id} was marked as a no-show. The client missed the scheduled appointment.`
   }
 
   transporter.sendMail(
@@ -646,10 +652,40 @@ module.exports = function (to, data, state = 'book') {
                               </tr>
                             </tbody>
                           </table>
+
+
+                          <tr>
+                                      <td>
+                                        <div style="width: 75%; margin: auto">
+                                          <a href="${deeplink}" style="text-decoration: none;">
+                                            <button
+                                              style="
+                                                cursor: pointer;
+                                                width: 100%;
+                                                color:rgba(255, 255, 255, 0.8);
+                                                font-family: Chivo, sans-serif;
+                                                font-size: 16px;
+                                                font-weight: 500;
+                                                letter-spacing: 0px;
+                                                text-align: center;
+                                                background-color: black;
+                                                border: 2px solid black;
+                                                padding: 10px;
+                                              "
+                                            >
+                                              Booking Detail
+                                            </button>
+                                          </a>
+                                        </div>
+                                      </td>
+                                    </tr>
                         </td>
                       </tr>
                     </tbody>
                   </table>
+
+
+
       
               ${jobs}
       
