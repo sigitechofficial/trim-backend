@@ -641,7 +641,7 @@ module.exports = function (to, data, state = 'book') {
                                             text-align: left;
                                           "
                                         >
-                                          <p style="margin: 0">
+                                          <p style="margin-bottom: 10px">
                                             ${description}
                                           </p>
                                         </div>
