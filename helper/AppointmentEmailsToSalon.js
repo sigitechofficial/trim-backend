@@ -650,11 +650,10 @@ module.exports = function (to, data, state = 'book') {
                                   </table>
                                 </td>
                               </tr>
-                            </tbody>
-                          </table>
 
 
-                          <tr>
+
+                                      <tr>
                                       <td>
                                         <div style="width: 75%; margin: auto">
                                           <a href="${deeplink}" style="text-decoration: none;">
@@ -681,6 +680,11 @@ module.exports = function (to, data, state = 'book') {
                                     </tr>
                         </td>
                       </tr>
+                            </tbody>
+                          </table>
+
+
+                  
                     </tbody>
                   </table>
 
