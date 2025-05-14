@@ -378,7 +378,6 @@ module.exports = function (OTP, data, type, to) {
                   </tr>
                 </tbody>
               </table>
-  
               <table
                 align="center"
                 border="0"
@@ -423,7 +422,6 @@ module.exports = function (OTP, data, type, to) {
                             >
                               <table
                                 border="0"
-                                cellpadding="10"
                                 cellspacing="0"
                                 class="paragraph_block block-1"
                                 role="presentation"
@@ -456,7 +454,6 @@ module.exports = function (OTP, data, type, to) {
                   </tr>
                 </tbody>
               </table>
-  
               <table
                 align="center"
                 border="0"
@@ -501,7 +498,6 @@ module.exports = function (OTP, data, type, to) {
                             >
                               <table
                                 border="0"
-                                cellpadding="10"
                                 cellspacing="0"
                                 class="paragraph_block block-2"
                                 role="presentation"
@@ -981,7 +977,6 @@ module.exports = function (OTP, data, type, to) {
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-1"
                               role="presentation"
@@ -1668,7 +1663,6 @@ module.exports = function (OTP, data, type, to) {
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-1"
                               role="presentation"
@@ -1746,7 +1740,6 @@ module.exports = function (OTP, data, type, to) {
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-2"
                               role="presentation"
@@ -1899,7 +1892,6 @@ module.exports = function (OTP, data, type, to) {
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-2"
                               role="presentation"
