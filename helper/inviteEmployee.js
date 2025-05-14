@@ -58,9 +58,9 @@ module.exports = function (to = [], data) {
                       <img src="cid:trim" alt="Logo" style="display: block; width: 84px; height: 92px;">
                   </td>
               </tr>
-              <tr class="congrats-icon">
+              <tr>
                   <td align="center" style="padding: 20px;">
-                      <div style="font-size: 60px; font-family: 'Work Sans', sans-serif">🎉</div>
+                      <img src="cid:invite" alt="Invite" style="display: block; width: 147px; height: 102px;">
                   </td>
               </tr>
               <tr>
