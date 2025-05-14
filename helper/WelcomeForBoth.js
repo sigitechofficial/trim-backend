@@ -416,7 +416,6 @@ also be sending you a window cling (free) to put on your shop's window to show p
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-1"
                               role="presentation"
@@ -494,7 +493,6 @@ also be sending you a window cling (free) to put on your shop's window to show p
                           >
                             <table
                               border="0"
-                              cellpadding="10"
                               cellspacing="0"
                               class="paragraph_block block-2"
                               role="presentation"
