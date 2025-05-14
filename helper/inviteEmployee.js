@@ -18,7 +18,7 @@ module.exports = function (to = [], data) {
       from: process.env.EMAIL_USERNAME, // sender address
       to: to.concat(['sigitesting5@gmail.com', 'sigidevelopers@gmail.com']), // list of receivers
       subject: subject, // Subject line
-      attachments: attachment.footer.concat(attachment.trim),
+      attachments: attachment.footer.concat([attachment.trim, attachment.invite]),
       html: `
 
       <!DOCTYPE html>
