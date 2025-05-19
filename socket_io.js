@@ -29,7 +29,7 @@ const initializeWebSocket = (server) => {
       socket.join(userId)
       const rows = await unAcknowledgedEvents.findAll({ where: { to: userId } })
       rows.forEach((event) => {
-        console.log(`🚀ðŸš€ðŸš€Even a`, event)
+        //console.log(`🚀ðŸš€ðŸš€Even a`, event)
 
         ioInstance
           .to(event.to)

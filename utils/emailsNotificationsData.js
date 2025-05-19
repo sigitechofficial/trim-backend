@@ -130,7 +130,7 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
             include: [
               {
                 model: user,
-                attributes: ['id', 'firstName', 'lastName'],
+                attributes: ['id', 'firstName', 'lastName','email'],
                 include: { model: deviceToken, attributes: ['tokenId'] },
               },
               {
