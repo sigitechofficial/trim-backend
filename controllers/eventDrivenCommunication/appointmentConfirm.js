@@ -51,7 +51,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
       body: `A new appointment has been booked with ${fullName} on ${dateTime}.`,
     }
 
-    if (bookingData?.employeeData > 0) {
+    if (bookingData?.employeeData.length > 0) {
       bookingData.employeeData.forEach((ele) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
