@@ -78,7 +78,7 @@ module.exports = function (to, data, state = 'book') {
                                       width: 100%;
                                     "
                                   >
-                                    <div style="float: left; width: auto;">
+                                    <div style="float: left;  font-weight: bold; width: auto;">
                                       <div>${ele?.service?.serviceName}</div>
                                       <div
                                         style="
@@ -89,8 +89,7 @@ module.exports = function (to, data, state = 'book') {
                                          ${ele.duration} mints  ${employee} 
                                       </div>
                                     </div>
-
-                                    <div style="float: right; width: auto;">${CURRENCY_UNIT} ${ele.total}</div>
+                                    <div style="float: right; width: auto; font-weight: bold;">${CURRENCY_UNIT} ${ele.total}</div>
                                   </div>
                                 </td>
                               </tr>
@@ -1249,7 +1248,7 @@ module.exports = function (to, data, state = 'book') {
                                     style="
                                       font-size: 16px;
                                       font-family: Chivo, sans-serif;
-                                      font-weight: 400;
+                                      font-weight: 700;
                                       width: 100%;
                                       clear: both;
                                     "
@@ -1491,7 +1490,7 @@ module.exports = function (to, data, state = 'book') {
                                           style="
                                             font-size: 16px;
                                             font-family: Chivo, sans-serif;
-                                            font-weight: 400;
+                                            font-weight: 700;
                                             display: flex;
                                             justify-content: space-between;
                                             color: #00000099;
