@@ -83,7 +83,7 @@ module.exports = function (to, data, state = 'book') {
                                       <div
                                         style="
                                           font-size: 12px;
-                                          font-weight: 300;
+                                          font-weight: 500;
                                         "
                                       >
                                          ${ele.duration} mints  ${employee} 
@@ -232,12 +232,12 @@ module.exports = function (to, data, state = 'book') {
 
   if (state === 'cancel') {
     subject = `Your booking ref #${data.id} has been cancelled!.`
-    badgeText = 'Cancellation'
+    badgeText = 'Cancelled'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
     attachments = attachment.footer.concat(attachment.cancel)
-    emailTitle = `Hi ${client.name}, your booking has been cancelled!`
-    description = `Appointment was scheduled for ${date} with ${salonName}`
+    emailTitle = `Hi ${client.name}, your booking has been cancelled`
+    description = `Booking was scheduled for ${date} with ${salonName}`
     buttonSection = `<table
               align="center"
               border="0"

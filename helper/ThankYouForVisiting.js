@@ -79,18 +79,17 @@ module.exports = function (to, input) {
                                       width: 100%;
                                     "
                                   >
-                                    <div style="float: left; width: auto;">
+                                    <div style="float: left; font-weight: bold; width: auto;">
                                       <div>${ele?.service?.serviceName}</div>
                                       <div
                                         style="
                                           font-size: 12px;
-                                          font-weight: 300;
+                                          font-weight: 500;
                                         "
                                       >
                                          ${ele.duration} mints ${employee} 
                                       </div>
                                     </div>
-
                                     <div style="float: right; width: auto;">${CURRENCY_UNIT} ${ele.total}</div>
                                   </div>
                                 </td>
@@ -241,96 +240,6 @@ module.exports = function (to, input) {
       <tbody>
         <tr>
           <td>
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-5"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
-                      style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
-                      "
-                      width="500"
-                    >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
-                            style="
-                              font-weight: 400;
-                              text-align: left;
-                              padding-bottom: 5px;
-                              padding-top: 25px;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
-                            "
-                            width="100%"
-                          >
-                            <table
-                              border="0"
-                              cellpadding="0"
-                              cellspacing="0"
-                              class="heading_block block-3"
-                              role="presentation"
-                              width="100%"
-                            >
-                              <tr>
-                                <td
-                                  class="pad"
-                                  style="text-align: center; width: 100%"
-                                >
-                                  <h1
-                                    style="
-                                      margin: 0 auto;
-                                      color: #12466f;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 30px;
-                                      font-weight: 700;
-                                      letter-spacing: normal;
-                                      line-height: 120%;
-                                      text-align: center;
-                                      width: 400px;
-                                    "
-                                  >
-                                    Thank you for visiting ${input?.salon?.salonName}
-                                  </h1>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-          
-
-
-
-
             <table
               align="center"
               border="0"
@@ -498,7 +407,7 @@ module.exports = function (to, input) {
                                   >
                                     <p style="margin: 0">
                                       Booking was on
-                                      <span style="color: #12466f"
+                                      <span style="color:rgb(0, 0, 0)"
                                         >${date}</span
                                       >
                                     </p>
@@ -699,7 +608,7 @@ module.exports = function (to, input) {
                                       font-weight: 700;
                                     "
                                   >
-                                    Appointment details
+                                    Booking details
                                   </h4>
                                 </td>
                               </tr>
@@ -782,7 +691,7 @@ module.exports = function (to, input) {
                                     style="
                                       font-size: 16px;
                                       font-family: Chivo, sans-serif;
-                                      font-weight: 400;
+                                      font-weight: 700;
                                       display: flex;
                                       justify-content: space-between;
                                     "
@@ -1026,7 +935,7 @@ module.exports = function (to, input) {
                                       font-weight: 400;
                                       display: flex;
                                       justify-content: space-between;
-                                      color: #00000099;
+                                      color:rgba(0, 0, 0, 0.6);
                                     "
                                   >
                                   ${input?.salon?.salonName}
@@ -1203,9 +1112,8 @@ module.exports = function (to, input) {
                                       color: #000;
                                     "
                                   >
-                                    We sent you this email because you have
-                                    booked with   ${input?.salon?.salonName}, which professional
-                                    with Trim for appointments and payments.
+                                    We sent you this email because you 
+                                    booked with   ${input?.salon?.salonName}, through Trim App.
                                   </div>
                                 </td>
                               </tr>
