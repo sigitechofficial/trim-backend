@@ -686,7 +686,7 @@ module.exports = function (to, input) {
                             >
                               <tr>
                                 <td>
-                                  <hr />
+                                  <hr/>
                                   <div
                                     style="
                                       font-size: 16px;
@@ -699,7 +699,6 @@ module.exports = function (to, input) {
                                    <div style="float: left; width: auto;">Total</div>
                                     <div style="float: right; width: auto;">${CURRENCY_UNIT} ${total}</div>
                                   </div>
-                                  <hr />
                                 </td>
                               </tr>
                             </table>
