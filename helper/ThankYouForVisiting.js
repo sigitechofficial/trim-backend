@@ -484,7 +484,7 @@ module.exports = function (to, input) {
                           gap: 50px;  /* Increased gap for more horizontal space */
                           align-items: center;
                           justify-content: center;
-                          color: #000000;
+                          color:rgb(0, 0, 0);
                           direction: ltr;
                           font-family: Chivo, sans-serif;
                           font-size: 14px;
@@ -692,8 +692,8 @@ module.exports = function (to, input) {
                                       font-size: 16px;
                                       font-family: Chivo, sans-serif;
                                       font-weight: 700;
-                                      display: flex;
-                                      justify-content: space-between;
+                                      width: 100%;
+                                      clear: both;
                                     "
                                   >
                                    <div style="float: left; width: auto;">Total</div>

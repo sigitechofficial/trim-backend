@@ -317,7 +317,7 @@ module.exports = function (to, data, state = 'book') {
                                         padding: 10px;
                                       "
                                     >
-                                    Rebook your appointment
+                                    Rebook
                                     </button>
                                   </div>
                                 </td>
