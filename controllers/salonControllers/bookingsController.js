@@ -1344,28 +1344,30 @@ exports.getSalonCustomer = async (req, res, next) => {
       userId,
     },
   })
-
+  
+ 
   const salonCustomers = await booking.findAll({
-    where: {
-      salonDetailId: SalonDetail.id,
+  where: {
+    salonDetailId: SalonDetail.id,
+    customerId: { [Op.ne]: null }, 
+  },
+  include: [
+    {
+      model: user,
+      attributes: [
+        'id',
+        'firstName',
+        'lastName',
+        'email',
+        'countryCode',
+        'phoneNum',
+        'image',
+      ],
     },
-    include: [
-      {
-        model: user,
-        attributes: [
-          `id`,
-          `firstName`,
-          'lastName',
-          'email',
-          'countryCode',
-          'phoneNum',
-          'image',
-        ],
-      },
-    ],
-    attributes: ['customerId'],
-    group: ['customerId'], // Group by customerId to ensure uniqueness
-  })
+  ],
+  attributes: ['customerId'],
+  group: ['customerId'], // Group by customerId to ensure uniqueness
+})
 
   return res.json(
     returnFunction('1', 'Customer Added Successfully!', { salonCustomers }, ''),

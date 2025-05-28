@@ -196,6 +196,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: '',
     },
+    reminderSent: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    }
   })
 
   booking.associate = (models) => {
