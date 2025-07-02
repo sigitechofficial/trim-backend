@@ -64,14 +64,14 @@ exports.cancelBySalon = async (bookingId) => {
     })
 
     const customerNotification = {
-      title: `Appointment Cancellation`,
+      title: `Appointment cancellation`,
       body: `We regret to inform you that your appointment on ${dateTime} has been cancelled.`,
     }
 
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
 
     const salonNotification = {
-      title: `Booking Cancellation Alert`,
+      title: `Booking cancellation alert`,
       body: `The appointment with ${fullName} on ${dateTime} has been cancelled.`,
     }
 
@@ -148,14 +148,14 @@ exports.cancelByCustomer = async (bookingId) => {
     })
 
     const customerNotification = {
-      title: `Appointment Cancellation`,
+      title: `Appointment cancellation`,
       body: `We regret to inform you that your appointment on ${dateTime} has been cancelled.`,
     }
 
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
 
     const salonNotification = {
-      title: `Booking Cancellation Alert`,
+      title: `Booking cancellation alert`,
       body: `The appointment with ${fullName} on ${dateTime} has been cancelled.`,
     }
 
@@ -165,7 +165,7 @@ exports.cancelByCustomer = async (bookingId) => {
           return ele?.tokenId
         })
         const employeeNotification = {
-          title: `Appointment Canceled`,
+          title: `Appointment canceled`,
           body: `Appointment with ${fullName} on ${dateTime} for ${ele.service.serviceName} has been canceled`,
         }
         ThrowNotification(

@@ -42,12 +42,12 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
     })
 
     const customerNotification = {
-      title: `Appointment Confirmation`,
+      title: `Appointment confirmation`,
       body: `Your appointment with ${emailInput?.salonDetail?.salonName} on ${dateTime} has been confirmed. Looking forward to seeing you!`,
     }
     const fullName = `${emailInput.user.firstName} ${emailInput.user.lastName}`
     const salonNotification = {
-      title: `New Booking Alert`,
+      title: `New booking alert`,
       body: `A new appointment has been booked with ${fullName} on ${dateTime}.`,
     }
 
@@ -55,7 +55,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
       bookingData.employeeData.forEach((ele) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
-          title: `Appointment Assigned`,
+          title: `Appointment assigned`,
           body: `A new appointment has been booked with ${fullName} on ${ele.dateTime} for ${ele.service}`,
         }
         ThrowNotification(

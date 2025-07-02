@@ -69,14 +69,14 @@ exports.noShowMessages = async (bookingId, finePercentage, isCase = false) => {
     })
 
     const customerNotification = {
-      title: `No-Show Notification`,
+      title: `No-show notification`,
       body: `We missed you at your appointment today.`,
     }
 
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
 
     const salonNotification = {
-      title: `No-Show Alert`,
+      title: `No-show alert`,
       body: `${fullName} did not show up for the appointment on ${dateTime}.`,
     }
 

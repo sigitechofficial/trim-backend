@@ -604,7 +604,7 @@ exports.login = async (req, res, next) => {
   // Response object without salon details or employee
   const response = {
     status: '1',
-    message: 'logged in successfully!',
+    message: 'logged in successful',
     data: {
       userId: User.id,
       image: User.image,
@@ -661,7 +661,7 @@ exports.login = async (req, res, next) => {
       response.message =
         User.verifiedAt === null
           ? 'Please Verify First!'
-          : 'Login successfully!'
+          : 'Login successful'
       response.data.profileCompletion = {
         salonDetailId: '',
         salonName: '',
@@ -712,7 +712,7 @@ exports.login = async (req, res, next) => {
       console.log('🚀 ~ exports.login= ~  hasEmployee:', hasEmployee)
 
       response.status = isAllDataAvailable && hasEmployee ? '1' : '2'
-      response.message = 'Login successfully!'
+      response.message = 'Login successful'
       response.data.profileCompletion = {
         salonDetailId: salon.id ?? '',
         salonName: salon.salonName,
@@ -768,7 +768,7 @@ exports.login = async (req, res, next) => {
 
     if (!employeeDetails) {
       response.status = '5'
-      response.message = 'Login successfully!'
+      response.message = 'Login successful'
       response.data.accessToken = token
       response.data.profileCompletion = {
         salonDetailId: employeeDetails.salonDetailId,
@@ -785,7 +785,7 @@ exports.login = async (req, res, next) => {
         employeeDetails.employeeWagesMethod
 
       response.status = isAllDataAvailable ? '4' : '5'
-      response.message = 'Login successfully!'
+      response.message = 'Login successful'
       response.data.accessToken = token
       response.data.profileCompletion = {
         salonDetailId: employeeDetails.salonDetailId,
