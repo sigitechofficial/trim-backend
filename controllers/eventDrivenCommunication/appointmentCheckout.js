@@ -43,13 +43,13 @@ exports.cash = async (bookingId, tip, amount = 0) => {
     })
 
     const customerNotification = {
-      title: `Thank You for Visiting`,
+      title: `Thank you for visiting`,
       body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
     }
 
     if (tip > 0) {
       const TipNotification = {
-        title: `Thank You for Tipping`,
+        title: `Thank you for tipping`,
         body: `Thank you for your generous tip. We greatly appreciate your support!`,
       }
       ThrowNotification(
@@ -66,7 +66,7 @@ exports.cash = async (bookingId, tip, amount = 0) => {
 
     const fullName = `${bookingData?.user?.firstName} ${bookingData?.user?.lastName}`
     const salonNotification = {
-      title: `Payment Received`,
+      title: `Payment received`,
       body: `Payment of ${CURRENCY_UNIT} ${amount}  received from ${fullName}.`,
     }
     //TODO  $[Amount]
@@ -137,7 +137,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
     if (tip > 0) {
       console.log('ðŸš€ ~ exports.checkOutBooking= ~ tip:', tip)
       const TipNotification = {
-        title: `Thank You for Tipping`,
+        title: `Thank you for tipping`,
         body: `Thank you for your generous tip. We greatly appreciate your support!`,
       }
 
@@ -154,7 +154,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
     }
 
     const customerNotification = {
-      title: `Thank You for Visiting`,
+      title: `Thank you for visiting`,
       body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
     }
 
@@ -165,7 +165,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
 
     const fullName = `${bookingData.user.firstName} ${bookingData.user.lastName}`
     const salonNotification = {
-      title: `Payment Received`,
+      title: `Payment received`,
       body: `Payment of ${CURRENCY_UNIT} ${amount} received from ${fullName}.`,
     }
 

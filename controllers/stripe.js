@@ -144,29 +144,28 @@ async function createPaymentIntendForUpFrontPayments(
   customerId,
   accountId,
 ) {
-  console.log('🚀 ~ amount:', amount)
-  console.log('ðŸš€ ~ accountId:', accountId)
+  console.log('ðŸš€ ~ amount:', amount)
+  console.log('Ã°Å¸Å¡â‚¬ ~ accountId:', accountId)
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: convertToCents(amount),
-      currency: 'gbp', //Specify British pounds (GBP)  as the currency
-      setup_future_usage: 'off_session', //  # This saves the payment method for future off-session payments
+      currency: 'gbp',
       customer: customerId,
-      // capture_method: "manual",
-      automatic_payment_methods: {
-        enabled: true,
-      },
-      application_fee_amount: 50,
+      setup_future_usage: 'off_session', // optional, only if you're saving card
+      application_fee_amount: 50, // platform fee
+      payment_method_types: ['card'], // ✅ key fix
       transfer_data: {
-        destination: accountId, // Replace with the Connect account ID
+        destination: accountId, // salon's connected account
       },
     })
+
 
     return paymentIntent
   } catch (error) {
     throw new AppError(`${error.message} `, 200)
   }
 }
+
 
 /*
  *  1:  Create PaymenIntend

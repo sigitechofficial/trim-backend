@@ -286,57 +286,61 @@ exports.salaryEmployees = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  const employees = await employee.findAll({
-    where: {
-      salonDetailId: salon?.id,
-      id: {
-        [Op.in]: literal(`(
-        SELECT employeeId
-        FROM employeeWagesMethods
-        WHERE wagesMethodId = 2
-      )`),
-      },
-    },
-    attributes: [
-      'id',
+  const employeesRaw = await employee.findAll({
+  where: {
+    salonDetailId: salon?.id,
+  },
+  attributes: [
+    'id',
 
-      [
-        literal(`COALESCE(
+    // Salary Paid Amount
+    [
+      literal(`COALESCE(
          (SELECT SUM(salaryPayouts.amount)
           FROM salaryPayouts
-          WHERE salaryPayouts.employeeId = employee.id AND salaryPayouts.status = 'paid'  ), 0)`),
-        'paidAmount',
-      ],
-      [
-        literal(
-          `(SELECT users.firstName
-           FROM users WHERE users.id = employee.userId)`,
-        ),
-        'firstName',
-      ],
-      [
-        literal(
-          `(SELECT users.lastName
-           FROM users WHERE users.id = employee.userId)`,
-        ),
-        'lastName',
-      ],
-      [
-        literal(
-          `(SELECT users.image FROM users WHERE users.id = employee.userId)`,
-        ),
-        'image',
-      ],
+          WHERE salaryPayouts.employeeId = employee.id AND salaryPayouts.status = 'paid'
+        ), 0)`),
+      'paidAmount',
     ],
-    include: [
-      {
-        model: employeeWagesMethod,
-        required: true,
-      },
+
+    // User First Name
+    [
+      literal(`(SELECT users.firstName FROM users WHERE users.id = employee.userId)`),
+      'firstName',
     ],
-  })
-  const input = JSON.parse(JSON.stringify(employees))
-  const data = await calculateDueSalaries(input)
+
+    // User Last Name
+    [
+      literal(`(SELECT users.lastName FROM users WHERE users.id = employee.userId)`),
+      'lastName',
+    ],
+
+    // User Image
+    [
+      literal(`(SELECT users.image FROM users WHERE users.id = employee.userId)`),
+      'image',
+    ],
+  ],
+  include: [
+    {
+      model: employeeWagesMethod,
+      required: true,
+      where: { wagesMethodId: 2 }, // ✅ Only salary-based employees
+    },
+  ],
+  distinct: true, // still useful with JOINs
+});
+
+const employees = Object.values(
+  employeesRaw.reduce((acc, emp) => {
+    acc[emp.id] = emp;
+    return acc;
+  }, {})
+);
+const input = JSON.parse(JSON.stringify(employees))
+const data = await calculateDueSalaries(input);
+
+//   const data = await calculateDueSalaries(input)
 
   return res.json(response({ message: 'success.', data: { employees: data } }))
 }
@@ -380,27 +384,27 @@ exports.salaryEmployeePayout = async (req, res, next) => {
   const totalAmount =
     input.length > 0
       ? input.reduce((total, { amount }) => {
-          if (amount) {
-            const num = typeof amount === 'number' ? amount : parseFloat(amount)
-            if (!isNaN(num)) {
-              return total + num
-            }
+        if (amount) {
+          const num = typeof amount === 'number' ? amount : parseFloat(amount)
+          if (!isNaN(num)) {
+            return total + num
           }
-          return total
-        }, 0)
+        }
+        return total
+      }, 0)
       : 0
 
   const totalTip =
     input.length > 0
       ? input.reduce((total, { tip }) => {
-          if (tip) {
-            const num = typeof tip === 'number' ? tip : parseFloat(tip)
-            if (!isNaN(num)) {
-              return total + num
-            }
+        if (tip) {
+          const num = typeof tip === 'number' ? tip : parseFloat(tip)
+          if (!isNaN(num)) {
+            return total + num
           }
-          return total
-        }, 0)
+        }
+        return total
+      }, 0)
       : 0
 
   await salaryPayout.bulkCreate(input)

@@ -10,7 +10,7 @@ module.exports = function (data) {
   console.log('🚀 ~ data:', data)
   let firstParagraph = `${data.content}`
 
-  let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
+  let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your shop success.`
 
   let greetings = `${data.greetings}`
   let subject = `${data.greetings}`

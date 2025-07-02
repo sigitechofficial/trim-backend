@@ -96,7 +96,7 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
       `${inputData?.user?.firstName} ${inputData?.user?.lastName}` || ''
 
     const salonNotification = {
-      title: `New Review Alert`,
+      title: `New review alert`,
       body: `${fullName} has left a new review: ${comment}.`,
     }
     const employeesId = []
@@ -118,7 +118,7 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
           )
           employeesId.push(ele?.employee?.user?.id)
           const employeeNotification = {
-            title: `New Review Notification`,
+            title: `New review notification`,
             body: `${fullName} has left a new review: ${comment}.`,
           }
           const employee = employeesRating.find(

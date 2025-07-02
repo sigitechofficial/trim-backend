@@ -518,6 +518,9 @@ exports.employeeDetail = async (req, res, next) => {
     ],
   })
 
+
+  //   console.log("Result -------------->",result)
+
   if (!result) return next(new appError('Data not found', 404))
 
   const employeeData = JSON.parse(JSON.stringify(result))
@@ -590,17 +593,17 @@ exports.employeeDetail = async (req, res, next) => {
     })
     // return res.json(returnFunction('1', 'Employee Deyails', worker, ''))
 
-    console.log('ðŸš€ ~ exports.employeeDetail= ~ worker:', worker)
+    console.log('Ã°Å¸Å¡â‚¬ ~ exports.employeeDetail= ~ worker:', worker)
     if (methodId == 1) {
       const earning =
         parseFloat(worker?.dataValues?.totalCommission) -
-          parseFloat(worker?.dataValues?.paidAmount) || 0
+        parseFloat(worker?.dataValues?.paidAmount) || 0
 
       if (earning > 0) paymentPending = true
     } else if (methodId == 3) {
       const earning =
         parseFloat(worker?.dataValues?.earnings) -
-          parseFloat(worker?.dataValues?.paidAmount) || 0
+        parseFloat(worker?.dataValues?.paidAmount) || 0
 
       if (earning > 0) paymentPending = true
     }
@@ -697,8 +700,8 @@ exports.updateEmployee = async (req, res, next) => {
       where: { id: employeeData.user.id },
     },
   )
-  ;(employeeData.position = position ?? employeeData.position),
-    await employeeData.save()
+    ; (employeeData.position = position ?? employeeData.position),
+      await employeeData.save()
 
   return res.json(returnFunction('1', 'Employee Updated Successfully!', {}, ''))
 }

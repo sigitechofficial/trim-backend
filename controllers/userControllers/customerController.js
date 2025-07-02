@@ -1851,7 +1851,7 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     ? parseFloat(req.body?.platformFee)
     : 0
   const tip = req.body.tip ? parseFloat(req.body.tip) : 0
-  const advanceAmount = upFrontAmount + tip + platformFee
+  const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
   const ephemeralKey = await Stripe.createEphemeralKey(
     req.body.stripeCustomerId,
