@@ -43,12 +43,12 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
 
     const customerNotification = {
       title: `Appointment confirmation`,
-      body: `Your appointment with ${emailInput?.salonDetail?.salonName} on ${dateTime} has been confirmed. Looking forward to seeing you!`,
+      body: `Your booking with ${emailInput?.salonDetail?.salonName} on ${dateTime} has been confirmed.`,
     }
     const fullName = `${emailInput.user.firstName} ${emailInput.user.lastName}`
     const salonNotification = {
-      title: `New booking alert`,
-      body: `A new appointment has been booked with ${fullName} on ${dateTime}.`,
+      title: `New booking`,
+      body: `${fullName} has booked on ${dateTime}.`,
     }
 
     if (bookingData?.employeeData.length > 0) {

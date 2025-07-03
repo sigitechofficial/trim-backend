@@ -96,7 +96,7 @@ exports.feedBack = async (appointmentId, comment, employeesRating) => {
       `${inputData?.user?.firstName} ${inputData?.user?.lastName}` || ''
 
     const salonNotification = {
-      title: `New review alert`,
+      title: `New review`,
       body: `${fullName} has left a new review: ${comment}.`,
     }
     const employeesId = []
