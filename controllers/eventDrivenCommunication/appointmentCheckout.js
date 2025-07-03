@@ -43,8 +43,9 @@ exports.cash = async (bookingId, tip, amount = 0) => {
     })
 
     const customerNotification = {
-      title: `Thank you for visiting`,
-      body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
+      title: `Review`,
+      //body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
+      body: `You can leave a review for your booking to let others know about your experience.`,
     }
 
     if (tip > 0) {
@@ -166,7 +167,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
     const fullName = `${bookingData.user.firstName} ${bookingData.user.lastName}`
     const salonNotification = {
       title: `Payment received`,
-      body: `Payment of ${CURRENCY_UNIT} ${amount} received from ${fullName}.`,
+      body: `Payment of ${CURRENCY_UNIT}${amount} received from ${fullName}.`,
     }
 
     ThrowNotification(
