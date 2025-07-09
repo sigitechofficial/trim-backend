@@ -442,7 +442,7 @@ exports.IncomeReportYear = async (req, res, next) => {
   // Format the response
   return res.status(200).json(
     response({
-      message: 'Income Report.',
+      message: 'Income report',
       data: { currencyUnit: CURRENCY_UNIT, report },
     }),
   )
@@ -693,7 +693,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
   // Structure the response
   return res.status(200).json(
     response({
-      message: 'Income Report.',
+      message: 'Income report',
       data: { currencyUnit: CURRENCY_UNIT, report },
     }),
   )
@@ -893,7 +893,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
   // Structure the response
   return res.status(200).json(
     response({
-      message: 'Hourly income report generated successfully.',
+      message: 'Hourly income report generated',
       data: {
         report: orderedHours,
       },
@@ -989,5 +989,5 @@ exports.averageJobsReport = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(response({ message: 'success', data: { report } }))
+    .json(response({ message: 'Success', data: { report } }))
 }

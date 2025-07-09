@@ -155,8 +155,8 @@ exports.cancelByCustomer = async (bookingId) => {
     const fullName = `${appointment.user.firstName} ${appointment.user.lastName}`
 
     const salonNotification = {
-      title: `Booking cancellation alert`,
-      body: `The appointment with ${fullName} on ${dateTime} has been cancelled.`,
+      title: `Booking cancellation`,
+      body: ` ${fullName} has cancelled their booking on ${dateTime}.`,
     }
 
     if (appointment?.jobs?.length > 0) {
@@ -165,8 +165,8 @@ exports.cancelByCustomer = async (bookingId) => {
           return ele?.tokenId
         })
         const employeeNotification = {
-          title: `Appointment canceled`,
-          body: `Appointment with ${fullName} on ${dateTime} for ${ele.service.serviceName} has been canceled`,
+          title: `Booking cancellation`,
+          body: `${fullName} has cancelled their booking on ${dateTime} for ${ele.service.serviceName}`,
         }
         ThrowNotification(
           employeesTokens,

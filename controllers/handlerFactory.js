@@ -13,7 +13,7 @@ exports.deleteOne = (Model) => async (req, res, next) => {
 
   res.status(200).json({
     status: '1',
-    message: 'Deleted Successfully!',
+    message: 'Deleted',
     data: null,
     error: '',
   })
@@ -31,7 +31,7 @@ exports.updateOne = (Model) => async (req, res, next) => {
 
   res.status(200).json({
     status: '1',
-    message: 'Updated Successfully!',
+    message: 'Updated',
     data,
     error: '',
   })
@@ -43,7 +43,7 @@ exports.createOne = (Model) => async (req, res, next) => {
 
   res.status(200).json({
     status: '1',
-    message: 'Created Successfully!',
+    message: 'Created',
     data,
     error: '',
   })
@@ -93,7 +93,7 @@ exports.getAll = (Model, option) => async (req, res, next) => {
   }
   res.status(200).json({
     status: '1',
-    message: `All Data`,
+    message: `All data`,
     data,
     error: '',
   })

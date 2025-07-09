@@ -965,7 +965,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
   if (!employeeIds) {
     return res.status(200).json({
       status: '2',
-      message: 'No employee available move forword',
+      message: 'No employees available',
       data: {},
       error: '',
     })
@@ -2060,7 +2060,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       return res.status(200).json(
         response({
           status: '2',
-          message: 'Time slot booked by another customer',
+          message: 'This time is already booked by another customer',
         }),
       )
     }
@@ -2931,7 +2931,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
 
   //notifications
   const output = response({
-    message: 'Appointment marked as no-show successfull.',
+    message: 'Booking marked as no-show',
     data: {},
   })
   return res.status(200).json(output)
@@ -3061,7 +3061,7 @@ exports.markAppointmentAscancel = async (req, res, next) => {
   }
 
   const output = response({
-    message: 'Appointment marked as cancel successfull.',
+    message: 'Booking marked as cancelled',
     data: {},
   })
   return res.status(200).json(output)
