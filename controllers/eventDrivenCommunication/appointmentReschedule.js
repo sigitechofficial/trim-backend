@@ -72,16 +72,16 @@ exports.fromCustomerSoloEmployee = async (bookingId) => {
     const fullName = bookingData.client.fullName
 
     const salonNotification = {
-      title: `Booking rescheduled alert`,
-      body: `The appointment with ${fullName} has been rescheduled to ${dateTime}.`,
+      title: `Booking rescheduled`,
+      body: `${fullName} has rescheduled their booking to ${dateTime}.`,
     }
 
     if (bookingData?.employeeData > 0) {
       bookingData.employeeData.forEach((ele) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
-          title: `Appointment rescheduled`,
-          body: `Your appointment with ${fullName} has been rescheduled to ${ele.dateTime} for ${ele.service}`,
+          title: `Booking rescheduled`,
+          body: `${fullName} has rescheduled their booking to ${ele.dateTime} for ${ele.service}`,
         }
         ThrowNotification(
           employeesTokens,
@@ -276,8 +276,8 @@ exports.fromSalonMultipleEmployees = async (bookingId) => {
       bookingData.employeeData.forEach((ele) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
-          title: `Appointment rescheduled`,
-          body: `Your appointment with ${fullName} has been rescheduled to ${ele.dateTime} for ${ele.service}`,
+          title: `Booking rescheduled`,
+          body: `${fullName} has rescheduled their booking to ${ele.dateTime} for ${ele.service}`,
         }
         ThrowNotification(
           employeesTokens,
