@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             validate: {
               notNull: {
-                msg: 'Country Code is Required'
+                msg: 'Country code required'
               },
               notEmpty: {
                 msg: 'Country Code cannot be empty'
@@ -39,7 +39,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             validate: {
               notEmpty: {
-                msg: 'Phone Number cannot be empty'
+                msg: 'Phone number cannot be empty'
               }
             }
           },

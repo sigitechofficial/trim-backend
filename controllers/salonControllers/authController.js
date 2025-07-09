@@ -126,7 +126,7 @@ exports.googleSignIn = async (req, res) => {
     redis_Client.hSet(`trim${userData.id}`, dvToken, token)
     return res.status(200).json({
       status: '1',
-      message: `Welcome back! You've successfully logged in.`,
+      message: `Welcome to Trim`,
       data: {
         userId: `${userData.id}`,
         image: `${userData.image}`,
@@ -207,7 +207,7 @@ exports.signup = async (req, res, next) => {
 
     return res.status(200).json({
       status: '2',
-      message: 'Welcome aboard! Your account has been successfully created.',
+      message: 'Account created',
       data: {
         userId: `${userData.id}`,
         image: `${userData.image}`,
@@ -249,7 +249,7 @@ exports.signup = async (req, res, next) => {
       redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
       return res.status(200).json({
         status: '2',
-        message: 'User Logged in successfully!',
+        message: 'Successful login',
         data: {
           userId: `${userExist.id}`,
           image: `${userExist.image}`,
@@ -327,7 +327,7 @@ exports.signup = async (req, res, next) => {
       await userExist.otpVerification.save()
       return res.status(200).json({
         status: '1',
-        message: `Welcome aboard! We've sent a verification code to ${userExist.email}. Enter it here to verify your account. Check spam or junk if you don’t see it.`,
+        message: `Welcome to Trim ${userExist.email}.`,
         data: {
           userId: `${userExist.id}`,
           image: '',
@@ -382,7 +382,7 @@ exports.signup = async (req, res, next) => {
     salonProfiles.create({ userid: newUser?.id })
     return res.status(200).json({
       status: '1',
-      message: `An OTP has been successfully sent to ${newUser.email}. If it’s not in your inbox, please check your spam or junk folder.`,
+      message: `An OTP has been sent to ${newUser.email}.If it’s not in your inbox, please check your spam or junk folder`,
       data: {
         userId: `${newUser.id}`,
         image: '',
@@ -433,7 +433,7 @@ exports.resendOTP = async (req, res, next) => {
   }
   return res.status(200).json({
     status: '1',
-    message: `An OTP has been successfully sent to ${userExist.email}. If it’s not in your inbox, please check your spam or junk folder.`,
+    message: `An OTP has been sent to ${userExist.email}. If it’s not in your inbox, please check your spam or junk folder`,
     data: {
       userId: `${userId}`,
       image: '',
@@ -484,7 +484,7 @@ exports.verifyOTP = async (req, res, next) => {
   )
   return res.status(200).json({
     status: '2',
-    message: 'User logged in successfully!',
+    message: 'Successful login',
     data: {
       userId: `${userExist.id}`,
       image: `${userExist.image}`,
@@ -604,7 +604,7 @@ exports.login = async (req, res, next) => {
   // Response object without salon details or employee
   const response = {
     status: '1',
-    message: 'logged in successful',
+    message: 'Successful login',
     data: {
       userId: User.id,
       image: User.image,
@@ -927,7 +927,7 @@ exports.resetPassword = async (req, res, next) => {
   redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
-    message: 'Password Reset successfully!',
+    message: 'Password reset',
     data: {
       userId: `${User.id}`,
       image: `${User.image}`,
@@ -961,7 +961,7 @@ exports.updatePassword = async (req, res, next) => {
   redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
-    message: 'Password Updated successfully!',
+    message: 'Password updated',
     data: {
       userId: `${User.id}`,
       image: `${User.image}`,
@@ -1034,7 +1034,7 @@ exports.session = async (req, res, next) => {
   if (User.verifiedAt === null) {
     return res.status(200).json({
       status: '3',
-      message: 'Please Verify First!',
+      message: 'Please verify',
       data: {
         userId: `${User.id}`,
         image: `${User.image}`,
@@ -1066,7 +1066,7 @@ exports.session = async (req, res, next) => {
   if (User.salonDetails.length === 0) {
     return res.status(200).json({
       status: '2',
-      message: 'Login successfully!',
+      message: 'Successful login',
       data: {
         userId: `${User.id}`,
         image: `${User.image}`,
@@ -1139,7 +1139,7 @@ exports.session = async (req, res, next) => {
 
   return res.status(200).json({
     status: isAllDataAvailable && hasEmployee ? '1' : '2',
-    message: 'Login successfully!',
+    message: 'Successful login',
     data: {
       userId: `${User.id}`,
       image: `${User.image}`,
@@ -1219,7 +1219,7 @@ exports.employeeSession = async (req, res, next) => {
 
   const response = {
     status: '1',
-    message: 'Login successfully!',
+    message: 'Successful login',
     data: {
       userId: User.id,
       image: User.image,
@@ -1276,7 +1276,7 @@ exports.logout = async (req, res) => {
 
   return res.json({
     status: '1',
-    message: 'Log-out successfully',
+    message: 'Logged out',
     data: {},
     error: '',
   })

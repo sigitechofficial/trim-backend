@@ -925,7 +925,7 @@ exports.salonDetails = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message:"Data Loaded",
+      message:"Data loaded",
       data: {
         announcements: announcements,
         customerStatus,
@@ -1088,7 +1088,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
   if (employeeIds.length < 1) {
     return res
       .status(200)
-      .json({ status: '2', message: 'No employee available move forword.' })
+      .json({ status: '2', message: 'Nobody is available at this time' })
   }
 
   const workers = await user.findAll({
@@ -1127,7 +1127,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
   if (!workers || workers.length < 1) {
     return res
       .status(200)
-      .json({ status: '2', message: 'No employee available move forword.' })
+      .json({ status: '2', message: 'Nobody is available at this time' })
   }
 
   const result = workers.map((ele) => {
@@ -1262,7 +1262,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       return res.status(200).json(
         response({
           status: '2',
-          message: 'Time slot booked by another customer',
+          message: 'This time is already booked by another customer',
         }),
       )
     }
@@ -1311,7 +1311,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   fromCustomerSoloEmployee(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   const output = response({
-    message: 'Appointment re-schedule successfully.',
+    message: 'Booking rescheduled',
     data: {},
   })
   return res.status(200).json(output)
@@ -1434,7 +1434,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   )
   fromCustomerMultipleEmployees(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
-  const output = response({ message: 'Appointment re-schedule successfully.' })
+  const output = response({ message: 'Booking rescheduled' })
   return res.status(200).json(output)
 }
 
@@ -1523,7 +1523,7 @@ exports.cancelAppointment = async (req, res, next) => {
     ],
   })
   if (!bookingData) {
-    return res.status(404).json({ message: 'Appointment not found.' })
+    return res.status(404).json({ message: 'Booking not found' })
   }
 
   const finePercentage = req.body?.cancellationPercentage ?? 0
@@ -1640,7 +1640,7 @@ exports.cancelAppointment = async (req, res, next) => {
     { where: { bookingId: bookingId } },
   )
   const output = response({
-    message: 'Appointment cancel successfully.',
+    message: 'Booking cancelled',
     data: {},
   })
   return res.status(200).json(output)
@@ -1823,7 +1823,7 @@ exports.bookAppointment = async (req, res, next) => {
   onlineAppointmentConfirm(book?.id)
 
   const output = response({
-    message: 'Appointment booked successfully',
+    message: 'Booked',
     data: { appointment: book?.id },
   })
   return res.status(200).json(output)
@@ -1882,7 +1882,7 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     stripeCustomerId: req.body.stripeCustomerId,
   }
 
-  const output = response({ status: '1', message: 'Advance Payment.', data })
+  const output = response({ status: '1', message: 'Advance payment', data })
   return res.status(200).json(output)
 }
 
@@ -1921,7 +1921,7 @@ exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
     stripeCustomerId: req.body.stripeCustomerId,
   }
 
-  const output = response({ status: '1', message: 'Advance Payment.', data })
+  const output = response({ status: '1', message: 'Advance payment', data })
   return res.status(200).json(output)
 }
 
@@ -2214,7 +2214,7 @@ exports.fetchCards = async (req, res, next) => {
 exports.detachCard = async (req, res, next) => {
   const pmId = req.params.pm
   const detach = await Stripe.cardDetach(pmId)
-  const output = response({ message: 'Card detach success', data: detach })
+  const output = response({ message: 'Card removed', data: detach })
   return res.status(200).json(output)
 }
 
@@ -2269,7 +2269,7 @@ exports.applyCoupon = async (req, res, next) => {
     data.limit = 1
     data.applied = 0
   }
-  const output = response({ message: 'success', data: { promoCode: data } })
+  const output = response({ message: 'Success', data: { promoCode: data } })
   return res.status(200).json(output)
 }
 
@@ -2293,7 +2293,7 @@ exports.profileImageUpdate = async (req, res, next) => {
   await user.update({ image: imagePath }, { where: { id: userId } })
 
   const output = response({
-    message: 'Profile Image updated.',
+    message: 'Profile image updated',
     data: { image: imagePath },
   })
   return res.status(200).json(output)
@@ -2441,7 +2441,7 @@ exports.rateEmployes = async (req, res, next) => {
   )
   feedBack(appointmentId, comment, employeesRating)
   const output = response({
-    message: `Thank you for your feedback! We appreciate it.`,
+    message: `Feedback posted`,
     data: {},
   })
 
@@ -2455,7 +2455,7 @@ exports.skipRating = async (req, res, next) => {
   const status = doNotShow ? 'cancel' : 'skiped'
   await booking.update({ rating: status }, { where: { id: appointmentId } })
 
-  const output = response({ message: `success`, data: {} })
+  const output = response({ message: `Success`, data: {} })
   return res.status(200).json(output)
 }
 
@@ -2505,7 +2505,7 @@ exports.renewEphemeralSecret = async (req, res, next) => {
   userExist.ephemeralKeySecret = ephemeralKeySecret.id
   userExist.ephemeralKeyExpireAt = expiry
 
-  const output = response({ message: `success`, data: userExist })
+  const output = response({ message: `Success`, data: userExist })
   return res.status(200).json(output)
 }
 
@@ -2590,7 +2590,7 @@ exports.clientFeedBack = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'Client Feedbacks.',
+      message: 'Customer feedback',
       data: { limit, feedbacks, feedbackCount },
     }),
   )
@@ -2643,7 +2643,7 @@ exports.accountDelete = async (req, res, next) => {
   )
   Stripe.deleteCustomer(data?.stripeCustomerId)
   deviceToken.destroy({ where: { userId: id } })
-  return res.json(response({ message: 'Account Deleted.', data: { data } }))
+  return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
 //! Notifications
@@ -2658,7 +2658,7 @@ exports.fetchNotifications = async (req, res, next) => {
   })
 
   return res.json(
-    response({ message: 'Notifications.', data: { notifications } }),
+    response({ message: 'Notifications', data: { notifications } }),
   )
 }
 
@@ -2668,7 +2668,7 @@ exports.fetchNotifications = async (req, res, next) => {
 exports.logout = async (req, res, next) => {
   const id = req.user.id
   deviceToken.destroy({ where: { userId: id, tokenId: req.user.dvToken } })
-  return res.json(response({ message: 'Logout.', data: {} }))
+  return res.json(response({ message: 'Logged out', data: {} }))
 }
 
 //!Salon Subcription
@@ -2741,7 +2741,7 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
   }
-  const output = response({ status: '1', message: 'Payment.', data })
+  const output = response({ status: '1', message: 'Payment', data })
 
   return res.status(200).json(output)
 }
@@ -2794,7 +2794,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
   }
-  const output = response({ status: '1', message: 'Payment.', data })
+  const output = response({ status: '1', message: 'Payment', data })
 
   return res.status(200).json(output)
 }
@@ -2810,7 +2810,7 @@ exports.checkSubscription = async (req, res, next) => {
     subscription,
   }
 
-  const output = response({ status: '1', message: 'subscription.', data })
+  const output = response({ status: '1', message: 'Subscription', data })
 
   return res.status(200).json(output)
 }
@@ -2824,7 +2824,7 @@ exports.testing = async (req, res, next) => {
     subscription,
   }
 
-  const output = response({ status: '1', message: 'subscription.', data })
+  const output = response({ status: '1', message: 'Subscription', data })
 
   return res.status(200).json(output)
 }

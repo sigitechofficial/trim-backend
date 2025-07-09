@@ -825,7 +825,7 @@ exports.addOrUpdateAccessleves = async (req, res, next) => {
 
   employeeAccess.bulkCreate(accesslevels)
 
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
 /*
@@ -913,7 +913,7 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
     ]
   }
 
-  return res.json(returnFunction('1', 'success', { accesslevels }, ''))
+  return res.json(returnFunction('1', 'Success', { accesslevels }, ''))
 }
 
 //*8.Add or update Default Accesslevels
@@ -928,7 +928,7 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
 
   accesslevels.forEach((el) => (el.salonDetailId = salonDetailId))
   employeeAccessDefault.bulkCreate(accesslevels)
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
 //*8.Active Block
@@ -1007,7 +1007,7 @@ exports.activeBlockEmployee = async (req, res, next) => {
   )
 
   blockEmployees(req.body?.status || false, worker)
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
 //*8. Delete Employee
@@ -1084,7 +1084,7 @@ exports.deleteEmployee = async (req, res, next) => {
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })
   deviceToken.destroy({ where: { userId } })
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
 exports.addExternalEmployeeDefaultService = async (req, res, next) => {
@@ -1133,5 +1133,5 @@ exports.addExternalEmployeeDefaultService = async (req, res, next) => {
 
   await employeeService.bulkCreate(employeeServicesList)
 
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }

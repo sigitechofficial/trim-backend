@@ -2421,7 +2421,7 @@ console.log("priceId--------------->>>",priceId);
 
   return res.json(
     response({
-      message: 'Subscription.',
+      message: 'Subscription',
       data: { price: output },
     }),
   )
@@ -2436,7 +2436,7 @@ exports.updateCoverImage = async (req, res, next) => {
     { coverImage: image.imageUrl },
     { where: { userId: req.user.id } },
   )
-  return res.status(200).json(returnFunction('1', `success`, {}, ''))
+  return res.status(200).json(returnFunction('1', `Success`, {}, ''))
 }
 
 exports.clientFeedBackSalon = async (req, res, next) => {
@@ -2477,7 +2477,7 @@ exports.clientFeedBackSalon = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'Client Feedbacks.',
+      message: 'Client feedbacks',
       data: { limit, feedbacks, feedbackCount },
     }),
   )
@@ -2537,7 +2537,7 @@ exports.reviewReply = async (req, res, next) => {
     ThrowNotification(tokens, customerNotification, data, client?.customerId)
   }
 
-  return res.status(200).json(returnFunction('1', `success`, {}, ''))
+  return res.status(200).json(returnFunction('1', `Success`, {}, ''))
 }
 
 //* Salon custom notification
@@ -2669,7 +2669,7 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
   }
   // console.log('🚀 ~ exports.reviewReply= ~ client:', client)
 
-  return res.status(200).json(returnFunction('1', `success`, {}, ''))
+  return res.status(200).json(returnFunction('1', `Success`, {}, ''))
 }
 
 //* Add Client's allergies
@@ -2686,7 +2686,7 @@ exports.addAllergies = async (req, res, next) => {
 
   const newAllergy = await allergies.create(req.body)
 
-  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
+  return res.json(returnFunction('1', 'Success', { newAllergy }, ''))
 }
 
 //* Get Client's allergies
@@ -2707,7 +2707,7 @@ exports.fetchAllergies = async (req, res, next) => {
     },
   })
 
-  return res.json(returnFunction('1', 'success', { allergiesList }, ''))
+  return res.json(returnFunction('1', 'Success', { allergiesList }, ''))
 }
 
 //* Remove Client's allergies
@@ -2716,7 +2716,7 @@ exports.removeAllergies = async (req, res, next) => {
   const newAllergy = await allergies.destroy({
     where: { id: req.params?.id },
   })
-  return res.json(returnFunction('1', 'success', { newAllergy }, ''))
+  return res.json(returnFunction('1', 'Success', { newAllergy }, ''))
 }
 
 //* Client Note
@@ -2763,7 +2763,7 @@ exports.onlinePayments = async (req, res, next) => {
   })
   salonData.onlinePayments = onlinePayments
   await salonData.save()
-  return res.json(returnFunction('1', 'success', {}, ''))
+  return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
 // TO change PaymentMethods
@@ -2787,7 +2787,7 @@ exports.attachPaymentMethodsForSubscription = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'Subscription.',
+      message: 'Subscription',
       data: {},
     }),
   )
@@ -2822,7 +2822,7 @@ exports.changePaymentMethodsForSubscription = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'Subscription.',
+      message: 'Subscription',
       data: { price: output },
     }),
   )
@@ -2894,5 +2894,5 @@ exports.accountDelete = async (req, res, next) => {
   Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
   deleteEmployeesAll(salon?.id)
-  return res.json(response({ message: 'Account Deleted.', data: { data } }))
+  return res.json(response({ message: 'Account deleted', data: { data } }))
 }

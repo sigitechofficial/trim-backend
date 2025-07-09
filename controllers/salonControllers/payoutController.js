@@ -199,7 +199,7 @@ exports.commissionEmployees = async (req, res, next) => {
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { employees } }))
+  return res.json(response({ message: 'Success', data: { employees } }))
 }
 
 //* Payout 2. Get Rent a Chair Employes ----------------------------------------------
@@ -276,7 +276,7 @@ exports.rentalChairEmployees = async (req, res, next) => {
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { employees } }))
+  return res.json(response({ message: 'Success', data: { employees } }))
 }
 
 //* Payout 3. Get Salary Employees ---------------------------------------------------
@@ -342,7 +342,7 @@ const data = await calculateDueSalaries(input);
 
 //   const data = await calculateDueSalaries(input)
 
-  return res.json(response({ message: 'success.', data: { employees: data } }))
+  return res.json(response({ message: 'Success', data: { employees: data } }))
 }
 
 //* Payout 4. Get Salary Employees ---------------------------------------------------
@@ -422,7 +422,7 @@ exports.salaryEmployeePayout = async (req, res, next) => {
   await isValid.save()
   console.log('--->', input)
 
-  return res.json(response({ message: 'success.', data: {} }))
+  return res.json(response({ message: 'Success', data: {} }))
 }
 
 //* Payout 5. Commission Employee Summary ---------------------------------------------
@@ -500,7 +500,7 @@ exports.commissionEmployeeSummary = async (req, res, next) => {
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { result } }))
+  return res.json(response({ message: 'Success', data: { result } }))
 }
 
 //* Payout 6. Rent a Chair Employee Summary -------------------------------------------
@@ -542,7 +542,7 @@ exports.rentalChairEmployeeSummary = async (req, res, next) => {
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { result } }))
+  return res.json(response({ message: 'Success', data: { result } }))
 }
 
 //* Payout 7. Salary Employee Summary --------------------------------------------------
@@ -575,7 +575,7 @@ exports.salaryEmployeeSummary = async (req, res, next) => {
     ],
   })
 
-  return res.json(response({ message: 'success.', data: { result } }))
+  return res.json(response({ message: 'Success', data: { result } }))
 }
 
 //? Transfer amount to employees
@@ -603,7 +603,7 @@ exports.amountTransferCommission = async (req, res, next) => {
     { where: { salonDetailId: salon?.salonDetailId } },
   )
 
-  return res.json(response({ message: 'success.', data: {} }))
+  return res.json(response({ message: 'Success', data: {} }))
 }
 
 //* Amount-Transfer 2. To rent a chair employees ----------------------------------------
@@ -628,7 +628,7 @@ exports.amountTransferRentAChair = async (req, res, next) => {
     },
     { where: { salonDetailId: salon?.salonDetailId } },
   )
-  return res.json(response({ message: 'success.', data: {} }))
+  return res.json(response({ message: 'Success', data: {} }))
 }
 
 //! TRANSACTIONS HISTORY
@@ -647,7 +647,7 @@ exports.commissionTransactionHistory = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { salon: salon.salonName, history },
     }),
   )
@@ -667,7 +667,7 @@ exports.rentChairTransactionHistory = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { salon: salon.salonName, history },
     }),
   )
@@ -688,7 +688,7 @@ exports.salaryTransactionHistory = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { salon: salon.salonName, history },
     }),
   )
@@ -730,7 +730,7 @@ exports.comissionEmployeeAccount = async (req, res, next) => {
   })
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { employee },
     }),
   )
@@ -827,7 +827,7 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { lastExpectedDate, data },
     }),
   )
@@ -893,7 +893,7 @@ exports.externalEmployeeSummary = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'success.',
+      message: 'Success',
       data: { employees: workers, currencyUnit: CURRENCY_UNIT },
     }),
   )
@@ -927,7 +927,7 @@ exports.collectRent = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'The rent payment has been successfully received.',
+      message: 'Rent payment received',
       data: {},
     }),
   )
@@ -943,7 +943,7 @@ exports.collectedRentTransactionHistory = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'The rent payment has been successfully received.',
+      message: 'Rent payment received',
       data: { history, currencyUnit: CURRENCY_UNIT },
     }),
   )
