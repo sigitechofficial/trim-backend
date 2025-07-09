@@ -841,7 +841,7 @@ exports.hourlyIncomeReportAdmin = async (req, res, next) => {
   // Structure the response
   return res.status(200).json(
     response({
-      message: 'Hourly income report generated successfully.',
+      message: 'Hourly Income Report.',
       data: {
         report: orderedHours,
       },

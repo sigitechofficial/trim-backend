@@ -69,7 +69,7 @@ const { salonDetails } = require('../userControllers/customerController')
 const response = ({ status, message, data, error, currencyUnit }) => {
   const output = {
     status: status ? `${status}` : '1',
-    message: message ? `${message}` : 'success',
+    message: message ? `${message}` : 'Success',
     data: data,
     error: error ? `${error}` : '',
   }
@@ -202,7 +202,7 @@ exports.addServieType = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'Service type added successfully',
+      message: 'Service type added',
       data: { id: data.id },
     }),
   )
@@ -219,7 +219,7 @@ exports.fetchServiceTypes = async (req, res, next) => {
 
   return res.status(200).json({
     status: '1',
-    message: 'success',
+    message: 'Success',
     data: data,
   })
 }
@@ -229,7 +229,7 @@ exports.fetchServiceTypes = async (req, res, next) => {
 exports.updateServiceTypes = async (req, res, next) => {
   if (!req.params.id) throw new AppError(`Invalid request format`, 200)
   const { id } = req.params
-  console.log('ðŸš€ ~ exports.updateServiceTypes= ~ id:', id)
+  console.log('🚀 ~ exports.updateServiceTypes= ~ id:', id)
   const input = req.body
   if (req.file) {
     const tmpPath = req.file.path
@@ -238,7 +238,7 @@ exports.updateServiceTypes = async (req, res, next) => {
   } else {
     delete input.image
   }
-  console.log('ðŸš€ ~ exports.updateServiceTypes= ~ input:', input)
+  console.log('🚀 ~ exports.updateServiceTypes= ~ input:', input)
 
   if(input.serviceOrder!=input.newOrder){
     await serviceType.update({
@@ -331,7 +331,7 @@ exports.dashboard = async (req, res, next) => {
 
   return res.status(200).json({
     status: '1',
-    mesage: 'success',
+    mesage: 'Success',
     data: {
       totalSalon,
       upcommingConfirmAppointments,
@@ -425,7 +425,7 @@ exports.dashboardCharts = async (req, res, next) => {
 
   return res.status(200).json({
     status: '1',
-    mesage: 'success',
+    mesage: 'Success',
     data: {
       dashboardBarChartData,
       dashboardDoughnutChartData,
@@ -584,7 +584,7 @@ exports.fecthSalons = async (req, res, next) => {
 //* 1.Fetch All Salons ---------------------(send stickers include) sendSticker
 
 exports.updateSalonDetails = async (req, res, next) => {
-  console.log('ðŸš€ ~ exports.updateSalonDetails= ~ req.body:', req.body)
+  console.log('🚀 ~ exports.updateSalonDetails= ~ req.body:', req.body)
   let condition={}
   if(req.params?.salon) condition.id=req.params.salon
   else if(req.body?.ids) condition.id=req.body.ids
@@ -594,7 +594,7 @@ exports.updateSalonDetails = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )
@@ -953,7 +953,7 @@ exports.addSubscription = async (req, res, next) => {
   const featureData = await subscriptionFeature.bulkCreate(featureInput)
   return res.status(200).json(
     response({
-      message: 'Subscription Plan added successfully',
+      message: 'Subscription Plan added',
       data: { id: plan.id },
     }),
   )
@@ -975,7 +975,7 @@ exports.fetchSubscriptions = async (req, res, next) => {
   if (req.params.id) output = output[0]
   return res.status(200).json({
     status: '1',
-    message: 'success',
+    message: 'Success',
     data: data,
     currencyUnit: CURRENCY_UNIT,
   })
@@ -1327,7 +1327,7 @@ exports.fetchHelpSupport = async (req, res, next) => {
   })
   return res.status(200).json({
     status: '1',
-    message: 'success',
+    message: 'Success',
     data: data,
   })
 }
@@ -1373,7 +1373,7 @@ exports.fetchSalonEmployees = async (req, res, next) => {
   })
   return res.status(200).json({
     status: '1',
-    message: 'success',
+    message: 'Success',
     data: data,
   })
 }
@@ -1443,7 +1443,7 @@ exports.throwNotifications = async (req, res, next) => {
 
   return res.status(200).json({
     status: '1',
-    message: 'success',
+    message: 'Success',
     data: {},
   })
 }
@@ -1459,7 +1459,7 @@ exports.fetchPushNotifications = async (req, res, next) => {
 
   return res.json({
     status: '1',
-    message: 'All Push Notifications.',
+    message: 'All push notifications.',
     data: allNotData,
     error: '',
   })
@@ -1492,7 +1492,7 @@ exports.peakTimesReport = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(response({ message: 'Peak Times Report', data: { report, status } }))
+    .json(response({ message: 'Peak Times report', data: { report, status } }))
 }
 
 //* 2.Reports > Financial Performance Report-----------------
@@ -1737,7 +1737,7 @@ exports.AllSubscriptions = async (req, res, next) => {
   const listOfPlans = await Stripe.AllProducts(3)
   return res.status(200).json(
     response({
-      message: 'All Subscription Plan',
+      message: 'Subscription plans',
       data: { listOfPlans },
     }),
   )
@@ -1756,7 +1756,7 @@ exports.updateSubscription = async (req, res, next) => {
   )
   return res.status(200).json(
     response({
-      message: 'Subscription Plan Updated Successfully!',
+      message: 'Subscription plan updated',
       data: { updatedProduct },
     }),
   )
@@ -2228,7 +2228,7 @@ exports.changeSalonStatus = async (req, res, next) => {
 
   res.status(200).json(
     response({
-      message: 'Status changed successfully',
+      message: 'Status changed',
       data: { count: updatedCount, newStatus },
     }),
   )
@@ -2255,7 +2255,7 @@ exports.changeCustomerStatus = async (req, res, next) => {
 
   res.status(200).json(
     response({
-      message: 'Status changed successfully',
+      message: 'Status changed',
       data: { count: updatedCount, newStatus },
     }),
   )
@@ -2282,7 +2282,7 @@ exports.changeStatus = (Model) => async (req, res, next) => {
   )
   res.status(200).json(
     response({
-      message: 'Status changed successfully',
+      message: 'Status changed',
       data: { count: updatedCount },
     }),
   )
@@ -2318,7 +2318,7 @@ exports.softDelete = (Model) => async (req, res, next) => {
 
   res.status(200).json(
     response({
-      message: 'Service type deleted successfully',
+      message: 'Service type deleted',
       data: { count: updatedCount },
     }),
   )
@@ -2338,7 +2338,7 @@ exports.delete = (Model) => async (req, res, next) => {
   } else {
     return res.status(200).json(
       response({
-        mesage: 'Deleted successfully',
+        mesage: 'Deleted Successfully',
       }),
     )
   }
@@ -2354,7 +2354,7 @@ exports.addReasons = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'Reason type added successfully',
+      message: 'Reason type added',
       data: { reason: data },
     }),
   )
@@ -2385,7 +2385,7 @@ exports.updateReasons = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )
@@ -2401,7 +2401,7 @@ exports.changeReasonStatus = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )
@@ -2414,7 +2414,7 @@ exports.deleteReasons = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )
@@ -2424,7 +2424,7 @@ exports.customEmails = async (req, res, next) => {
   CutomEmails(req.body)
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )
@@ -2493,7 +2493,7 @@ exports.adminEarnings = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: { totalRevenue, data: rows },
     }),
   )
@@ -2556,7 +2556,7 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: { totalRevenue, data: rows },
     }),
   )
@@ -2611,7 +2611,7 @@ exports.updateFAQs = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: { id: req.params?.id },
     }),
   )
@@ -2624,7 +2624,7 @@ exports.deleteFAQs = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'success',
+      message: 'Success',
       data: {},
     }),
   )

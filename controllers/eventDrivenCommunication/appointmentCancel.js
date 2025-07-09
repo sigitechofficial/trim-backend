@@ -64,7 +64,7 @@ exports.cancelBySalon = async (bookingId) => {
     })
 
     const customerNotification = {
-      title: `Appointment cancelled`,
+      title: `Booking cancelled`,
       body: `Your booking on ${dateTime} has been cancelled.`,
     }
 
