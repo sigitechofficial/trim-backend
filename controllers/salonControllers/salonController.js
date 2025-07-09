@@ -2525,7 +2525,7 @@ exports.reviewReply = async (req, res, next) => {
     })
 
     const customerNotification = {
-      title: `Salon Reply`,
+      title: `Shop reply`,
       body: `${req.body?.reply}. From  ${client?.dataValues?.salonName}`,
     }
 

@@ -140,6 +140,7 @@ exports.online = async (bookingId, tip, amount = 0) => {
       const TipNotification = {
         title: `Thank you for tipping`,
         body: `Thank you for your generous tip. We greatly appreciate your support!`,
+        
       }
 
       ThrowNotification(
@@ -155,8 +156,10 @@ exports.online = async (bookingId, tip, amount = 0) => {
     }
 
     const customerNotification = {
-      title: `Thank you for visiting`,
-      body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
+      title: `Review`,
+      //title: `Thank you for visiting`,
+      //body: `Thank you for visiting ${bookingData?.salonDetail?.salonName}! We hope you enjoyed. Please leave a review.`,
+      body: `You can leave a review for your booking to let others know about your experience.`,
     }
 
     console.log(

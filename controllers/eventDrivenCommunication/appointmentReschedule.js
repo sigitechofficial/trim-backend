@@ -65,8 +65,8 @@ exports.fromCustomerSoloEmployee = async (bookingId) => {
     const customerTokens = bookingData.client.customerTokens
 
     const customerNotification = {
-      title: `Rescheduled appointment`,
-      body: `Your appointment with ${inputData?.salonDetail?.salonName} has been rescheduled to ${dateTime}. Please let us know if this works for you.`,
+      title: `Rescheduled booking`,
+      body: `Your booking with ${inputData?.salonDetail?.salonName} has been rescheduled to ${dateTime}.`,
     }
 
     const fullName = bookingData.client.fullName
