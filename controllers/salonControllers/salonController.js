@@ -37,6 +37,7 @@ const {
   allergies,
   clientNotes,
   deletedCustomer,
+  subscriptions
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -50,7 +51,6 @@ const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
 const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
-
 const {
   processAllAppointments,
   processAppointment,
@@ -2896,3 +2896,62 @@ exports.accountDelete = async (req, res, next) => {
   deleteEmployeesAll(salon?.id)
   return res.json(response({ message: 'Account deleted', data: { data } }))
 }
+
+exports.updateSubscriptionsPriceId = async (req, res, next) => {
+  try {
+    // Dynamically import p-limit
+    const { default: pLimit } = await import('p-limit');
+
+    const latestPriceId = process.env.stage_PriceId;
+
+    const subsToUpdate = await subscriptions.findAll({
+      where: {
+        [Op.or]: [
+          { priceId: { [Op.ne]: latestPriceId } },
+          { priceId: null }
+        ]
+      }
+    });
+
+    console.log(`🔍 Found ${subsToUpdate.length} subscriptions to update.`);
+
+    const limit = pLimit(15);
+
+    const updateJobs = subsToUpdate.map(sub =>
+      limit(async () => {
+        try {
+          const stripeSub = await Stripe.subscriptionsRetrieve(sub.subscriptionId);
+          const itemId = stripeSub?.items?.data?.[0]?.id;
+
+          if (!itemId) {
+            console.warn(`⚠️ No subscription item found for ${sub.subscriptionId}`);
+            return { success: false, id: sub.subscriptionId, reason: 'No item ID' };
+          }
+
+          await Stripe.updateSubscription(sub.subscriptionId, latestPriceId, stripeSub.customer, null);
+
+          sub.priceId = latestPriceId;
+          await sub.save();
+
+          console.log(`✅ Updated subscription ${sub.subscriptionId}`);
+          return { success: true, id: sub.subscriptionId };
+        } catch (err) {
+          console.error(`❌ Failed to update subscription ${sub.subscriptionId}:`, err.message);
+          return { success: false, id: sub.subscriptionId, reason: err.message };
+        }
+      })
+    );
+
+    const results = await Promise.allSettled(updateJobs);
+
+    const summary = results.map(r => (r.status === 'fulfilled' ? r.value : { success: false, reason: r.reason }));
+
+    return res.json(response({ message: 'Subscriptions updated', data: summary }));
+  } catch (err) {
+    console.error('❌ updateSubscriptionsPriceId failed:', err);
+    return res.status(500).json(response({ status: 0, message: 'Internal Server Error', error: err.message }));
+  }
+};
+
+
+
