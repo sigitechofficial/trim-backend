@@ -16,21 +16,21 @@ if(process.env.NODE_ENV==='test'){
 }else{
   endpointSecret=process.env.live_signature
 }
-console.log("🚀 ~ endpointSecret:", endpointSecret)
+console.log("ЁЯЪА ~ endpointSecret:", endpointSecret)
 
 exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
   const sig = req.headers['stripe-signature']
   let event
-  console.log('⚠️⚠️⚠️ Webhook signature verification.')
+  console.log('тЪая╕ПтЪая╕ПтЪая╕П Webhook signature verification.')
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret)
     console.log(
-      '🚀 ~~~~~~~~~~~ exports.stripeSubscriptionWebhookEventHandler= ~ event:',
+      'ЁЯЪА ~~~~~~~~~~~ exports.stripeSubscriptionWebhookEventHandler= ~ event:',
       JSON.stringify(event),
     )
   } catch (err) {
-    console.error('⚠️⚠️⚠️ Webhook signature verification failed.', err.message)
+    console.error('тЪая╕ПтЪая╕ПтЪая╕П Webhook signature verification failed.', err.message)
     return res.status(400).send(`Webhook Error: ${err.message}`)
   }
   // invoice.paid
@@ -41,7 +41,7 @@ exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
   // subscription_schedule.created
   // subscription_schedule.updated
   // Handle the event
-  console.log('🚀🚀🚀 ~~~~~~~~~~ >  EVENT TYPE }:', event.type)
+  console.log('ЁЯЪАЁЯЪАЁЯЪА ~~~~~~~~~~ >  EVENT TYPE }:', event.type)
   switch (event.type) {
     case 'invoice.payment_succeeded':
       await handleInvoicePayment(
@@ -89,6 +89,7 @@ const handleInvoicePayment = async (invoice, state, status) => {
 
     const periodEnd = new Date(subscribtionData?.current_period_end * 1000)
     const periodStart = new Date(subscribtionData?.current_period_start * 1000)
+    const priceId = subscribtionData?.items?.data?.[0]?.price?.id || null;
 
     const input = {
       status: status,
@@ -101,6 +102,7 @@ const handleInvoicePayment = async (invoice, state, status) => {
       customerId,
       subscriptionId,
       invoiceId,
+      priceId,
     }
     console.log('🚀 ~ handleInvoicePaymentSucceeded ~ input:', input)
     // Find the user by Stripe Customer ID

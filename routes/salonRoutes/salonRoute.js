@@ -334,4 +334,6 @@ router.patch(
   catchAsync(salonController.changeCategoryStatus),
 )
 
+router.post('/update-subscriptions-price-id', catchAsync(salonController.updateSubscriptionsPriceId))
+
 module.exports = router
