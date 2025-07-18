@@ -1274,6 +1274,7 @@ exports.updateSubscription = async (req, res, next) => {
     membersCount: newMemberCount,
     paymentMethodId: paymentMethodId,
     priceId: newPriceId,
+    teamSize:newMemberCount
   }
   //   {
   // subscriptionId:'subs_823940182euwjd0qsx'
