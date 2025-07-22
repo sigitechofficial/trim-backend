@@ -2683,7 +2683,7 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
   if (!salon) throw new AppError('resource not found', 200)
 
   // TODO salon already have subscripiton
-  console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ = ~ req.body:', req.body)
+  console.log('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ~ = ~ req.body:', req.body)
   //   return res.json(req.body);
   let stripeCustomer = salon?.stripeCustomerId
   if (!salon?.stripeCustomerId) {
@@ -2694,12 +2694,18 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
     stripeCustomer = stripeCustomerId
     await user.update({ stripeCustomerId }, { where: { id: salon.id } })
   }
+  const salonDetails = await salonDetail.findOne({ where: { userId: salon.id } })
+
+let trialDays = req.body?.freeTrialDays || 0
+if (salonDetails?.hasObtainedFreeTrial) {
+  trialDays = 0 // User already consumed free trial
+}
   const metadata = {
     members: req.body?.members,
     subscriptionName: req.body.subscriptionName,
     sloanId: salon.id,
     membersCount: req.body.membersCount,
-    freeTrialDays: req.body?.freeTrialDays || 0,
+    freeTrialDays: trialDays,
     paymentMethodId: req.body?.paymentMethodId,
     teamSize: req.body.membersCount,
     priceId: req.body?.priceId,
@@ -2715,7 +2721,7 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
   //   subscriptionName: 'Owner + 3 members'
   // }
   console.log(
-    'ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
+    'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
     stripeCustomer,
   )
   // const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
@@ -2724,7 +2730,7 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
     req.body.priceId,
     metadata,
     req.body.membersCount,
-    req.body?.freeTrialDays || 0,
+    trialDays|| 0,
     req.body.paymentMethodId,
   )
   //return res.json(indent);
