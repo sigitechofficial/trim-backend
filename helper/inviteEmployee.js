@@ -8,7 +8,7 @@ const { newFooter } = require('./newFooter')
 
 module.exports = function (to = [], data) {
   const greetings = `Hi ${data?.name || ''}, you’re invited to join ${data?.salonName} on Trim Business!`
-  let subject = `Hi ${data?.name || ''} welcome to trim, We're Glad to Have You!`
+  let subject = `Welcome to Trim!`
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + 7);
   const formattedExpiryDate = expiryDate.toDateString();

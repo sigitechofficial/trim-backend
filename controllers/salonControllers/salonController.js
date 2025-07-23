@@ -733,6 +733,9 @@ exports.salonProfile = async (req, res, next) => {
   //         ? ''
   //         : Convert.convertTo12HourFormat(timeSlot.closingTime)
   // })
+  
+  console.log('Trying to create Stripe login link for accountId:', salonData?.connectAccountId)
+
   if (salonData?.connectAccountId) {
     let link = salonData?.connectAccountId
       ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
@@ -742,8 +745,8 @@ exports.salonProfile = async (req, res, next) => {
 
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
     const output = JSON.parse(JSON.stringify(salonData))
-    output.stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+    let stripeDashboardlink = link
+    return res.json(returnFunction('1', 'Salon Profile', { salonData,stripeDashboardlink }, ''))
 
   } else {
     const output = JSON.parse(JSON.stringify(salonData))
@@ -2367,66 +2370,72 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
             ) 
             AND employees.status = true 
             AND employees.isOwner = false 
-            AND employees.deleted = false)`,
+            AND employees.deleted = false)`
         ),
         'teamSize',
       ],
     ],
-  })
-  if (!salon) throw new appError('resource not found', 200)
+  });
 
-  console.log('ðŸš€ ~ exports.forSubcription= ~ salonsalonsalona:', salon)
-  let stripeCustomer = salon?.stripeCustomerId
-  if (!salon?.stripeCustomerId) {
+  if (!salon) throw new appError('resource not found', 200);
+
+  // ✅ Fetch from salonDetails for free trial flag
+  const salonDetails = await salonDetail.findOne({
+    where: { userId: salon.id },
+    attributes: ['hasObtainedFreeTrial'],
+  });
+
+  let stripeCustomer = salon?.stripeCustomerId;
+  if (!stripeCustomer) {
     const stripeCustomerId = await Stripe.addCustomer(
       salon.fullName,
-      salon.email,
-    )
-    stripeCustomer = stripeCustomerId
-    await user.update({ stripeCustomerId }, { where: { id: salon.id } })
+      salon.email
+    );
+    stripeCustomer = stripeCustomerId;
+    await user.update({ stripeCustomerId }, { where: { id: salon.id } });
   }
 
   let priceId;
+  if (process.env.NODE_ENV === 'test') {
+    priceId = process.env.stage_PriceId;
+  } else {
+    priceId = process.env.live_price_Id;
+  }
 
-if(process.env.NODE_ENV==='test'){
-  priceId=process.env.stage_PriceId
-}else{
-  priceId=process.env.live_price_Id
-}
+  const price = await Stripe.getPriceById(priceId);
+  const setupIntent = await Stripe.setupIntent(stripeCustomer);
+  const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer);
 
-console.log("priceId--------------->>>",priceId);
+  const { livemode, product, currency, billing_scheme, active, object } = price;
+  const limited = price.tiers[0];
 
-  const price = await Stripe.getPriceById(priceId)
-  const setupIntent = await Stripe.setupIntent(stripeCustomer)
-  const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
-
-  const { livemode, product, currency, billing_scheme, active, object } = price
-  const output = { livemode, product, currency, billing_scheme, active, object }
-  const limited = price.tiers[0]
-
-  output.priceId = price.id
-  output.unlimitedMembersAmount = price.tiers[1].flat_amount / 100
-  output.ownerAmount = limited.flat_amount / 100
-  output.memberAmount = limited.unit_amount / 100
-  output.upTo = limited.up_to
-  output.freeTrialDays = 30
-  output.stripeCustomer = stripeCustomer
-  output.clientSecret = setupIntent.client_secret
-  output.teamSize = salon?.dataValues?.teamSize || 0
-  output.ephemeralKeySecret = ephemeralKey.secret
-
-  console.log(
-    '🚀 ~ exports.fetchSubscriptionPrice= ~ setupIntent:',
-    setupIntent,
-  )
+  const output = {
+    livemode,
+    product,
+    currency,
+    billing_scheme,
+    active,
+    object,
+    priceId: price.id,
+    unlimitedMembersAmount: price.tiers[1].flat_amount / 100,
+    ownerAmount: limited.flat_amount / 100,
+    memberAmount: limited.unit_amount / 100,
+    upTo: limited.up_to,
+    freeTrialDays: 30,
+    hasObtainedFreeTrial: salonDetails?.hasObtainedFreeTrial || false,  
+    stripeCustomer,
+    clientSecret: setupIntent.client_secret,
+    teamSize: salon?.dataValues?.teamSize || 0,
+    ephemeralKeySecret: ephemeralKey.secret,
+  };
 
   return res.json(
     response({
       message: 'Subscription',
       data: { price: output },
-    }),
-  )
-}
+    })
+  );
+};
 
 exports.updateCoverImage = async (req, res, next) => {
   const image = await salonImage.findOne({

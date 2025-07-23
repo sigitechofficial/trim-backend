@@ -129,7 +129,7 @@ module.exports = function (to, data, state = 'book') {
   const deeplink = `https://trimworldwide.com/appointmentDetail?id=${data.id}`
 
   let emailTitle = `Hi ${client.name}, your booking is confirmed!`
-  let subject = `Your booking ref #${data.id} is confirmed!.`
+  let subject = `Your booking ref #${data.id} is confirmed.`
 
   let buttonSection = `   <table
                     align="center"
@@ -231,7 +231,7 @@ module.exports = function (to, data, state = 'book') {
   let attachments = attachment.footer.concat(attachment.confirm)
 
   if (state === 'cancel') {
-    subject = `Your booking ref #${data.id} has been cancelled!.`
+    subject = `Your booking ref #${data.id} has been cancelled.`
     badgeText = 'Cancelled'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
@@ -332,7 +332,7 @@ module.exports = function (to, data, state = 'book') {
               </tbody>
             </table>`
   } else if (state === 'reschudle') {
-    subject = `your booking ref #${data.id} has been rescheduled!`
+    subject = `your booking ref #${data.id} has been rescheduled`
     emailTitle = `Hi ${client.name}, your booking has been rescheduled!`
     description = `Your booking with ${salonName} is now on ${date}.`
     buttonSection = `   <table
@@ -527,7 +527,7 @@ module.exports = function (to, data, state = 'book') {
     </tbody>
   </table>`
   } else if (state === 'noshow') {
-    subject = `You missed an booking ref #${data?.id}`
+    subject = `You missed your booking ref #${data?.id}`
     badgeText = 'No-Show'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
