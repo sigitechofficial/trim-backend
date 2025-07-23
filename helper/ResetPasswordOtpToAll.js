@@ -1181,7 +1181,7 @@ module.exports = function (OTP, data, type, to) {
 
     let postOtpText = `If  you didn't request this code, please ignore this email, your <br/> password won't change without inputting the code above.`
 
-    let subject = `Trim Business - Reset Password`
+    let subject = `Trim - Reset Password`
     const name = `${data.firstName} ${data.lastName}`
     const to = [data.email, 'sigidevelopers@gmail.com']
     console.log(
