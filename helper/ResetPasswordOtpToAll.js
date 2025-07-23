@@ -23,7 +23,7 @@ module.exports = function (OTP, data, type, to) {
       preOtpText = `Use the below code in the App to verify your account.`
       postOtpText = `If you didn’t request this, please ignore this email.`
 
-    let subject = preOtpText
+    let subject = `Trim Business - OTP`
     const name = `${data.firstName} ${data.lastName}`
     const to = [data.email, 'sigidevelopers@gmail.com']
     console.log(
@@ -577,7 +577,7 @@ module.exports = function (OTP, data, type, to) {
       subText = 'OTP Verification'
       preOtpText = `Use the below code in the App to verify your account.`
       postOtpText = `If you didn’t request this, please ignore this email.`
-    let subject = preOtpText
+    let subject = `Trim - OTP`
     const name = `${data.firstName} ${data.lastName}`
     const to = [data.email, 'sigidevelopers@gmail.com']
     console.log(
@@ -1181,7 +1181,7 @@ module.exports = function (OTP, data, type, to) {
 
     let postOtpText = `If  you didn't request this code, please ignore this email, your <br/> password won't change without inputting the code above.`
 
-    let subject = preOtpText
+    let subject = `Trim Business - Reset Password`
     const name = `${data.firstName} ${data.lastName}`
     const to = [data.email, 'sigidevelopers@gmail.com']
     console.log(

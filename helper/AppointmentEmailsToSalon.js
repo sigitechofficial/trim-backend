@@ -129,27 +129,27 @@ module.exports = function (to, data, state = 'book') {
   let heading = `Booking confirmed`
   // let description = `Appointment with ${client?.name} on ${date} has been booked. Booking ID: <a href="https://trimworldwide.com/BookingDetailScreen?id=${data?.id}">#${data?.id}</a>`
   let description = `The following booking has been made:`
-  let subject = `Appointment confirmed ref #${data?.id}.`
+  let subject = `Booking ref #${data?.id} confirmed`
   deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
 
 
 
   if (state === 'cancel') {
-    subject = `Booking ref #${data.id} has been cancelled!.`
+    subject = `Booking ref #${data.id} has been cancelled`
     heading = `Booking has been cancelled`
     description = `A booking was scheduled for ${date} with ${client?.name}, but has been cancelled.`
   } else if (state === 'reschudle') {
-    subject = `Booking ref #${data.id} has been rescheduled!`
+    subject = `Booking ref #${data.id} has been rescheduled`
     heading = `Booking has been updated`
     deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
     description = `An appointment ref ${data?.id} is scheduled for ${date} with ${client?.name} check.`
   } else if (state === 'complete') {
-    subject = `Booking ref #${data.id} has been marked as complete.`
+    subject = `Booking ref #${data.id} marked as complete.`
     heading = `Booking has been completed`
     deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
     description = `Booking reference ${data?.id} has been marked as complete.`
   } else if (state === 'noshow') {
-    subject = `Booking ref #${data.id} marked as No-Show!`
+    subject = `Booking ref #${data.id} marked as No-Show`
     heading = `Appointment marked as No-Show`
     description = `Booking reference ${data?.id} was marked as a no-show. The client missed the scheduled appointment.`
   }

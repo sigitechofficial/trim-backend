@@ -15,7 +15,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
 
   let greetings = `Dear ${name}!`
 
-  let subject = `${greetings} welcome to trim, We're Glad to Have You!`
+  let subject = `Welcome to Trim`
   if (sentTo == 'customer') {
     firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!<br /> <br />`
 

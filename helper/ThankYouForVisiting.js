@@ -120,7 +120,7 @@ module.exports = function (to, input) {
       from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
       to: ['sigidevelopers@gmail.com'],
       replyTo: businessEmail,
-      subject: ` Thank you for visiting ${input?.salon?.salonName}.`,
+      subject: ` Rate ${input?.salon?.salonName}.`,
       attachments: attachment.footer.concat(attachment.star),
       html: `<!DOCTYPE html>
 
