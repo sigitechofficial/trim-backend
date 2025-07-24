@@ -1811,11 +1811,13 @@ exports.checkOutBooking = async (req, res, next) => {
   const accountId = bookingData.salonDetail.connectAccountId
   const customerId = bookingData.user.stripeCustomerId
 
+  const targetAmount=req.body.targetAmount
   const payments = await Stripe.capturePayment(
     amount,
     customerId,
     bookingData.stripeCardId,
     accountId,
+    targetAmount
   )
 
   console.log('ðŸš€ ~ payments= ~ tip:', payments)
