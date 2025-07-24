@@ -751,7 +751,7 @@ exports.updateEmployeTimings = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Employee Timings Updated Successfully!', {}, ''),
+    returnFunction('1', 'Employee timings updated successfully', {}, ''),
   )
 }
 /*

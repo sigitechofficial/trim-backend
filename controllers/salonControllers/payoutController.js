@@ -287,60 +287,60 @@ exports.salaryEmployees = async (req, res, next) => {
   })
 
   const employeesRaw = await employee.findAll({
-  where: {
-    salonDetailId: salon?.id,
-  },
-  attributes: [
-    'id',
+    where: {
+      salonDetailId: salon?.id,
+    },
+    attributes: [
+      'id',
 
-    // Salary Paid Amount
-    [
-      literal(`COALESCE(
+      // Salary Paid Amount
+      [
+        literal(`COALESCE(
          (SELECT SUM(salaryPayouts.amount)
           FROM salaryPayouts
           WHERE salaryPayouts.employeeId = employee.id AND salaryPayouts.status = 'paid'
         ), 0)`),
-      'paidAmount',
+        'paidAmount',
+      ],
+
+      // User First Name
+      [
+        literal(`(SELECT users.firstName FROM users WHERE users.id = employee.userId)`),
+        'firstName',
+      ],
+
+      // User Last Name
+      [
+        literal(`(SELECT users.lastName FROM users WHERE users.id = employee.userId)`),
+        'lastName',
+      ],
+
+      // User Image
+      [
+        literal(`(SELECT users.image FROM users WHERE users.id = employee.userId)`),
+        'image',
+      ],
     ],
-
-    // User First Name
-    [
-      literal(`(SELECT users.firstName FROM users WHERE users.id = employee.userId)`),
-      'firstName',
+    include: [
+      {
+        model: employeeWagesMethod,
+        required: true,
+        where: { wagesMethodId: 2 }, // ✅ Only salary-based employees
+      },
     ],
+    distinct: true, // still useful with JOINs
+  });
 
-    // User Last Name
-    [
-      literal(`(SELECT users.lastName FROM users WHERE users.id = employee.userId)`),
-      'lastName',
-    ],
+  const employees = Object.values(
+    employeesRaw.reduce((acc, emp) => {
+      acc[emp.id] = emp;
+      return acc;
+    }, {})
+  );
+  const input = JSON.parse(JSON.stringify(employees))
+  const data = await calculateDueSalaries(input);
 
-    // User Image
-    [
-      literal(`(SELECT users.image FROM users WHERE users.id = employee.userId)`),
-      'image',
-    ],
-  ],
-  include: [
-    {
-      model: employeeWagesMethod,
-      required: true,
-      where: { wagesMethodId: 2 }, // ✅ Only salary-based employees
-    },
-  ],
-  distinct: true, // still useful with JOINs
-});
-
-const employees = Object.values(
-  employeesRaw.reduce((acc, emp) => {
-    acc[emp.id] = emp;
-    return acc;
-  }, {})
-);
-const input = JSON.parse(JSON.stringify(employees))
-const data = await calculateDueSalaries(input);
-
-//   const data = await calculateDueSalaries(input)
+  //   const data = await calculateDueSalaries(input)
 
   return res.json(response({ message: 'Success', data: { employees: data } }))
 }
