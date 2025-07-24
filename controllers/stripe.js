@@ -146,6 +146,7 @@ async function createPaymentIntendForUpFrontPayments(
 ) {
   console.log('ðŸš€ ~ amount:', amount)
   console.log('Ã°Å¸Å¡â‚¬ ~ accountId:', accountId)
+  console.log('Ã°Å¸Å¡â‚¬ ~ customerId ====================================>>>>>>>>>>NEWNEW:', customerId)
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: convertToCents(amount),
