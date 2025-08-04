@@ -36,6 +36,7 @@ const {
   commissionPayout,
   rentChairPayout,
   pushNotification,
+  customerOnConnectAccount,
   wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
@@ -307,7 +308,7 @@ exports.notificationTesting = async (req, res, next) => {
 //     }),
 //   }
 
-//   console.log('🚀 ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
+//   console.log('ðŸš€ ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
 
 //   // Construct the query body without including 'service' and 'time'
 //   const body = {
@@ -390,7 +391,7 @@ exports.notificationTesting = async (req, res, next) => {
 //       return { ...salon, like: found }
 //     })
 //   }
-//   // console.log('🚀 ~ exports.home= ~ results:', results)
+//   // console.log('ðŸš€ ~ exports.home= ~ results:', results)
 //   let appointments = []
 //   if (req.user && req.user.id) {
 //     appointments = await booking.findAll({
@@ -551,7 +552,7 @@ exports.home = async (req, res, next) => {
     }),
   }
 
-  console.log('🚀 ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
+  console.log('ðŸš€ ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
 
   // Construct the query body without including 'service' and 'time'
   const body = {
@@ -628,7 +629,7 @@ exports.home = async (req, res, next) => {
  let results = await salonDetail.findAll(body)
 results = JSON.parse(JSON.stringify(results))
 
-   console.log('🚀 ~ exports.home= ~ results:', results)
+   console.log('ðŸš€ ~ exports.home= ~ results:', results)
 
 
 if (results.length > 0) {
@@ -734,6 +735,7 @@ exports.salonDetails = async (req, res, next) => {
       'description',
       'onlinePayments',
       'isOnline',
+      "userId",
       'isExternalEmployee',
       [
         literal(
@@ -1084,7 +1086,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
           (employeeService) => employeeService.employeeId,
         )
       : []
-  console.log('ðŸš€~employees:', employeeIds)
+  console.log('Ã°Å¸Å¡â‚¬~employees:', employeeIds)
   if (employeeIds.length < 1) {
     return res
       .status(200)
@@ -1145,7 +1147,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
 
 exports.employeeAvailability = async (req, res, next) => {
   let { openingTime, closingTime, jobDate, duration } = req.body
-  console.log('🚀 ~ exports.employeeAvailability= ~ req.body:', req.body)
+  console.log('ðŸš€ ~ exports.employeeAvailability= ~ req.body:', req.body)
 
   if (openingTime == '00:00' || openingTime == '00:00:00')
     openingTime = '00:00:01'
@@ -1203,21 +1205,21 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const { bookingId } = req.params
   const { appointment, services, employeeId } = req.body
   console.log(
-    '🚀 ~ exports.rescheduleSoloEmployeeAppointment= ~ employeeId:',
+    'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ employeeId:',
     employeeId,
   )
   console.log(
-    '🚀 ~ exports.rescheduleSoloEmployeeAppointment= ~ services:',
+    'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ services:',
     services,
   )
   console.log(
-    '🚀 ~ exports.rescheduleSoloEmployeeAppointment= ~ appointment:',
+    'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ appointment:',
     appointment,
   )
   appointment.startTime = DateManupulation.convertTo24HourFormat(
     appointment.startTime,
   )
-  console.log('🚀 ~ AFTER START-TIME', appointment.startTime)
+  console.log('ðŸš€ ~ AFTER START-TIME', appointment.startTime)
 
   appointment.endTime = DateManupulation.convertTo24HourFormat(
     appointment.endTime,
@@ -1271,7 +1273,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const jobIds = services.map((obj) => obj.id)
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
   console.log(
-    '🚀 ~ exports.rescheduleSoloEmployeeAppointment= ~ assignTimeSlots:',
+    'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ assignTimeSlots:',
     assignTimeSlots,
   )
 
@@ -1371,9 +1373,9 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   })
   employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
 
-  console.log('🚀~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀  services:', services)
+  console.log('ðŸš€~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€  services:', services)
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
-  console.log('🚀 ~ assignTimeSlots:', assignTimeSlots)
+  console.log('ðŸš€ ~ assignTimeSlots:', assignTimeSlots)
 
   JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   appointment.status = 'book'
@@ -1382,7 +1384,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
       ? JobsInput.find((el) => el.status === 'pending')
       : false
   console.log(
-    '🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ findUnAssign:',
+    'ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ findUnAssign:',
     findUnAssign,
   )
   if (findUnAssign) {
@@ -1390,7 +1392,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   }
   const jobIds = services.map((obj) => obj.id)
   console.log(
-    '🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobIds:',
+    'ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobIds:',
     jobIds,
   )
   let sessions = await jobs.findAll({ where: { id: jobIds } })
@@ -1398,10 +1400,10 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   // Update each job's times
   JobsInput.forEach((newJobData) => {
     // Find the corresponding job in sessions array by ID
-    // console.log("🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ newJobData:", newJobData)
+    // console.log("ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ newJobData:", newJobData)
 
     const jobToUpdate = sessions.find((job) => job.id === newJobData.id)
-    // console.log("🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobToUpdate:", jobToUpdate)
+    // console.log("ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobToUpdate:", jobToUpdate)
     if (jobToUpdate) {
       // Update startTime, endTime, and on attributes
       jobToUpdate.startTime = newJobData.startTime
@@ -1555,14 +1557,14 @@ exports.cancelAppointment = async (req, res, next) => {
       parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
 
     const cancellationCharges = parseFloat(req.body.cancellationCharges)
-    console.log('🚀 ~ exports.cancelAppointment= ~ paid:', paid)
-    console.log('🚀 ~ ~ cancellationCharges:', cancellationCharges)
+    console.log('ðŸš€ ~ exports.cancelAppointment= ~ paid:', paid)
+    console.log('ðŸš€ ~ ~ cancellationCharges:', cancellationCharges)
 
     if (paid * 1 > cancellationCharges * 1) {
       console.log('-----> ~CASE~ intialPayment Greater (refund) ')
 
       const refundAmount = paid - cancellationCharges
-      console.log('🚀  refundAmount:', refundAmount)
+      console.log('ðŸš€  refundAmount:', refundAmount)
       if (refundAmount > 0.31) {
         const refund = await Stripe.refundPartialPayment(
           appointment.initialPaymentIntend,
@@ -1592,7 +1594,7 @@ exports.cancelAppointment = async (req, res, next) => {
         updatedBooking.penaltyAmount = fineAmount
         updatedBooking.penaltyPaymentIntend = fine?.id
       }
-      console.log('ðŸš€ ----------->~Fine Captured Success', fine)
+      console.log('Ã°Å¸Å¡â‚¬ ----------->~Fine Captured Success', fine)
     } else {
       // Cancellation charges equal to upfront payment
       updatedBooking.status = 'cancel'
@@ -1612,7 +1614,7 @@ exports.cancelAppointment = async (req, res, next) => {
   updatedBooking.subTotal = appointment.total
 
   console.log(
-    '🚀 ~ exports.cancelAppointment= ~ updatedBooking:',
+    'ðŸš€ ~ exports.cancelAppointment= ~ updatedBooking:',
     updatedBooking,
   )
 
@@ -1652,7 +1654,7 @@ exports.bookAppointment = async (req, res, next) => {
   const customerId = req.user.id
   const { appointment, services } = req.body
   console.log(
-    '🚀 ~ exports.bookAppointment= ~ req.body:',
+    'ðŸš€ ~ exports.bookAppointment= ~ req.body:',
     JSON.stringify(req.body),
   )
 
@@ -1697,7 +1699,7 @@ exports.bookAppointment = async (req, res, next) => {
   appointment.startTime = DateManupulation.convertTo24HourFormat(
     appointment.startTime,
   )
-  console.log('ðŸš€ ~ AFTER START-TIME', appointment.startTime)
+  console.log('Ã°Å¸Å¡â‚¬ ~ AFTER START-TIME', appointment.startTime)
 
   appointment.endTime = DateManupulation.convertTo24HourFormat(
     appointment.endTime,
@@ -1779,11 +1781,11 @@ exports.bookAppointment = async (req, res, next) => {
   }
 
   console.log(
-    'ðŸš€~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€  services:',
+    'Ã°Å¸Å¡â‚¬~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬ ~Ã°Å¸Å¡â‚¬  services:',
     services,
   )
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
-  console.log('ðŸš€ ~ assignTimeSlots:', assignTimeSlots)
+  console.log('Ã°Å¸Å¡â‚¬ ~ assignTimeSlots:', assignTimeSlots)
 
   if (!req.body.employeeId) {
     JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
@@ -1796,7 +1798,7 @@ exports.bookAppointment = async (req, res, next) => {
   }
   const findUnAssign = JobsInput.find((el) => el.status === 'pending')
   if (findUnAssign) {
-    console.log('ðŸš€ ~ findUnAssign:', findUnAssign)
+    console.log('Ã°Å¸Å¡â‚¬ ~ findUnAssign:', findUnAssign)
     appointment.status = 'pending'
   }
   const book = await booking.create(appointment)
@@ -1834,9 +1836,12 @@ exports.bookAppointment = async (req, res, next) => {
 exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   //Partial payment upfront
   console.log(
-    '🚀 ~ exports.captureUpFrontPaymentInfo= ~ !req.body.onlinePayments:',
-    req.body,
+    'ðŸš€ ~ exports.captureUpFrontPaymentInfo= ~ !req.body.onlinePayments:',
+    req.body.stripeCustomerId,
   )
+  
+  const customerId = req.user.id
+  console.log("CustomerId=================>>>>",customerId)
 
   if (!req.body.onlinePayments)
     throw new AppError('Salon does not accept online payments.', 200)
@@ -1853,20 +1858,32 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   const tip = req.body.tip ? parseFloat(req.body.tip) : 0
   const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
-  const ephemeralKey = await Stripe.createEphemeralKey(
-    req.body.stripeCustomerId,
-  )
   const account = await salonDetail.findOne({
     where: { id: req.body.salonId },
     attributes: ['connectAccountId'],
   })
+  
+  console.log("account.connectAccountId===========<><><><>>>><<<<<<<<<<<<<<>>>>>>>>>><<<<<<<<<<",account.connectAccountId)
+  let stripeCustomerId=req.body.stripeCustomerId;
+  let confirmCustomerId=await Stripe.getCustomer(stripeCustomerId,account.connectAccountId)
+        console.log("confirmCustomerId------<><><><><><><><>",confirmCustomerId)
+
+  if(!confirmCustomerId){
+      throw new AppError("User Not Exists on Stripe Connect Account")
+  }
+  console.log("Stripe CustomerId-===============================>>>>",confirmCustomerId)
+  const ephemeralKey = await Stripe.createEphemeralKey(
+    confirmCustomerId,
+    account.connectAccountId
+  )
+  
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
     advanceAmount > 0
-      ? await Stripe.createPaymentIntendForUpFrontPayments(
+      ? await Stripe.createDirectCharge(
           advanceAmount,
-          req.body.stripeCustomerId,
+          confirmCustomerId,
           account.connectAccountId,
         )
       : null
@@ -1879,8 +1896,11 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     tip: tip,
     platformFee,
     actualCapturedAmount: actualCapturedAmount,
-    stripeCustomerId: req.body.stripeCustomerId,
+    stripeCustomerId: confirmCustomerId,
+    stripeAccountId:account.connectAccountId,
   }
+  
+  console.log("Data================================><><><><><><>",data);
 
   const output = response({ status: '1', message: 'Advance payment', data })
   return res.status(200).json(output)
@@ -2178,7 +2198,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
 exports.fetchCards = async (req, res, next) => {
   const userId = req.user.id
-  console.log('🚀 ~ ~ userId:', userId)
+  console.log('ðŸš€ ~ ~ userId:', userId)
   const customer = await user.findByPk(userId, {
     attributes: ['firstName', 'lastName', 'email', 'stripeCustomerId'],
   })
@@ -2188,7 +2208,7 @@ exports.fetchCards = async (req, res, next) => {
   }
   const customerId = customer.stripeCustomerId
   const allCards = await Stripe.cards(customerId)
-  console.log('🚀 ~ ~ customerId:', customerId)
+  console.log('ðŸš€ ~ ~ customerId:', customerId)
 
   const stripeCards = allCards.data.map((obj) => ({
     id: obj.id,
@@ -2200,7 +2220,7 @@ exports.fetchCards = async (req, res, next) => {
     funding: obj.card.funding,
   }))
 
-  console.log('🚀 ~ stripeCards ~ stripeCards:', stripeCards)
+  console.log('ðŸš€ ~ stripeCards ~ stripeCards:', stripeCards)
 
   const output = response({ data: { cards: stripeCards } })
 
@@ -2486,9 +2506,9 @@ exports.renewEphemeralSecret = async (req, res, next) => {
     userExist.stripeCustomerId ||
     (await Stripe.addCustomer(fullName, userExist.email))
   const ephemeralKeySecret = await Stripe.createEphemeralKey(stripeCustomerId)
-  console.log('🚀 ~ exports.signup= ~ ephemeralKeySecret:', ephemeralKeySecret)
+  console.log('ðŸš€ ~ exports.signup= ~ ephemeralKeySecret:', ephemeralKeySecret)
   const expiry = DateManupulation.stampToDate(ephemeralKeySecret.expires)
-  // console.log('🚀 ~ exports.signup= ~ expiry:', expiry)
+  // console.log('ðŸš€ ~ exports.signup= ~ expiry:', expiry)
   //
 
   const input = {
@@ -2515,7 +2535,7 @@ exports.renewEphemeralSecret = async (req, res, next) => {
 
 exports.salonPolicies = async (req, res, next) => {
   const salonDetailId = req.params.salon
-  console.log('🚀 ~ exports.salonPolicies= ~ salonDetailId:', salonDetailId)
+  console.log('ðŸš€ ~ exports.salonPolicies= ~ salonDetailId:', salonDetailId)
 
   const output = await salonDetail.findOne({
     where: { id: salonDetailId },
@@ -2683,7 +2703,7 @@ exports.forSubcriptionPurchase = async (req, res, next) => {
   if (!salon) throw new AppError('resource not found', 200)
 
   // TODO salon already have subscripiton
-  console.log('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ~ = ~ req.body:', req.body)
+  console.log('ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ ~ = ~ req.body:', req.body)
   //   return res.json(req.body);
   let stripeCustomer = salon?.stripeCustomerId
   if (!salon?.stripeCustomerId) {
@@ -2721,7 +2741,7 @@ if (salonDetails?.hasObtainedFreeTrial) {
   //   subscriptionName: 'Owner + 3 members'
   // }
   console.log(
-    'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
+    'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
     stripeCustomer,
   )
   // const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
@@ -2767,7 +2787,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
     ],
   })
   if (!salon) throw new AppError('resource not found', 200)
-  console.log('ðŸš€ ~ exports.forSubcription= ~ salonsalonsalona:', salon)
+  console.log('Ã°Å¸Å¡â‚¬ ~ exports.forSubcription= ~ salonsalonsalona:', salon)
   let stripeCustomer = salon?.stripeCustomerId
   if (!salon?.stripeCustomerId) {
     const stripeCustomerId = await Stripe.addCustomer(
@@ -2783,7 +2803,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
     sloanId: salon.id,
   }
   console.log(
-    'ðŸš€ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
+    'Ã°Å¸Å¡â‚¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
     stripeCustomer,
   )
   const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
@@ -2836,3 +2856,125 @@ exports.testing = async (req, res, next) => {
 
   return res.status(200).json(output)
 }
+
+
+/*
+* Transfer 0.50 Amouunt from To Admin Stripe
+*/
+exports.transferFixedFeeToAdmin=async (req,res,next)=>{
+    const{connectedAccountId}=req.body
+    
+    const feeAmount=187.00;
+    
+    //const connectedAccountId='acct_1RoLFcCwrlf25Znd';
+    
+    const result= await Stripe.transferToPlatform(feeAmount, connectedAccountId)
+    
+    return res.json(response({ status: '1', message: 'Amount Trtansfer', result }))
+}
+
+/*
+* Create Customer on the Stripe Connect Account
+*/
+
+exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
+  try {
+    const customerId = req.user.id;
+
+    // Step 1: Get salon's connected account
+    const account = await salonDetail.findOne({
+      where: { userId: req.body.salonId },
+      attributes: ['id', 'connectAccountId'],
+    });
+
+    if (!account) {
+      return res.status(404).json({
+        status: '0',
+        message: 'Salon account not found',
+      });
+    }
+
+    const connectAccountId = account.connectAccountId;
+
+    // Step 2: Check if customer already exists on this connected account
+    const existing = await customerOnConnectAccount.findOne({
+      where: {
+        userId: customerId,
+        connectAccountId: connectAccountId,
+      },
+      attributes: ['customerId', 'connectAccountId', 'salonDetailId', 'userId'],
+    });
+
+    if (existing?.customerId) {
+      const stripeCustomer = await Stripe.getCustomer(
+        existing.customerId,
+        connectAccountId
+      );
+
+      if (stripeCustomer) {
+        return res.status(200).json({
+          status: '1',
+          message: 'Stripe Customer Fetched',
+          data: {
+            stripeCustomerId: existing.customerId,
+            stripeAccountId: connectAccountId,
+          },
+        });
+      }
+    }
+
+    // Step 3: Get user details to create customer
+    const userDetails = await user.findByPk(customerId, {
+      attributes: ['firstName', 'lastName', 'email'],
+    });
+
+    const fullName = `${userDetails.firstName} ${userDetails.lastName}`;
+    const email = userDetails.email;
+
+    // Step 4: Create new Stripe customer on connected account
+    const stripeCustomerId = await Stripe.addCustomer(
+      fullName,
+      email,
+      connectAccountId
+    );
+
+    // Step 5: Save to customerOnConnectAccount table
+    await customerOnConnectAccount.create({
+      userId: customerId,
+      customerId: stripeCustomerId,
+      connectAccountId: connectAccountId,
+      status: true,
+      salonDetailId: account.id,
+    });
+
+    // Step 6: Update user table with stripeCustomerId
+    await user.update({ stripeCustomerId }, { where: { id: customerId } });
+
+    // Step 7: Return success response
+    return res.status(200).json({
+      status: '1',
+      message: 'Stripe customer initialized',
+      data: {
+        stripeCustomerId: stripeCustomerId,
+        stripeAccountId: connectAccountId,
+      },
+    });
+  } catch (error) {
+    console.error('🚀 Error in initStripeCustomeronConnectAccount:', error);
+    return res.status(500).json({
+      status: '0',
+      message: 'Something went wrong while initializing Stripe customer',
+    });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+

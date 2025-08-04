@@ -214,7 +214,7 @@ exports.fetchServiceTypes = async (req, res, next) => {
   const data = await serviceType.findAll({
     where: { deleted: false },
     attributes: ['id', 'typeName', 'image', 'serviceOrder','status', 'createdAt'],
-    order: [['id', 'ASC']],
+    order: [['serviceOrder', 'ASC']],
   })
 
   return res.status(200).json({
