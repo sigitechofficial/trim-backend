@@ -165,10 +165,10 @@ exports.signup = async (req, res, next) => {
 
   if (signedBy !== 'email') {
     const fullName = `${userExist.firstName} ${userExist.lastName}`
-    const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
-    await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
+    //const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
+    //await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
     let input = JSON.parse(JSON.stringify(userExist))
-    input.stripeCustomerId = stripeCustomerId
+    //input.stripeCustomerId = stripeCustomerId
     input.verifiedAt = new Date()
 
     EmailWelcome([userExist?.email], fullName, 'customer')
@@ -244,11 +244,11 @@ exports.verifyOTP = async (req, res, next) => {
   if (!req?.body?.forgetPassword) {
     EmailWelcome([userExist?.email], fullName, 'customer')
   }
-  if (!user.stripeCustomerId) {
-    const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
-    userExist.stripeCustomerId = stripeCustomerId
-    await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
-  }
+  // if (!user.stripeCustomerId) {
+  //   const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
+  //   userExist.stripeCustomerId = stripeCustomerId
+  //   await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
+  // }
 
   await user.update({ verifiedAt: Date.now() }, { where: { id: userId } })
   createSendToken(userExist, dvToken, 200, res)

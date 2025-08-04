@@ -1,5 +1,7 @@
 const { STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY } = process.env;
-const stripe = require("stripe")(STRIPE_SECRET_KEY);
+
+const stripe = require('stripe')(STRIPE_SECRET_KEY)
+
 const AppError = require("../utils/appError");
 const dateManipulation = require("../utils/dateManipulation");
 
@@ -12,16 +14,71 @@ function convertToCents(amount) {
 /*
  *  1:  Create Customer ________________________
  */
-async function addCustomer(name, email) {
+async function addCustomer(name, email, accountId = null) {
   try {
-    const customer = await stripe.customers.create({ name, email });
-    console.log("ðŸš€ ~ addCustomer ~ customer:", customer.id);
+    let customer;
+    if (accountId) {
+      customer = await stripe.customers.create(
+        { name, email },
+        { stripeAccount: accountId }
+      );
+    } else {
+      customer = await stripe.customers.create({ name, email });
+    }
+
+    console.log("✅ Customer created:", customer.id);
     return customer.id;
   } catch (error) {
-    console.error(error);
-    throw new AppError(`${error.message} `, 200);
+    console.error("❌ Stripe error:", error);
+    throw new AppError(`${error.message}`, 200);
   }
 }
+
+
+async function getCustomer(customerId,accountId) {
+    console.log("customerId===========================>>>>",customerId)
+  try {
+        const customer = await stripe.customers.retrieve(customerId, {
+          stripeAccount: accountId,
+        });
+        if (customer && !customer.deleted) {
+          console.log("✅ Found existing customer:", customer.id);
+          return customer.id;
+        }
+      }  catch (error) {
+    console.error("❌ Stripe error:", error);
+    //throw new AppError(`${error.message}`, 200);
+  }
+}
+
+
+async function getPlatformAccountId() {
+  try {
+    const account = await stripe.accounts.retrieve()
+    console.log('✅ Platform Account ID:', account.id)
+    return account.id
+  } catch (error) {
+    console.error('❌ Failed to get platform account ID', error)
+    throw error
+  }
+}
+
+async function transferToPlatform(amountPounds, connectedAccountId) {
+  const platformAccountId = await getPlatformAccountId()
+  
+  console.log("platformAccountId===<><><><><<<<<<<<<<<<<><>>>>>>>>>>>>>>>>",platformAccountId)
+
+  await stripe.transfers.create({
+    amount: Math.round(amountPounds * 100),
+    currency: 'gbp',
+    destination: platformAccountId,
+  }, {
+    stripeAccount: connectedAccountId,
+  })
+
+  console.log(`✅ £${amountPounds} transferred from ${connectedAccountId} to platform`)
+}
+
 
 //! Cards ____________________________________________________________________________
 /*
@@ -62,7 +119,7 @@ async function addCard(data) {
 //* attch Payment Method
 async function attchPaymentMethod(paymentMethod, customerId) {
   console.log(
-    "🚀 ~ attchPaymentMethod ~ paymentMethod, customerId:",
+    "ðŸš€ ~ attchPaymentMethod ~ paymentMethod, customerId:",
     paymentMethod,
     customerId
   );
@@ -151,21 +208,44 @@ async function createPaymentIntendForUpFrontPayments(
     const paymentIntent = await stripe.paymentIntents.create({
       amount: convertToCents(amount+0.50),
       currency: 'gbp',
-      customer: customerId,
+      //customer: customerId,
+      //payment_method: 'pm_1RpnnUCwrlf25ZndWHZGWJ3B',
+      //confirm:true,
       setup_future_usage: 'off_session', // optional, only if you're saving card
-      application_fee_amount: 50, // platform fee
+      //application_fee_amount: 50, // platform fee
       payment_method_types: ['card'], // âœ… key fix
       transfer_data: {
         destination: accountId, // salon's connected account
       },
     })
-
-
     return paymentIntent
   } catch (error) {
     throw new AppError(`${error.message} `, 200)
   }
 }
+
+async function createDirectCharge(amount, customerId, connectedAccountId) {
+    console.log("connectedAccountId========Stripe===>",connectedAccountId)
+    try{
+  const paymentIntent = await stripe.paymentIntents.create(
+    {
+      amount: convertToCents(amount+0.50),
+      currency: 'gbp',
+      customer: customerId,
+      //setup_future_usage: 'off_session',
+      payment_method_types: ['card'],
+    },
+    {
+      stripeAccount: connectedAccountId,
+    }
+  );
+  return paymentIntent;
+}
+catch (error) {
+    throw new AppError(`${error.message} `, 200);
+  }
+}
+
 
 
 /*
@@ -311,14 +391,14 @@ async function AllProducts(limit) {
   let listOfPlans = [];
   const productsWithPrices = await Promise.all(
     products.data.map(async (product) => {
-      console.log("ðŸš€ ~ exports.AllProducts= ~ product:", product);
+      console.log("Ã°Å¸Å¡â‚¬ ~ exports.AllProducts= ~ product:", product);
       const prices = await stripe.prices.list({ product: product.id });
       const price = prices.data[0]; // Assume the first price is associated with the product
       if (!price) {
         //TODO Skip this product if there's no price (manage prices for each Product)
         return undefined;
       }
-      console.log("ðŸš€ ~ exports.AllProducts= ~ price:", prices);
+      console.log("Ã°Å¸Å¡â‚¬ ~ exports.AllProducts= ~ price:", prices);
       const features = product.features || [];
       return {
         id: product.id,
@@ -352,7 +432,7 @@ async function createSubscription(
 async function getSubscription(subscriptionPlan) {
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionPlan);
-    console.log("🚀 ~ getSubscription ~ subscription:", subscription);
+    console.log("ðŸš€ ~ getSubscription ~ subscription:", subscription);
 
     const product = await stripe.products.retrieve(subscription.plan.product);
     const prices = await stripe.prices.list({ product: product.id });
@@ -379,7 +459,7 @@ async function getSubscription(subscriptionPlan) {
       metaData: subscription.metadata,
     };
   } catch (error) {
-    console.log("ðŸš€ ~ getSubscription ~ error:", error);
+    console.log("Ã°Å¸Å¡â‚¬ ~ getSubscription ~ error:", error);
     return false;
   }
 }
@@ -421,13 +501,13 @@ async function updateSubscription(
     }
   );
 
-  console.log("ðŸš€ ~ updatedSubscription:", updatedSubscription);
+  console.log("Ã°Å¸Å¡â‚¬ ~ updatedSubscription:", updatedSubscription);
   return updatedSubscription;
 }
 
 async function subscriptionInvoices(subscriptionPlan) {
   console.log(
-    "ðŸš€ ~ subscriptionInvoices ~ subscriptionPlan:",
+    "Ã°Å¸Å¡â‚¬ ~ subscriptionInvoices ~ subscriptionPlan:",
     subscriptionPlan
   );
   const subscription = await stripe.subscriptions.retrieve(subscriptionPlan);
@@ -453,7 +533,7 @@ async function subscriptionInvoices(subscriptionPlan) {
   });
 
   // Extract invoice data
-  console.log("ðŸš€ ~ invoiceData ~ invoice.period_start:", invoices.data);
+  console.log("Ã°Å¸Å¡â‚¬ ~ invoiceData ~ invoice.period_start:", invoices.data);
   const invoiceData = invoices.data.map((invoice) => ({
     startDate: dateManipulation.stampToDate(subscription.current_period_start), //TODO Study the invocies and start end dates how they work
     endDate: dateManipulation.stampToDate(subscription.current_period_end),
@@ -531,7 +611,7 @@ async function retrievePaymentMethod(paymentMethodId) {
  */
 // async function capturePayment(amount, customerId, paymentMethodId, accountId) {
 //   try {
-//     console.log('ðŸš€ ~ capturePayment ~ accountId:', accountId)
+//     console.log('Ã°Å¸Å¡â‚¬ ~ capturePayment ~ accountId:', accountId)
 //     // Create a Payment Intent with the provided parameters
 //     const paymentIntent = await stripe.paymentIntents.create({
 //       amount: convertToCents(amount), // Convert amount to cents
@@ -562,7 +642,7 @@ async function capturePayment(
   targetAmount
 ) {
   try {
-    console.log("💳 capturePayment accountId:", accountId);
+    console.log("ðŸ’³ capturePayment accountId:", accountId);
     console.log("Amount==================>>", amount);
 
     // If amount is 0 or falsy, no need to do anything
@@ -570,7 +650,7 @@ async function capturePayment(
       throw new AppError("Amount is zero, nothing to process.", 200);
     }
 
-    // CASE 1: ➕ Charge customer
+    // CASE 1: âž• Charge customer
     if (amount > 0) {
       const paymentIntent = await stripe.paymentIntents.create({
         amount: convertToCents(amount),
@@ -591,7 +671,7 @@ async function capturePayment(
       return capturedIntent;
     }
 
-    // CASE 2: ➖ Refund to customer
+    // CASE 2: âž– Refund to customer
     if (amount < 0) {
       // You must have a previously captured paymentIntent to refund.
       // You can either pass a specific paymentIntentId or search the most recent one.
@@ -650,15 +730,17 @@ async function createStripeAccountLink(accountId) {
 }
 
 // create Ephemeral Key to open Stripe sheet on mobile app
-async function createEphemeralKey(customerId, stripe_version) {
+async function createEphemeralKey(customerId, accountId) {
   const key = await stripe.ephemeralKeys.create(
-    { customer: customerId },
-    {
-      apiVersion: "2020-08-27", //stripe_version
-    }
-  );
+  { customer: customerId },
+  {
+    apiVersion: '2022-11-15', // ✅ correct key
+    stripeAccount: accountId,
+  }
+);
   return key;
 }
+
 
 async function subscriptionsRetrieve(subscriptionId) {
   try {
@@ -685,7 +767,7 @@ async function createSubscriptionWithPriceId(
     // Here, we're assuming that the client has completed necessary front-end steps to authorize usage of the payment method.
     // Create a subscription using the provided priceId
     console.log(
-      "ðŸš€ ~~~~~~~~~~~~~~~~~ metadata:",
+      "Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~ metadata:",
       customerId,
       priceId,
       metadata,
@@ -718,7 +800,7 @@ async function createSubscriptionWithPriceId(
 
     const paymentIntent = subscription?.latest_invoice?.payment_intent;
 
-    console.log("ðŸš€ ~ paymentIntent?.status:", paymentIntent?.status);
+    console.log("Ã°Å¸Å¡â‚¬ ~ paymentIntent?.status:", paymentIntent?.status);
     if (paymentIntent?.status === "requires_action") {
       // Handle additional authentication if required (e.g., 3D Secure)
       // This typically involves client-side handling
@@ -758,8 +840,8 @@ async function upgradeDowngradeSubscriptionQuantity(
 
     const paymentIntent = updatedSubscription.latest_invoice.payment_intent;
 
-    console.log("ðŸš€ ~ Updated Subscription:", updatedSubscription.id);
-    console.log("ðŸš€ ~ Payment Intent Status:", paymentIntent.status);
+    console.log("Ã°Å¸Å¡â‚¬ ~ Updated Subscription:", updatedSubscription.id);
+    console.log("Ã°Å¸Å¡â‚¬ ~ Payment Intent Status:", paymentIntent.status);
 
     if (paymentIntent.status === "requires_action") {
       // Handle additional authentication if required (e.g., 3D Secure)
@@ -805,18 +887,18 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
 }
 // refund Payment
 async function refundPartialPayment(paymentIntentId, amountToRefund) {
-  console.log("🚀 ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
+  console.log("ðŸš€ ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
   try {
     // Retrieve the PaymentIntent
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     console.log(
-      "ðŸš€ ~ refundPartialPayment ~ paymentIntent:",
+      "Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ paymentIntent:",
       JSON.stringify(paymentIntent)
     );
 
     // Get the Charge ID from the PaymentIntent
     const chargeId = paymentIntent.latest_charge;
-    console.log("ðŸš€ ~ refundPartialPayment ~ chargeId:", chargeId);
+    console.log("Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ chargeId:", chargeId);
 
     // Create a partial refund for the charge
     const refund = await stripe.refunds.create({
@@ -827,7 +909,7 @@ async function refundPartialPayment(paymentIntentId, amountToRefund) {
     console.log(`Partial refund successful:${amountToRefund}`, refund.id);
     return refund;
   } catch (error) {
-    console.log("ðŸš€ ~ refundPartialPayment ~ error:", error);
+    console.log("Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ error:", error);
     throw new AppError(`${error.message}`, 200);
   }
 }
@@ -837,13 +919,13 @@ async function refundFullPayment(paymentIntentId) {
     // Retrieve the PaymentIntent
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     console.log(
-      "ðŸš€ ~ refundFullPayment ~ paymentIntent:",
+      "Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ paymentIntent:",
       JSON.stringify(paymentIntent)
     );
 
     // Get the Charge ID from the PaymentIntent
     const chargeId = paymentIntent.latest_charge;
-    console.log("ðŸš€ ~ refundFullPayment ~ chargeId:", chargeId);
+    console.log("Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ chargeId:", chargeId);
 
     // Create a full refund for the charge
     const refund = await stripe.refunds.create({
@@ -857,7 +939,7 @@ async function refundFullPayment(paymentIntentId) {
     );
     return refund;
   } catch (error) {
-    console.log("ðŸš€ ~ refundFullPayment ~ error:", error);
+    console.log("Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ error:", error);
     throw new AppError(`${error.message}`, 200);
   }
 }
@@ -883,8 +965,8 @@ const createTieredPrice = async (priceId) => {
       billing_scheme: "tiered",
       tiers_mode: "volume", // or 'graduated'
       tiers: [
-        { up_to: 12, unit_amount: 2000 }, // Tier 1: Up to 12 members @ Â£20 each
-        { up_to: null, unit_amount: 25000 }, // Tier 2: 13+ members @ Â£250 fixed
+        { up_to: 12, unit_amount: 2000 }, // Tier 1: Up to 12 members @ Ã‚Â£20 each
+        { up_to: null, unit_amount: 25000 }, // Tier 2: 13+ members @ Ã‚Â£250 fixed
       ],
     });
     console.log("Created tiered price:", price.id);
@@ -915,7 +997,7 @@ async function subscriptionUpgradeDowngrade(
   paymentMethodId = null
 ) {
   try {
-    console.log("🚀 ~ Updating subscription with parameters:", {
+    console.log("ðŸš€ ~ Updating subscription with parameters:", {
       subscriptionId,
       newPriceId,
       newQuantity,
@@ -1188,6 +1270,10 @@ module.exports = {
   setupIntent,
   expireManually,
   fetchSingleCard,
+  createDirectCharge,
+  getCustomer,
+  getPlatformAccountId,
+  transferToPlatform
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination

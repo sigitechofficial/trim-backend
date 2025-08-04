@@ -218,4 +218,21 @@ router.get(
   catchAsync(appController.fetchNotifications),
 )
 
+
+// POST route to transfer fixed fee to admin
+router.post(
+  '/transfer-fee',
+  protect,
+  catchAsync(appController.transferFixedFeeToAdmin),
+)
+
+
+//Post Route to create the customer on the connect Account
+router.post('/initStripeCustomeronConnectAccount',
+protect,
+catchAsync(appController.initStripeCustomeronConnectAccount),
+)
+
+
+
 module.exports = router
