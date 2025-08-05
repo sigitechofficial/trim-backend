@@ -45,6 +45,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(),
       allowNull: true,
     },
+    VAT:{
+      type: DataTypes.DECIMAL(20, 2),
+      allowNull: true,
+    }
   })
 
   subscriptions.associate = (models) => {}

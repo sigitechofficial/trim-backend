@@ -2729,6 +2729,7 @@ if (salonDetails?.hasObtainedFreeTrial) {
     paymentMethodId: req.body?.paymentMethodId,
     teamSize: req.body.membersCount,
     priceId: req.body?.priceId,
+    VAT:req.body?.VAT,
   }
   console.log("metadata=====================>>>>>>>",metadata)
   //   {
