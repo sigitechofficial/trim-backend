@@ -11,10 +11,10 @@ const { salonDetail, user, subscriptions } = require('../../models')
 const DEMO = require('../../helper/demo')
 let endpointSecret;
 
-if(process.env.NODE_ENV==='test'){
-  endpointSecret=process.env.stage_signature
-}else{
-  endpointSecret=process.env.live_signature
+if (process.env.NODE_ENV === 'test') {
+  endpointSecret = process.env.stage_signature
+} else {
+  endpointSecret = process.env.live_signature
 }
 console.log("ЁЯЪА ~ endpointSecret:", endpointSecret)
 
@@ -79,8 +79,8 @@ const handleInvoicePayment = async (invoice, state, status) => {
     const name =
       invoice.lines?.data.length > 0
         ? invoice.lines?.data[invoice.lines?.data.length - 1]?.metadata
-            ?.subscriptionName ||
-          invoice.lines?.data[invoice.lines?.data.length - 1]?.description
+          ?.subscriptionName ||
+        invoice.lines?.data[invoice.lines?.data.length - 1]?.description
         : ''
 
     const invoiceId = invoice.id
@@ -90,6 +90,17 @@ const handleInvoicePayment = async (invoice, state, status) => {
     const periodEnd = new Date(subscribtionData?.current_period_end * 1000)
     const periodStart = new Date(subscribtionData?.current_period_start * 1000)
     const priceId = subscribtionData?.items?.data?.[0]?.price?.id || null;
+
+
+    const lineItem = invoice.lines?.data[invoice.lines.data.length - 1];
+    const metadata = lineItem?.metadata || {};
+    console.log("MetaData=======================>>>>",metadata);
+    const vatAmount = parseFloat(metadata?.VAT || '0');
+    
+    
+    console.log("vatAmount=======================>>>>",vatAmount);
+
+
 
     const input = {
       status: status,
@@ -103,6 +114,7 @@ const handleInvoicePayment = async (invoice, state, status) => {
       subscriptionId,
       invoiceId,
       priceId,
+      VAT:vatAmount,
     }
     console.log('🚀 ~ handleInvoicePaymentSucceeded ~ input:', input)
     // Find the user by Stripe Customer ID

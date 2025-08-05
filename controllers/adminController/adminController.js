@@ -139,13 +139,13 @@ exports.login = async (req, res, next) => {
 
   const features = await feature.findAll({
     attributes: [`id`, `title`, `key`,
-       [
-      literal(
-        `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${User?.roleId||0} LIMIT 1)`,
-      ),
-      'access',
-    ]
-  ],
+      [
+        literal(
+          `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${User?.roleId || 0} LIMIT 1)`,
+        ),
+        'access',
+      ]
+    ],
   })
   // check Device Token
   const found = User.deviceTokens.find((ele) => ele.tokenId === dvToken)
@@ -182,20 +182,20 @@ exports.addServieType = async (req, res, next) => {
   } else {
     throw new AppError('Image is required. Please upload Image', 200)
   }
-  if(input.serviceOrder<input.actualOrder){
+  if (input.serviceOrder < input.actualOrder) {
     await serviceType.update({
-      serviceOrder:input.actualOrder,
-    },{where:{serviceOrder:input.serviceOrder}})
+      serviceOrder: input.actualOrder,
+    }, { where: { serviceOrder: input.serviceOrder } })
   }
 
-  const findServiceType=await serviceType.findOne({
-    where:{
-      typeName:input.typeName,
-      deleted:0
+  const findServiceType = await serviceType.findOne({
+    where: {
+      typeName: input.typeName,
+      deleted: 0
     }
   })
 
-  if(findServiceType){
+  if (findServiceType) {
     throw new appError("Service Already Exists  &&  Active")
   }
   const data = await serviceType.create(input)
@@ -213,7 +213,7 @@ exports.addServieType = async (req, res, next) => {
 exports.fetchServiceTypes = async (req, res, next) => {
   const data = await serviceType.findAll({
     where: { deleted: false },
-    attributes: ['id', 'typeName', 'image', 'serviceOrder','status', 'createdAt'],
+    attributes: ['id', 'typeName', 'image', 'serviceOrder', 'status', 'createdAt'],
     order: [['serviceOrder', 'ASC']],
   })
 
@@ -240,13 +240,15 @@ exports.updateServiceTypes = async (req, res, next) => {
   }
   console.log('🚀 ~ exports.updateServiceTypes= ~ input:', input)
 
-  if(input.serviceOrder!=input.newOrder){
+  if (input.serviceOrder != input.newOrder) {
     await serviceType.update({
-      serviceOrder:input.serviceOrder
-    },{where:{
-      serviceOrder:input.newOrder
-    }})
-    input.serviceOrder=input.newOrder
+      serviceOrder: input.serviceOrder
+    }, {
+      where: {
+        serviceOrder: input.newOrder
+      }
+    })
+    input.serviceOrder = input.newOrder
   }
 
   const [rows] = await serviceType.update(input, { where: { id } })
@@ -270,12 +272,12 @@ exports.dashboard = async (req, res, next) => {
         [Op.between]: [new Date(startDate), new Date(endDate)],
       },
     }
-    ;(customerFilter.createdAt = {
-      [Op.between]: [new Date(startDate), new Date(endDate)],
-    }),
-      (salonFilter.createdAt = {
+      ; (customerFilter.createdAt = {
         [Op.between]: [new Date(startDate), new Date(endDate)],
-      })
+      }),
+        (salonFilter.createdAt = {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        })
   } else if (startDate) {
     // If only startDate is provided
     dateFilter = {
@@ -585,9 +587,9 @@ exports.fecthSalons = async (req, res, next) => {
 
 exports.updateSalonDetails = async (req, res, next) => {
   console.log('🚀 ~ exports.updateSalonDetails= ~ req.body:', req.body)
-  let condition={}
-  if(req.params?.salon) condition.id=req.params.salon
-  else if(req.body?.ids) condition.id=req.body.ids
+  let condition = {}
+  if (req.params?.salon) condition.id = req.params.salon
+  else if (req.body?.ids) condition.id = req.body.ids
   salonDetail.update(req.body, {
     where: condition,
   })
@@ -697,55 +699,55 @@ exports.employeeDetails = async (req, res, next) => {
   )
   const salonData = employeeData.employee.salonDetailId
     ? await salonDetail.findByPk(employeeData?.employee?.salonDetailId, {
-        attributes: [
-          'id',
-          'salonName',
-          'coverImage',
-          [
-            literal(
-              '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
-            ),
-            'salonAverageRating',
-          ],
-          [
-            literal(
-              '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
-            ),
-            'ratingCount',
-          ],
+      attributes: [
+        'id',
+        'salonName',
+        'coverImage',
+        [
+          literal(
+            '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+          ),
+          'salonAverageRating',
         ],
-        include: [
-          {
-            model: rating,
-            attributes: [],
-            on: { salonDetailId: col('salonDetail.id') },
-            required: false,
-          },
-          {
-            model: socialLink,
-            attributes: [`id`, `platform`, `url`],
-          },
-          {
-            model: addressDBS,
-            required: true,
-            attributes: [
-              'id',
-              'streetAddress',
-              'city',
-              'country',
-              'postalCode',
-            ],
-          },
+        [
+          literal(
+            '(SELECT COUNT(DISTINCT ratings.bookingId) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
+          ),
+          'ratingCount',
         ],
-        group: ['salonDetail.id', 'socialLinks.id'],
-      })
+      ],
+      include: [
+        {
+          model: rating,
+          attributes: [],
+          on: { salonDetailId: col('salonDetail.id') },
+          required: false,
+        },
+        {
+          model: socialLink,
+          attributes: [`id`, `platform`, `url`],
+        },
+        {
+          model: addressDBS,
+          required: true,
+          attributes: [
+            'id',
+            'streetAddress',
+            'city',
+            'country',
+            'postalCode',
+          ],
+        },
+      ],
+      group: ['salonDetail.id', 'socialLinks.id'],
+    })
     : null
 
   const jobsData = employeeData.employee.salonDetailId
     ? await jobs.findAll({
-        where: { employeeId: employeeData.employee.id, status: 'complete' },
-        attributes: [`total`, `tip`, 'on'],
-      })
+      where: { employeeId: employeeData.employee.id, status: 'complete' },
+      attributes: [`total`, `tip`, 'on'],
+    })
     : null
   const calculationsOnJob = Custom.calculateJobTotals(jobsData)
   let earnings = calculationsOnJob.totalRevenue
@@ -1291,24 +1293,24 @@ exports.fecthSalonsEarnings = async (req, res, next) => {
   const totalEarning =
     earnings.length > 0
       ? earnings.reduce((accumulator, currentObject) => {
-          const revenueStr = currentObject.revenue
+        const revenueStr = currentObject.revenue
 
-          // Check if revenue exists
-          if (revenueStr) {
-            const revenue = parseFloat(revenueStr)
+        // Check if revenue exists
+        if (revenueStr) {
+          const revenue = parseFloat(revenueStr)
 
-            // Check if the parsed revenue is a valid number
-            if (!isNaN(revenue)) {
-              return accumulator + revenue
-            } else {
-              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
-              return accumulator
-            }
+          // Check if the parsed revenue is a valid number
+          if (!isNaN(revenue)) {
+            return accumulator + revenue
           } else {
-            console.warn('Revenue key missing in object:', currentObject)
+            console.warn(`Invalid revenue value encountered: ${revenueStr}`)
             return accumulator
           }
-        }, 0)
+        } else {
+          console.warn('Revenue key missing in object:', currentObject)
+          return accumulator
+        }
+      }, 0)
       : 0
   return res.status(200).json(
     response({
@@ -1388,9 +1390,9 @@ exports.throwNotifications = async (req, res, next) => {
     const notData = await pushNotification.findByPk(req.params.notification, {
       attributes: ['to', 'title', 'body'],
     })
-    ;(input.sendTo = notData.to),
-      (input.title = notData.title),
-      (input.body = notData.body)
+      ; (input.sendTo = notData.to),
+        (input.title = notData.title),
+        (input.body = notData.body)
     console.log('Body -------', input)
     req.body = null
   }
@@ -1406,8 +1408,8 @@ exports.throwNotifications = async (req, res, next) => {
   if (sendTo === 'shop') condition.userTypeId = 2
   if (sendTo === 'employee') condition.userTypeId = 3
   if (sendTo === 'all') condition.userTypeId = [1, 2, 3]
-  
-    console.log('Sending To: ======================>>>>>>>>>>>>>', sendTo);
+
+  console.log('Sending To: ======================>>>>>>>>>>>>>', sendTo);
 
   const data = await user.findAll({
     where: condition,
@@ -1426,12 +1428,12 @@ exports.throwNotifications = async (req, res, next) => {
       if (token.tokenId != null) to.push(token.tokenId)
     })
   })
-  
-     //console.log('senderData To: ======================>>>>>>>>>>>>>', senderData);
+
+  //console.log('senderData To: ======================>>>>>>>>>>>>>', senderData);
 
 
   let notification = { title, body }
-  ThrowNotification(to, notification,{}, sendTo, 'admin')
+  ThrowNotification(to, notification, {}, sendTo, 'admin')
 
   let dt = new Date()
 
@@ -1951,7 +1953,7 @@ exports.updateRole = async (req, res, next) => {
   permissionRole.map((ele) => {
     if (ele.permissions.access === true)
       bulkArray.push({ permissionType: true, featureId: ele.id, roleId })
-    
+
   })
 
   permission.bulkCreate(bulkArray)
@@ -1979,7 +1981,7 @@ exports.roleDetails = async (req, res, next) => {
     where: { status: true },
     attributes: ['id', 'title', [
       literal(
-        `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${roleId||0} LIMIT 1)`,
+        `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${roleId || 0} LIMIT 1)`,
       ),
       'access',
     ]],
@@ -2190,10 +2192,10 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
       {
         data: output
           ? [
-              output.newCustomers,
-              output.returningCustomers,
-              output.lapsedCustomers,
-            ]
+            output.newCustomers,
+            output.returningCustomers,
+            output.lapsedCustomers,
+          ]
           : [0, 0, 0],
       },
     ],
@@ -2297,21 +2299,21 @@ exports.softDelete = (Model) => async (req, res, next) => {
     { deleted: true },
     { where: { id } },
   )
-  if(updatedCount === 0){
+  if (updatedCount === 0) {
     return res.status(200).json(
       response({ message: 'Record not found or already deleted' })
     );
   }
-  const records=await Model.findAll({
-    where:{
-      deleted:false,
-      serviceOrder:{[Op.ne]:null}
+  const records = await Model.findAll({
+    where: {
+      deleted: false,
+      serviceOrder: { [Op.ne]: null }
     },
-    order:[['serviceOrder','ASC']]
+    order: [['serviceOrder', 'ASC']]
   })
 
-  const updateRecords=records.map((record,index) =>
-    record.update({serviceOrder:index+1})
+  const updateRecords = records.map((record, index) =>
+    record.update({ serviceOrder: index + 1 })
   );
 
   await Promise.all(updateRecords)
@@ -2378,9 +2380,14 @@ exports.fetchReasons = async (req, res, next) => {
 //^ 2.Update Reasons  ----------------------------
 
 exports.updateReasons = async (req, res, next) => {
-  const data = await reason.findAll(
+  const data = await reason.update(
     { reason: req.body?.reason },
-    { where: { type: req.params?.id } },
+    {
+      where: {
+        type: req.params?.type,
+        id: req.params?.id
+      }
+    },
   )
 
   return res.status(200).json(
@@ -2394,9 +2401,9 @@ exports.updateReasons = async (req, res, next) => {
 //^ 3.Update Status  ----------------------------
 
 exports.changeReasonStatus = async (req, res, next) => {
-  await reason.findAll(
+  await reason.update(
     { reason: req.body?.status },
-    { where: { type: req.params?.id } },
+    { where: { type: req.params?.type, id: req.params?.id } },
   )
 
   return res.status(200).json(
@@ -2471,24 +2478,24 @@ exports.adminEarnings = async (req, res, next) => {
   const totalRevenue =
     rows.length > 0
       ? rows.reduce((accumulator, currentObject) => {
-          const revenueStr = currentObject.dataValues.revenue
+        const revenueStr = currentObject.dataValues.revenue
 
-          // Check if revenue exists
-          if (revenueStr) {
-            const revenue = parseFloat(revenueStr)
+        // Check if revenue exists
+        if (revenueStr) {
+          const revenue = parseFloat(revenueStr)
 
-            // Check if the parsed revenue is a valid number
-            if (!isNaN(revenue)) {
-              return accumulator + revenue
-            } else {
-              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
-              return accumulator
-            }
+          // Check if the parsed revenue is a valid number
+          if (!isNaN(revenue)) {
+            return accumulator + revenue
           } else {
-            console.warn('Revenue key missing in object:', currentObject)
+            console.warn(`Invalid revenue value encountered: ${revenueStr}`)
             return accumulator
           }
-        }, 0)
+        } else {
+          console.warn('Revenue key missing in object:', currentObject)
+          return accumulator
+        }
+      }, 0)
       : 0
 
   return res.status(200).json(
@@ -2534,24 +2541,24 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
   const totalRevenue =
     rows.length > 0
       ? rows.reduce((accumulator, currentObject) => {
-          const revenueStr = currentObject.dataValues.amountPaid
+        const revenueStr = currentObject.dataValues.amountPaid
 
-          // Check if revenue exists
-          if (revenueStr) {
-            const revenue = parseFloat(revenueStr)
+        // Check if revenue exists
+        if (revenueStr) {
+          const revenue = parseFloat(revenueStr)
 
-            // Check if the parsed revenue is a valid number
-            if (!isNaN(revenue)) {
-              return accumulator + revenue
-            } else {
-              console.warn(`Invalid revenue value encountered: ${revenueStr}`)
-              return accumulator
-            }
+          // Check if the parsed revenue is a valid number
+          if (!isNaN(revenue)) {
+            return accumulator + revenue
           } else {
-            console.warn('Revenue key missing in object:', currentObject)
+            console.warn(`Invalid revenue value encountered: ${revenueStr}`)
             return accumulator
           }
-        }, 0)
+        } else {
+          console.warn('Revenue key missing in object:', currentObject)
+          return accumulator
+        }
+      }, 0)
       : 0
 
   return res.status(200).json(
