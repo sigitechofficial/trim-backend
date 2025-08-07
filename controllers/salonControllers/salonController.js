@@ -1854,8 +1854,8 @@ exports.salonHistory = async (req, res) => {
 */
 
 exports.saleDetails = async (req, res, next) => {
-  const { bookingId } = req.body
-  let bookings = []
+  const { bookingId } = req.body;
+  let bookings = [];
 
   let bookingData = await booking.findOne({
     where: { id: bookingId },
@@ -1888,13 +1888,13 @@ exports.saleDetails = async (req, res, next) => {
               'position',
               [
                 literal(
-                  `(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.employeeId = jobs.employeeId)`,
+                  `(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.employeeId = jobs.employeeId)`
                 ),
                 'employeeAverageRating',
               ],
               [
                 literal(
-                  `(SELECT COUNT(ratings.id) FROM ratings WHERE ratings.employeeId = jobs.employeeId)`,
+                  `(SELECT COUNT(ratings.id) FROM ratings WHERE ratings.employeeId = jobs.employeeId)`
                 ),
                 'totalRatings',
               ],
@@ -1909,16 +1909,15 @@ exports.saleDetails = async (req, res, next) => {
         ],
       },
     ],
-  })
-  // return res.json(bookingData)
+  });
 
   const employeeMap = bookingData.jobs.reduce((acc, ele) => {
-    const employeeId = ele.employee ? ele.employee.id : 'AnyOne'
+    const employeeId = ele.employee ? ele.employee.id : 'AnyOne';
     if (!acc[employeeId]) {
       acc[employeeId] = {
         employee: ele.employee,
         services: [],
-      }
+      };
     }
 
     acc[employeeId].services.push({
@@ -1932,31 +1931,45 @@ exports.saleDetails = async (req, res, next) => {
       duration: ele.duration,
       endTime: dateManipulation.convertTo12HourFormat(ele.endTime),
       extra: ele.Extra,
-    })
+    });
 
-    return acc
-  }, {})
+    return acc;
+  }, {});
 
   const promises = Object.values(employeeMap).map(async (employeeObj) => {
-    return employeeObj
-  })
+    return employeeObj;
+  });
+
   const finalPayment = parseFloat(
-    (bookingData.subTotal - bookingData.initialPayment).toFixed(2),
-  )
+    (bookingData.subTotal - bookingData.initialPayment).toFixed(2)
+  );
+
   const remainingAmount =
     bookingData.status === 'save-unpaid'
       ? parseFloat(
-        (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2),
-      )
-      : 0.0
+          (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2)
+        )
+      : 0.0;
 
-  const employees = await Promise.all(promises)
+  const employees = await Promise.all(promises);
 
-  let cardLast4digits
+  // ✅ Fetch connectAccountId from salonDetail
+  const salon = await salonDetail.findOne({
+    where: { id: bookingData.salonDetailId },
+    attributes: ['connectAccountId'],
+  });
+
+  const connectAccountId = salon?.connectAccountId;
+
+  let cardLast4digits;
   if (bookingData.stripeCardId) {
-    const card = await Stripe.fetchSingleCard(bookingData.stripeCardId)
-    cardLast4digits = card?.card?.last4
+    const card = await Stripe.fetchSingleCard(
+      bookingData.stripeCardId,
+      connectAccountId // ✅ Pass connect account to Stripe
+    );
+    cardLast4digits = card?.card?.last4;
   }
+
   let bookingDetail = {
     id: bookingData.id,
     status: bookingData.status,
@@ -1985,9 +1998,12 @@ exports.saleDetails = async (req, res, next) => {
     customerId: bookingData.customerId,
     cardLast4digits: cardLast4digits,
     employees,
-  }
-  return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''))
-}
+  };
+
+  return res.json(
+    returnFunction('1', 'Booking Details', { bookingDetail }, '')
+  );
+};
 
 /*
               4.Booking Details
