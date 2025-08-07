@@ -178,9 +178,10 @@ async function cards(customerId) {
 
 //* 2 :  Get All Card ________________________
 
-async function fetchSingleCard(paymentMethodId) {
+async function fetchSingleCard(paymentMethodId, connectAccountId = null) {
   try {
-    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    const options = connectAccountId ? { stripeAccount: connectAccountId } : undefined;
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId, options);
     return paymentMethod;
   } catch (error) {
     throw new AppError(`${error.message}`, 200);

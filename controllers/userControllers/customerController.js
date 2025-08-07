@@ -2839,7 +2839,7 @@ exports.transferFixedFeeToAdmin=async (req,res,next)=>{
     
     const result= await Stripe.transferToPlatform(feeAmount, connectedAccountId)
     
-    return res.json(response({ status: '1', message: 'Amount Trtansfer', result }))
+    return res.json(response({ status: '1', message: 'Amount Transferred', result }))
 }
 
 /*
