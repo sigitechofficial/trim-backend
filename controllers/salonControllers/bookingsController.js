@@ -25,6 +25,7 @@ const {
   unAcknowledgedEvents,
   employeeCommission,
   rentChairEarning,
+  customerOnConnectAccount,
   employeeWagesMethod,
   salonProfiles,
   clientNotes,
@@ -538,7 +539,7 @@ exports.getbookingByFilter = async (req, res, next) => {
 
     if (orderStatus) {
       const status = orderStatus === 'unAssigned' ? 'pending' : 'assign'
-      console.log('🚀 ~ exports.status= ~ status:', status)
+      console.log('ðŸš€ ~ exports.status= ~ status:', status)
       let found = booking.jobs.find((ele) => ele.status === status)
       if (!found) return null
     }
@@ -609,11 +610,12 @@ exports.getbookingByFilter = async (req, res, next) => {
 exports.bookingDetails = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-  const { bookingId } = req.body
-  console.log('Ã°Å¸Å¡â‚¬ ~ exports.bookingDetails= ~ bookingId:', bookingId)
-  let bookings = []
+    attributes: ['id', 'connectAccountId'], // ✅ include account ID
+  });
+
+  const { bookingId } = req.body;
+  let bookings = [];
+
   const bookingData = await booking.findByPk(bookingId, {
     include: [
       {
@@ -656,42 +658,40 @@ exports.bookingDetails = async (req, res, next) => {
         ],
       },
     ],
-  })
+  });
 
-  console.log(
-    'Ã°Å¸Å¡â‚¬ ~ exports.bookingDetails= ~ bookingData:',
-    JSON.parse(JSON.stringify(bookingData)),
-  )
+  let cardDetails;
+  if (bookingData?.paymentMethod === 'card') {
+    try {
+      cardDetails = await Stripe.retrievePaymentMethod(
+        bookingData.stripeCardId,
+        salon?.connectAccountId // ✅ send connectAccountId to Stripe call
+      );
+    } catch (error) {
+      console.warn(`Stripe retrievePaymentMethod failed: ${error.message}`);
+    }
+  }
 
-  // return res.json(bookingData)
-  let cardDetails
-  if (bookingData?.paymentMethod == 'card') {
-    cardDetails = await Stripe.retrievePaymentMethod(bookingData.stripeCardId)
+  let customerStatus = 'active';
+
+  if (bookingData?.customerId && salon?.id) {
+    const isblocked = await blockCustomer.findOne({
+      where: { userId: bookingData.customerId, salonDetailId: salon.id },
+      attributes: ['id'],
+    });
+
+    if (isblocked) customerStatus = 'block';
   }
-  let customerStatus = 'active'
-  
-  if(bookingData?.customerId && salon?.id){
-      const isblocked = await blockCustomer.findOne({
-    where: { userId: bookingData.customerId, salonDetailId: salon.id },
-    attributes: ['id'],
-  })
-  
-   if (isblocked) customerStatus = 'block'
-  }
-  
-  
+
   let notes;
-  if(bookingData.customerId && salon?.id ){
-      notes = await clientNotes.findOne({
-    where: { userId: bookingData.customerId, salonDetailId: salon.id },
-    attributes: ['customerNote'],
-  })
+  if (bookingData.customerId && salon?.id) {
+    notes = await clientNotes.findOne({
+      where: { userId: bookingData.customerId, salonDetailId: salon.id },
+      attributes: ['customerNote'],
+    });
   }
-  
 
- 
-  let services = []
-  let startTime, endTime
+  let services = [];
   bookingData.jobs.map((ele) => {
     let obj = {
       id: ele.id,
@@ -707,18 +707,16 @@ exports.bookingDetails = async (req, res, next) => {
       employeeId: ele.employeeId,
       specialists: ele.employee ? `${ele.employee.user.firstName}` : '',
       extra: ele.Extra,
-    }
-    services.push(obj)
-  })
+    };
+    services.push(obj);
+  });
 
-  const clientName = `${bookingData.user?.firstName || bookingData.clientFirstName} ${bookingData.user?.lastName || bookingData.clientLastName}`
-
-  const clientContact = `${bookingData.user?.countryCode || bookingData.countryCode} ${bookingData.user?.phoneNum || bookingData.phoneNum}`
-
+  const clientName = `${bookingData.user?.firstName || bookingData.clientFirstName} ${bookingData.user?.lastName || bookingData.clientLastName}`;
+  const clientContact = `${bookingData.user?.countryCode || bookingData.countryCode} ${bookingData.user?.phoneNum || bookingData.phoneNum}`;
   const remaining =
     parseFloat(bookingData.total) +
     parseFloat(bookingData.discount) -
-    parseFloat(bookingData.actualCapturedAmount)
+    parseFloat(bookingData.actualCapturedAmount);
 
   let bookingDetail = {
     id: bookingData.id,
@@ -742,10 +740,12 @@ exports.bookingDetails = async (req, res, next) => {
     paymentMethodId: bookingData?.stripeCardId ?? '',
     services,
     customerStatus,
-    // clientFeedBack:bookingData?.rating
-  }
-  return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''))
-}
+    connectAccountId: salon?.connectAccountId || '', // ✅ added here
+  };
+
+  return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''));
+};
+
 /*
               4.Cancel Reasons
       ________________________________________
@@ -764,11 +764,12 @@ exports.reasons = async (req, res, next) => {
 */
 
 exports.cancelBooking = async (req, res, next) => {
-  const userId = req.user.id
-  const { bookingId, reasonId, reasonText } = req.body
+  const userId = req.user.id;
+  const { bookingId, reasonId, reasonText } = req.body;
+
   const jobComplete = await jobs.findOne({
     where: { bookingId, status: 'complete' },
-  })
+  });
 
   const appointment = await booking.findByPk(bookingId, {
     attributes: [
@@ -783,9 +784,10 @@ exports.cancelBooking = async (req, res, next) => {
       'initialPayment',
       'salonDetailId',
     ],
-  })
+  });
+
   if (!appointment) {
-    throw new AppError('resource not found', 404)
+    throw new AppError('resource not found', 404);
   }
 
   if (
@@ -795,70 +797,79 @@ exports.cancelBooking = async (req, res, next) => {
   ) {
     throw new AppError(
       `The appointment has already been marked as : ${appointment.status}.`,
-      200,
-    )
+      200
+    );
   } else if (jobComplete) {
     return next(
       new appError(
         `You've completed one service, so the appointment cannot be canceled at this stage.`,
-        200,
-      ),
-    )
+        200
+      )
+    );
   }
-  //!TODO Term and Condition on cancel charges and time ---->>> after discuss //Implemented
-  const updatedBooking = { tip: 0 }
+
+  // ✅ Get connectAccountId for the salon
+  const salon = await salonDetail.findOne({
+    where: { id: appointment.salonDetailId },
+    attributes: ['connectAccountId'],
+  });
+  const connectAccountId = salon?.connectAccountId;
+
+  const updatedBooking = { tip: 0 };
 
   const paid =
-    parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
+    parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip);
 
   if (
     paid > 0 &&
     appointment.stripeCardId &&
     appointment.initialPaymentIntend
   ) {
-    const refundAmount = paid
+    const refundAmount = paid;
     const refund = await Stripe.refundFullPayment(
       appointment?.initialPaymentIntend,
-    )
+      connectAccountId // ✅ passed here
+    );
     if (refund?.id) {
-      updatedBooking.finalPayment = 'paid'
-      updatedBooking.refundAmount = refundAmount
-      updatedBooking.refundPaymentIntend = refund?.id
+      updatedBooking.finalPayment = 'paid';
+      updatedBooking.refundAmount = refundAmount;
+      updatedBooking.refundPaymentIntend = refund?.id;
     }
-    console.log('--------------->Ã°Å¸Å¡â‚¬ ~Refund Success', refund)
+    console.log('---------------> Refund Success', refund);
   }
 
-  updatedBooking.status = 'cancel'
-  updatedBooking.total = paid
-  updatedBooking.subTotal = appointment.total
-  updatedBooking.initialPayment = paid
+  updatedBooking.status = 'cancel';
+  updatedBooking.total = paid;
+  updatedBooking.subTotal = appointment.total;
+  updatedBooking.initialPayment = paid;
 
-  await booking.update(updatedBooking, { where: { id: bookingId } })
+  await booking.update(updatedBooking, { where: { id: bookingId } });
 
-  await jobs.update({ status: 'cancel' }, { where: { bookingId } })
+  await jobs.update({ status: 'cancel' }, { where: { bookingId } });
 
   const Reason = await reason.findByPk(reasonId, {
     attributes: ['id', 'reason'],
-  })
+  });
 
-  // creating canceled booking details column
   await cancelledBooking.create({
     reasonText: reasonText ?? Reason.reason,
     bookingId,
     userId,
     reasonId,
-  })
-  cancelBySalon(bookingId)
+  });
+
+  cancelBySalon(bookingId);
   socketForCalendar({
     appointmentId: bookingId,
     type: 'finish',
     status: 'cancel',
-  })
+  });
 
   return res.json(
-    returnFunction('1', 'Booking Cancelled Successfully!', {}, ''),
-  )
-}
+    returnFunction('1', 'Booking Cancelled Successfully!', {}, '')
+  );
+};
+
 /*
               4.Get Services of salon
       ________________________________________
@@ -937,7 +948,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
     where: { userId },
   })
   const { services } = req.body
-  console.log('🚀 ~ exports.employeesWithAllServices= ~ services:', services)
+  console.log('ðŸš€ ~ exports.employeesWithAllServices= ~ services:', services)
   const employeesWithServices = await employeeService.findAll({
     where: {
       salonDetailId: SalonDetail.id,
@@ -957,10 +968,10 @@ exports.employeesWithAllServices = async (req, res, next) => {
   const employeeIds =
     employeesWithServices.length > 0
       ? employeesWithServices.map(
-          (employeeService) => employeeService.employeeId,
-        )
+        (employeeService) => employeeService.employeeId,
+      )
       : null
-  console.log('🚀~employees:', employeesWithServices)
+  console.log('ðŸš€~employees:', employeesWithServices)
   console.log(employeeIds)
   if (!employeeIds) {
     return res.status(200).json({
@@ -1032,9 +1043,9 @@ exports.employeeAvailability = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  console.log(' 🚀req.body ', req.body)
+  console.log(' ðŸš€req.body ', req.body)
   var date = new Date(jobDate)
-  console.log('🚀date ONLY', date)
+  console.log('ðŸš€date ONLY', date)
   let daysOfWeek = [
     'Sunday',
     'Monday',
@@ -1048,7 +1059,7 @@ exports.employeeAvailability = async (req, res, next) => {
   // Get the day of the week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
   let dayOfWeekIndex = date.getDay()
   const dateDay = daysOfWeek[dayOfWeekIndex]
-  console.log('🚀date Day', dateDay)
+  console.log('ðŸš€date Day', dateDay)
   console.log(employeeId)
 
   const isSalonOpen = await time.findOne({
@@ -1094,9 +1105,9 @@ exports.employeeAvailability = async (req, res, next) => {
   const busyTimes =
     employeeId > 0
       ? await jobs.findAll({
-          where: { status: 'assign', employeeId, on: jobDate },
-          attributes: ['startTime', 'endTime'],
-        })
+        where: { status: 'assign', employeeId, on: jobDate },
+        attributes: ['startTime', 'endTime'],
+      })
       : []
 
   console.log('TIMES BUSY', JSON.parse(JSON.stringify(busyTimes)))
@@ -1106,7 +1117,7 @@ exports.employeeAvailability = async (req, res, next) => {
       ? '24:00:00'
       : employeeTiming.closingTime
 
-  console.log('🚀 ~ exports.employeeAvailability= ~ closingTime:', closingTime)
+  console.log('ðŸš€ ~ exports.employeeAvailability= ~ closingTime:', closingTime)
 
   const availableTimeSlots = Slot.getAvailableTimeSlots(
     jobDate,
@@ -1185,9 +1196,9 @@ exports.addExtraService = async (req, res, next) => {
     }),
   )
 
-  console.log('🚀 ~ exports.addExtraService= ~ newServiceIds:', newServiceIds)
+  console.log('ðŸš€ ~ exports.addExtraService= ~ newServiceIds:', newServiceIds)
   console.log(
-    '🚀 ~ exports.addExtraService= ~ newServiceIds:',
+    'ðŸš€ ~ exports.addExtraService= ~ newServiceIds:',
     bookingData.total,
   )
   const findUnAssign = extraServices.find((service) => service.employeeId == 0)
@@ -1227,7 +1238,7 @@ exports.addExtraService = async (req, res, next) => {
     servicesNames.push(ele.service?.serviceName)
 
     const isNew = newServiceIds.find((u) => u == ele.id)
-    console.log('🚀 ~ exports.addExtraService= ~ isNew:', isNew)
+    console.log('ðŸš€ ~ exports.addExtraService= ~ isNew:', isNew)
 
     if (isNew) {
       const job = {
@@ -1344,30 +1355,30 @@ exports.getSalonCustomer = async (req, res, next) => {
       userId,
     },
   })
-  
- 
+
+
   const salonCustomers = await booking.findAll({
-  where: {
-    salonDetailId: SalonDetail.id,
-    customerId: { [Op.ne]: null }, 
-  },
-  include: [
-    {
-      model: user,
-      attributes: [
-        'id',
-        'firstName',
-        'lastName',
-        'email',
-        'countryCode',
-        'phoneNum',
-        'image',
-      ],
+    where: {
+      salonDetailId: SalonDetail.id,
+      customerId: { [Op.ne]: null },
     },
-  ],
-  attributes: ['customerId'],
-  group: ['customerId'], // Group by customerId to ensure uniqueness
-})
+    include: [
+      {
+        model: user,
+        attributes: [
+          'id',
+          'firstName',
+          'lastName',
+          'email',
+          'countryCode',
+          'phoneNum',
+          'image',
+        ],
+      },
+    ],
+    attributes: ['customerId'],
+    group: ['customerId'], // Group by customerId to ensure uniqueness
+  })
 
   return res.json(
     returnFunction('1', 'Customer Added Successfully!', { salonCustomers }, ''),
@@ -1458,13 +1469,13 @@ exports.addWalkinBooking = async (req, res, next) => {
   startTime = Convert.convertTo24HourFormat(startTime)
   endTime = Convert.convertTo24HourFormat(endTime)
 
-  console.log('Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ jobsData:', jobsData)
+  console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ jobsData:', jobsData)
   const assignTimeSlots = Custom.scheduleSessions(
     { startTime, endTime, on: jobDate, duration },
     jobsData,
   )
   console.log(
-    'Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ assignTimeSlots:',
+    'ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ assignTimeSlots:',
     assignTimeSlots,
   )
   const appointmentDate = new Date(jobDate)
@@ -1508,18 +1519,18 @@ exports.addWalkinBooking = async (req, res, next) => {
     employeeId < 1 && employeeData.length > 0
       ? Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
       : assignTimeSlots.map((service) => ({
-          ...service,
-          employeeId: employeeId > 0 ? employeeId : null,
-          status: employeeId > 0 ? 'assign' : 'pending',
-        }))
+        ...service,
+        employeeId: employeeId > 0 ? employeeId : null,
+        status: employeeId > 0 ? 'assign' : 'pending',
+      }))
   console.log(
-    'Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ assiginEmployee:',
+    'ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ assiginEmployee:',
     // ,assiginEmployee
   )
   let appointmentStatus = 'book'
   const findUnAssign = assiginEmployee.find((el) => el.status === 'pending')
   if (findUnAssign) {
-    console.log('Ã°Å¸Å¡â‚¬ ~ findUnAssign:', findUnAssign)
+    console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ findUnAssign:', findUnAssign)
     appointmentStatus = 'pending'
   }
 
@@ -1544,19 +1555,19 @@ exports.addWalkinBooking = async (req, res, next) => {
   })
 
   console.log(
-    'ðŸš€ ~ exports.addWalkinBooking= ~ policies:',
+    'Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ policies:',
     JSON.parse(JSON.stringify(policies)),
   )
 
   const hasAppointments =
     customerId && customerId > 0
       ? await booking.count({
-          where: {
-            salonDetailId: SalonDetail.id,
-            customerId,
-            status: 'complete',
-          },
-        })
+        where: {
+          salonDetailId: SalonDetail.id,
+          customerId,
+          status: 'complete',
+        },
+      })
       : 0
 
   const newAppointment = await booking.create({
@@ -1585,7 +1596,7 @@ exports.addWalkinBooking = async (req, res, next) => {
     ...service,
     bookingId: newAppointment.id,
   }))
-  console.log('Ã°Å¸Å¡â‚¬ ~ exports.addWalkinBooking= ~ finalInput:', finalInput)
+  console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ finalInput:', finalInput)
   await jobs.bulkCreate(finalInput)
   walkinAppointmentConfirm(newAppointment, customerId, SalonDetail?.id)
   socketForCalendar({ appointmentId: newAppointment?.id, type: 'new' })
@@ -1650,7 +1661,7 @@ exports.jobStatus = async (req, res, next) => {
       { where: { id: jobData.bookingId } },
     )
   } else if (status == 'complete') {
-    console.log('🚀 ~ Calculation Start :status', status)
+    console.log('ðŸš€ ~ Calculation Start :status', status)
     calculatePayoutsOnService(jobData)
   }
 
@@ -1749,15 +1760,18 @@ exports.clientHistory = async (req, res, next) => {
       ________________________________________
   */
 exports.checkOutBooking = async (req, res, next) => {
-  const { bookingId, tip } = req.body
+  const { bookingId, tip } = req.body;
+
   const jobData = await jobs.findOne({
     where: { bookingId, status: { [Op.or]: ['pending', 'assign'] } },
-  })
+  });
+
   if (jobData) {
     return res.json(
-      returnFunction('2', 'The appointment has unfinished services.', {}, ''),
-    )
+      returnFunction('2', 'The appointment has unfinished services.', {}, '')
+    );
   }
+
   let bookingData = await booking.findByPk(bookingId, {
     include: [
       {
@@ -1766,7 +1780,7 @@ exports.checkOutBooking = async (req, res, next) => {
       },
       {
         model: user,
-        attributes: ['stripeCustomerId'],
+        attributes: ['id'], // ✅ only need ID
       },
       { model: jobs },
     ],
@@ -1783,84 +1797,94 @@ exports.checkOutBooking = async (req, res, next) => {
       'actualCapturedAmount',
       'salonDetailId',
     ],
-  })
+  });
 
   if (
-    bookingData.status == 'cancel' ||
-    bookingData.status == 'no-show' ||
-    bookingData.status == 'complete'
+    bookingData.status === 'cancel' ||
+    bookingData.status === 'no-show' ||
+    bookingData.status === 'complete'
   ) {
-    let message =
-      'You cannot check out because the Appointment has already been Completed.'
-    if (bookingData.status == 'cancel') {
-      message =
-        'You cannot check out because the appointment is marked as Canceled'
-    } else if (bookingData.status == 'no-show') {
-      message =
-        'You cannot check out because the appointment is marked as No-Show'
-    }
-    return res.json(returnFunction('2', message, {}, ''))
+    const statusMessages = {
+      cancel: 'You cannot check out because the appointment is marked as Canceled',
+      'no-show': 'You cannot check out because the appointment is marked as No-Show',
+      complete: 'You cannot check out because the Appointment has already been Completed.',
+    };
+    return res.json(returnFunction('2', statusMessages[bookingData.status], {}, ''));
   }
-  // return res.json(bookingData)
-  const salonEarning =
-    parseFloat(req.body.amount) + parseFloat(bookingData.actualCapturedAmount)
 
-  //Amount to be captured
-  const amount = parseFloat(req.body.amount) + tip
+  // ✅ Get Connect Account ID
+  const accountId = bookingData.salonDetail.connectAccountId;
 
-  const accountId = bookingData.salonDetail.connectAccountId
-  const customerId = bookingData.user.stripeCustomerId
+  // ✅ Lookup correct customer ID for this user + connect account
+  const customerConnect = await customerOnConnectAccount.findOne({
+    where: {
+      userId: bookingData.user.id,
+      salonDetailId: bookingData.salonDetailId,
+      connectAccountId: accountId,
+    },
+  });
 
-  const targetAmount=req.body.targetAmount
+  if (!customerConnect || !customerConnect.customerId) {
+    return res.json(
+      returnFunction('0', 'No Stripe customer found for this connected account.', {}, '')
+    );
+  }
+
+  const customerId = customerConnect.customerId;
+
+  const amount = parseFloat(req.body.amount) + tip;
+  const targetAmount = req.body.targetAmount;
+  const salonEarning = amount + parseFloat(bookingData.actualCapturedAmount);
+
   const payments = await Stripe.capturePayment(
     amount,
     customerId,
     bookingData.stripeCardId,
     accountId,
     targetAmount
-  )
-
-  console.log('ðŸš€ ~ payments= ~ tip:', payments)
+  );
 
   if (payments.status === 'succeeded') {
     await wallet.increment(
       { onlineAmount: salonEarning },
-      { where: { salonDetailId: bookingData?.salonDetail?.id } },
-    )
+      { where: { salonDetailId: bookingData?.salonDetail?.id } }
+    );
 
-    bookingData.status = 'complete'
-    bookingData.finalPaymentIntend = payments.id
-    bookingData.finalPayment = 'paid'
-    bookingData.subTotal = bookingData.total
-    await bookingData.save()
-    const capturedPayment = parseFloat(req.body.amount)
+    bookingData.status = 'complete';
+    bookingData.finalPaymentIntend = payments.id;
+    bookingData.finalPayment = 'paid';
+    bookingData.subTotal = bookingData.total;
+    await bookingData.save();
+
     await booking.increment(
-      { actualCapturedAmount: capturedPayment, tip: tip },
-      { where: { id: bookingId } },
-    )
+      { actualCapturedAmount: parseFloat(req.body.amount), tip: tip },
+      { where: { id: bookingId } }
+    );
 
-    // ------------------------Notificatons------------------------
-    Communication.online(bookingId, tip || 0, amount)
+    Communication.online(bookingId, tip || 0, amount);
 
-    employeeCommission.update(
+    await employeeCommission.update(
       { appointmentClosed: true },
-      { where: { bookingId: bookingData.id } },
-    )
-    rentChairEarning.update(
+      { where: { bookingId: bookingData.id } }
+    );
+
+    await rentChairEarning.update(
       { appointmentClosed: true },
-      { where: { bookingId: bookingData.id } },
-    )
-    distributeTip(bookingData, tip || 0)
+      { where: { bookingId: bookingData.id } }
+    );
+
+    await distributeTip(bookingData, tip || 0);
+
     return res.json(
-      returnFunction('1', 'Payment processed successfully.', {}, ''),
-    )
+      returnFunction('1', 'Payment processed successfully.', {}, '')
+    );
   } else {
-    console.log('ðŸš€ ~ exports.checkOutBooking= ~ Unsuccess:')
     return res.json(
-      returnFunction('0', 'Payment processing unsuccessful.', {}, ''),
-    )
+      returnFunction('0', 'Payment processing unsuccessful.', {}, '')
+    );
   }
-}
+};
+
 /*
                           4.CheckOut Cash Api
                   ________________________________________
@@ -2017,7 +2041,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   appointment.startTime = dateManipulation.convertTo24HourFormat(
     appointment.startTime,
   )
-  console.log('🚀 ~ AFTER START-TIME', appointment.startTime)
+  console.log('ðŸš€ ~ AFTER START-TIME', appointment.startTime)
 
   appointment.endTime = dateManipulation.convertTo24HourFormat(
     appointment.endTime,
@@ -2112,7 +2136,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const { appointment, services, bookingId } = req.body
   console.log(
-    '🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ req.body:',
+    'ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ req.body:',
     req.body,
   )
   appointment.startTime = dateManipulation.convertTo24HourFormat(
@@ -2162,21 +2186,21 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
   }
 
-  console.log('🚀~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀  services:', services)
+  console.log('ðŸš€~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€  services:', services)
   const servicesinput =
     services.length > 0
       ? services.map((ele) => {
-          let obj = {
-            id: ele.id,
-            duration: ele.duration,
-            serviceId: ele.serviceId,
-          }
-          return obj
-        })
+        let obj = {
+          id: ele.id,
+          duration: ele.duration,
+          serviceId: ele.serviceId,
+        }
+        return obj
+      })
       : []
-  console.log('🚀 ~ servicesinput ~ servicesinput:', servicesinput)
+  console.log('ðŸš€ ~ servicesinput ~ servicesinput:', servicesinput)
   const assignTimeSlots = Custom.scheduleSessions(appointment, servicesinput)
-  // console.log("🚀 ~ assignTimeSlots:", assignTimeSlots);
+  // console.log("ðŸš€ ~ assignTimeSlots:", assignTimeSlots);
 
   JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   appointment.status = 'book'
@@ -2186,19 +2210,19 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   }
   const jobIds = services.map((obj) => obj.id)
   console.log(
-    '🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobIds:',
+    'ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobIds:',
     jobIds,
   )
   let sessions = await jobs.findAll({ where: { id: jobIds } })
 
   // Update each job's times
-  console.log('🚀 ~ JobsInput.forEach ~ JobsInput:', JobsInput)
+  console.log('ðŸš€ ~ JobsInput.forEach ~ JobsInput:', JobsInput)
   JobsInput.forEach((newJobData) => {
     // Find the corresponding job in sessions array by ID
-    // console.log("🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ newJobData:", newJobData)
+    // console.log("ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ newJobData:", newJobData)
 
     const jobToUpdate = sessions.find((job) => job.id === newJobData.id)
-    // console.log("🚀 ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobToUpdate:", jobToUpdate)
+    // console.log("ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ jobToUpdate:", jobToUpdate)
     if (jobToUpdate) {
       // Update startTime, endTime, and on attributes
       jobToUpdate.startTime = dateManipulation.convertTo24HourFormat(
@@ -2556,7 +2580,7 @@ exports.serviceData = async (req, res, next) => {
     serviceData?.duration,
     req.body?.startTime || '13:00:00',
   )
-  // console.log('🚀 ~ exports.serviceData= ~ updatedEmployees:', updatedEmployees)
+  // console.log('ðŸš€ ~ exports.serviceData= ~ updatedEmployees:', updatedEmployees)
 
   // return res.json({ employees, teamMembers })
 
@@ -2573,15 +2597,15 @@ exports.serviceData = async (req, res, next) => {
   // })
 
   console.log(
-    '🚀 ~ exports.serviceData= ~ serviceData.jobData.total:',
+    'ðŸš€ ~ exports.serviceData= ~ serviceData.jobData.total:',
     jobData.total,
   )
   console.log(
-    '🚀 ~ exports.serviceData= ~ serviceData.jobData.extraDiscount:',
+    'ðŸš€ ~ exports.serviceData= ~ serviceData.jobData.extraDiscount:',
     jobData.extraDiscount,
   )
   console.log(
-    '🚀 ~ exports.serviceData= ~ serviceData.parseFloat(jobData.total)+parseFloat(jobData.serviceDiscount):',
+    'ðŸš€ ~ exports.serviceData= ~ serviceData.parseFloat(jobData.total)+parseFloat(jobData.serviceDiscount):',
     parseFloat(jobData.total) + parseFloat(jobData.serviceDiscount),
   )
   if (jobData && jobData.serviceId == serviceId) {
@@ -2624,7 +2648,7 @@ exports.editService = async (req, res, next) => {
     extraDiscount,
   } = req.body
 
-  console.log('ðŸš€ ~ exports.editService= ~ req.body:', req.body)
+  console.log('Ã°Å¸Å¡â‚¬ ~ exports.editService= ~ req.body:', req.body)
 
   let jobStatus = 'pending'
   let bookingStatus = 'pending'
@@ -2634,7 +2658,7 @@ exports.editService = async (req, res, next) => {
 
   startTime = dateManipulation.convertTo24HourFormat(startTime)
   console.log(
-    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ startTime:',
+    'Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ startTime:',
     startTime,
   )
 
@@ -2653,7 +2677,7 @@ exports.editService = async (req, res, next) => {
     ('0' + setendTime.getMinutes()).slice(-2)
 
   console.log(
-    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ endTime:',
+    'Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.editService= ~ endTime:',
     endTime,
   )
 
@@ -2702,31 +2726,31 @@ exports.editService = async (req, res, next) => {
   let endsAt = jobData?.booking?.endTime
 
   console.log(
-    'ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom= ~ OLd TIME:',
+    'Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom= ~ OLd TIME:',
     startFrom,
   )
-  console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.endsAt= ~ OLd TIME:', endsAt)
+  console.log('Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.endsAt= ~ OLd TIME:', endsAt)
 
   if (allJobs.length === 1) {
-    console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.CASE IF:')
+    console.log('Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.CASE IF:')
 
     // If there's only one entry
     startFrom = allJobs[0].startTime
     endsAt = allJobs[0].endTime
   } else if (allJobs.length > 1) {
-    console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.CASE ELSEIF IF:')
+    console.log('Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.CASE ELSEIF IF:')
 
     // If there are multiple entries
     startFrom = allJobs[0].startTime // start time of the first entry
     endsAt = allJobs[allJobs.length - 1].endTime // end time of the last entry
   }
 
-  console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom EndsAt NEW TIMES:', {
+  console.log('Ã°Å¸Å¡â‚¬ ~~~~~~~~~~~~~~~~~~~~ exports.startFrom EndsAt NEW TIMES:', {
     startFrom,
     endsAt,
   })
 
-  console.log('🚀 ~ exports.editService= ~ jobData.duration:', jobData.duration)
+  console.log('ðŸš€ ~ exports.editService= ~ jobData.duration:', jobData.duration)
 
   const findUnAssign = await jobs.findOne({
     where: { bookingId: jobData.bookingId, status: 'pending' },
@@ -2746,7 +2770,7 @@ exports.editService = async (req, res, next) => {
   )
 
   console.log(
-    '🚀 ~ 🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~exports.editService= ~ WHEN UDATE BOOKING ENDAT:',
+    'ðŸš€ ~ ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~ðŸš€ ~exports.editService= ~ WHEN UDATE BOOKING ENDAT:',
     {
       endsAt,
       startFrom,
@@ -2827,11 +2851,11 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
 
     finePercentage = refundPercentage
     console.log(
-      '🚀 ~ exports.markAppointmentAsNoShow= ~ refundPercentage:',
+      'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ refundPercentage:',
       refundPercentage,
     )
     console.log(
-      '🚀 ~ exports.markAppointmentAsNoShow= ~ finePercentage:',
+      'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ finePercentage:',
       finePercentage,
     )
 
@@ -2843,19 +2867,19 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     )
 
     console.log(
-      'ðŸš€ ~ exports.as= ~ appointment.actualCapturedAmount:',
+      'Ã°Å¸Å¡â‚¬ ~ exports.as= ~ appointment.actualCapturedAmount:',
       appointment.actualCapturedAmount,
     )
 
-    console.log('ðŸš€ ~ exports.as= ~ appointment.tip:', appointment.tip)
+    console.log('Ã°Å¸Å¡â‚¬ ~ exports.as= ~ appointment.tip:', appointment.tip)
 
-    console.log('ðŸš€ ~ exports.as= ~ paid:', paid)
-    console.log('ðŸš€ ~ ~ noshowCharges:', noshowCharges)
+    console.log('Ã°Å¸Å¡â‚¬ ~ exports.as= ~ paid:', paid)
+    console.log('Ã°Å¸Å¡â‚¬ ~ ~ noshowCharges:', noshowCharges)
 
-    console.log('🚀 ~ exports.markAppointmentAsNoShow= ~ paid:', paid)
+    console.log('ðŸš€ ~ exports.markAppointmentAsNoShow= ~ paid:', paid)
     if (paid > noshowCharges) {
       console.log(
-        '🚀 ~ exports.markAppointmentAsNoShow= ~ noshowCharges:',
+        'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ noshowCharges:',
         noshowCharges,
       )
       console.log('-----> ~CASE~ intialPayment Greater (penalty) ')
@@ -2864,7 +2888,10 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       const refund = await Stripe.refundPartialPayment(
         appointment.initialPaymentIntend,
         refundAmount,
+        appointment.salonDetail?.connectAccountId,
       )
+
+      console.log("FROM this error coming =-=-=-=-=-")
       if (refund?.id) {
         updatedBooking.status = 'no-show'
         updatedBooking.finalPayment = 'paid'
@@ -2872,7 +2899,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
         updatedBooking.refundPaymentIntend = refund?.id
       }
 
-      console.log('--------------->Ã°Å¸Å¡â‚¬ ~Refund Success', refund)
+      console.log('--------------->ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~Refund Success', refund)
     } else if (paid < noshowCharges) {
       console.log('-----------> ~CASE~ noshowCharges Greater (penalty)')
       const fineAmount = noshowCharges - paid
@@ -2888,7 +2915,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
         updatedBooking.penaltyPaymentIntend = fine?.id
         updatedBooking.penaltyAmount = fineAmount
       }
-      console.log('Ã°Å¸Å¡â‚¬ ----------->~Fine Captured Success', fine)
+      console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ----------->~Fine Captured Success', fine)
     } else {
       // Cancellation charges equal to upfront payment
       updatedBooking.status = 'no-show'
@@ -2907,7 +2934,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
   }
   updatedBooking.subTotal = appointment.total
   console.log(
-    'ðŸš€ ~ exports.cancelAppointment= ~ updatedBooking:',
+    'Ã°Å¸Å¡â‚¬ ~ exports.cancelAppointment= ~ updatedBooking:',
     updatedBooking,
   )
 
@@ -2941,25 +2968,25 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
 
 
 //Online Payment Key update
-exports.updateOnlibePayment=async(req,res,next) =>{
-  const{salonDetailId,onlinePayments}=req.body
+exports.updateOnlibePayment = async (req, res, next) => {
+  const { salonDetailId, onlinePayments } = req.body
 
-  const findSaloonDetail=await salonDetail.findOne({
-    where:{
-      id:salonDetailId
+  const findSaloonDetail = await salonDetail.findOne({
+    where: {
+      id: salonDetailId
     }
   })
-  console.log("findSaloonDetail ----------->",findSaloonDetail)
+  console.log("findSaloonDetail ----------->", findSaloonDetail)
 
-  if(!findSaloonDetail){
+  if (!findSaloonDetail) {
     throw new appError("Saloon Detail Not Exists")
   }
 
   await salonDetail.update({
-    onlinePayments:onlinePayments,
-  },{where:{id:salonDetailId}})
+    onlinePayments: onlinePayments,
+  }, { where: { id: salonDetailId } })
 
-  return res.json(returnFunction("1",'Updated SucessFully',{},""))
+  return res.json(returnFunction("1", 'Updated SucessFully', {}, ""))
 }
 
 
@@ -3073,8 +3100,8 @@ exports.markAppointmentAscancel = async (req, res, next) => {
 // object: 'payment_intent',
 // amount: 2.25
 
-// 🚀 ~ amount: 6.25
-// ðŸš€ ~ accountId: acct_1QetyVIOTz68gwkY
+// ðŸš€ ~ amount: 6.25
+// Ã°Å¸Å¡â‚¬ ~ accountId: acct_1QetyVIOTz68gwkY
 // {
 //   id: 'pi_3QnJGaIUi1Nn55FG2OXJUQp5',
 //   object: 'payment_intent',

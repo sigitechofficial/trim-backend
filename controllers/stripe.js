@@ -64,19 +64,27 @@ async function getPlatformAccountId() {
 }
 
 async function transferToPlatform(amountPounds, connectedAccountId) {
-  const platformAccountId = await getPlatformAccountId()
-  
-  console.log("platformAccountId===<><><><><<<<<<<<<<<<<><>>>>>>>>>>>>>>>>",platformAccountId)
+  try {
+    const platformAccountId = await getPlatformAccountId(); // Your own logic to fetch platform ID
+    console.log("🔁 Platform Account ID:", platformAccountId);
 
-  await stripe.transfers.create({
-    amount: Math.round(amountPounds * 100),
-    currency: 'gbp',
-    destination: platformAccountId,
-  }, {
-    stripeAccount: connectedAccountId,
-  })
+    const transfer = await stripe.transfers.create(
+      {
+        amount: Math.round(amountPounds * 100), // amount in pence
+        currency: 'gbp',
+        destination: platformAccountId,
+      },
+      {
+        stripeAccount: connectedAccountId, // ✅ called from the connected account
+      }
+    );
 
-  console.log(`✅ £${amountPounds} transferred from ${connectedAccountId} to platform`)
+    console.log(`✅ £${amountPounds} transferred from ${connectedAccountId} ➡️ ${platformAccountId}`);
+    return transfer;
+  } catch (error) {
+    console.error("❌ transferToPlatform error:", error.message);
+    throw new AppError(`${error.message}`, 200);
+  }
 }
 
 
@@ -601,9 +609,20 @@ async function createCheckoutSession(line_items, accountId, applicationFee) {
   };
 }
 
-async function retrievePaymentMethod(paymentMethodId) {
-  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-  return paymentMethod.card;
+// async function retrievePaymentMethod(paymentMethodId) {
+//   const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+//   return paymentMethod.card;
+// }
+
+async function retrievePaymentMethod(paymentMethodId, connectedAccountId = null) {
+  try {
+    const options = connectedAccountId ? { stripeAccount: connectedAccountId } : {};
+const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId, options);
+console.log("paymentMethod-------------====================>>>",paymentMethod)
+return paymentMethod.card;
+  } catch (error) {
+    throw new AppError(`${error.message}`, 200);
+  }
 }
 
 /*
@@ -638,54 +657,59 @@ async function capturePayment(
   amount,
   customerId,
   paymentMethodId,
-  accountId,
+  accountId,     // ✅ Stripe Connect Account ID
   targetAmount
 ) {
   try {
-    console.log("ðŸ’³ capturePayment accountId:", accountId);
+    console.log("🔌 capturePayment accountId:", accountId);
     console.log("Amount==================>>", amount);
 
-    // If amount is 0 or falsy, no need to do anything
     if (!amount || amount === 0) {
       throw new AppError("Amount is zero, nothing to process.", 200);
     }
 
-    // CASE 1: âž• Charge customer
+    const stripeOptions = accountId ? { stripeAccount: accountId } : {};
+
+    // CASE 1: 🔄 Charge customer (Direct charge to connected account)
     if (amount > 0) {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: convertToCents(amount),
-        currency: "gbp",
-        payment_method: paymentMethodId,
-        customer: customerId,
-        capture_method: "manual",
-        confirm: true,
-        return_url: "https://example.com/reauth",
-        transfer_data: {
-          destination: accountId,
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: convertToCents(amount),
+          currency: "gbp",
+          customer: customerId,
+          payment_method: paymentMethodId,
+          capture_method: "manual",
+          confirm: true,
+          return_url: "https://example.com/reauth",
         },
-      });
+        stripeOptions // ✅ run on behalf of connected account
+      );
 
       const capturedIntent = await stripe.paymentIntents.capture(
-        paymentIntent.id
+        paymentIntent.id,
+        {},
+        stripeOptions // ✅ also capture from connected account's context
       );
+
       return capturedIntent;
     }
 
-    // CASE 2: âž– Refund to customer
+    // CASE 2: 💸 Refund to customer
     if (amount < 0) {
-      // You must have a previously captured paymentIntent to refund.
-      // You can either pass a specific paymentIntentId or search the most recent one.
       const lastPaymentIntent =
-        await getMatchingPaymentIntentForCustomer(customerId, targetAmount);
+        await getMatchingPaymentIntentForCustomer(customerId, targetAmount,accountId);
 
       if (!lastPaymentIntent) {
         throw new AppError("No previous payment found to refund.", 200);
       }
 
-      const refund = await stripe.refunds.create({
-        payment_intent: lastPaymentIntent.id,
-        amount: convertToCents(Math.abs(amount)), // convert negative to positive for refund
-      });
+      const refund = await stripe.refunds.create(
+        {
+          payment_intent: lastPaymentIntent.id,
+          amount: convertToCents(Math.abs(amount)),
+        },
+        stripeOptions // ✅ refund scoped to connected account
+      );
 
       return refund;
     }
@@ -694,16 +718,19 @@ async function capturePayment(
   }
 }
 
-async function getMatchingPaymentIntentForCustomer(customerId, targetAmount) {
-  const intents = await stripe.paymentIntents.list({
-    customer: customerId,
-    limit: 10, // Increase as needed
-  });
 
-  console.log(
-    "intents===================================================++++++++++++++++",
-    intents
+async function getMatchingPaymentIntentForCustomer(customerId, targetAmount, connectAccountId) {
+  const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
+
+  const intents = await stripe.paymentIntents.list(
+    {
+      customer: customerId,
+      limit: 10,
+    },
+    stripeOptions // ✅ Scoped to connected account
   );
+
+  console.log("🔍 Matching PaymentIntents from Connect Account:", intents);
 
   const cents = convertToCents(targetAmount);
 
@@ -712,11 +739,12 @@ async function getMatchingPaymentIntentForCustomer(customerId, targetAmount) {
       intent.status === "succeeded" &&
       intent.amount === cents &&
       !intent.charges?.data?.[0]?.refunded
-    ); // Ensure not already refunded
+    );
   });
 
   return match || null;
 }
+
 
 async function createStripeAccountLink(accountId) {
   const accountLink = await stripe.accountLinks.create({
@@ -786,6 +814,7 @@ async function createSubscriptionWithPriceId(
       // payment_behavior: 'default_incomplete', // Ensures subscription awaits payment // used when create subscription then capture payment
       payment_behavior: "error_if_incomplete", //Automatically attempt to pay
       expand: ["latest_invoice.payment_intent"], // Retrieve payment intent details
+      //automatic_tax: { enabled: true },
       metadata: metadata,
       default_payment_method: paymentMethodId, // Attach the default payment method
     };
@@ -886,63 +915,64 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
   }
 }
 // refund Payment
-async function refundPartialPayment(paymentIntentId, amountToRefund) {
-  console.log("ðŸš€ ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
+async function refundPartialPayment(paymentIntentId, amountToRefund, connectAccountId) {
+  console.log("🚀 ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
   try {
-    // Retrieve the PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    console.log(
-      "Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ paymentIntent:",
-      JSON.stringify(paymentIntent)
+    const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
+
+    // ✅ Retrieve PaymentIntent from connected account
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      stripeOptions
+    );
+    console.log("⚡️ ~ paymentIntent:", JSON.stringify(paymentIntent));
+
+    const chargeId = paymentIntent.latest_charge;
+    if (!chargeId) throw new AppError("No charge found for PaymentIntent", 200);
+
+    console.log("⚡️ ~ chargeId:", chargeId);
+
+    // ✅ Create refund in the context of the connected account
+    const refund = await stripe.refunds.create(
+      {
+        charge: chargeId,
+        amount: convertToCents(amountToRefund),
+      },
+      stripeOptions
     );
 
-    // Get the Charge ID from the PaymentIntent
-    const chargeId = paymentIntent.latest_charge;
-    console.log("Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ chargeId:", chargeId);
-
-    // Create a partial refund for the charge
-    const refund = await stripe.refunds.create({
-      charge: chargeId,
-      amount: convertToCents(amountToRefund), // Amount in the smallest currency unit
-    });
-
-    console.log(`Partial refund successful:${amountToRefund}`, refund.id);
+    console.log(`✅ Partial refund successful: ${amountToRefund}`, refund.id);
     return refund;
   } catch (error) {
-    console.log("Ã°Å¸Å¡â‚¬ ~ refundPartialPayment ~ error:", error);
+    console.error("❌ refundPartialPayment error:", error);
     throw new AppError(`${error.message}`, 200);
   }
 }
 
-async function refundFullPayment(paymentIntentId) {
+
+async function refundFullPayment(paymentIntentId, connectAccountId = null) {
   try {
-    // Retrieve the PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    console.log(
-      "Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ paymentIntent:",
-      JSON.stringify(paymentIntent)
-    );
+    const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
 
-    // Get the Charge ID from the PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, stripeOptions);
+    console.log("⚡ refundFullPayment ~ paymentIntent:", JSON.stringify(paymentIntent));
+
     const chargeId = paymentIntent.latest_charge;
-    console.log("Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ chargeId:", chargeId);
+    console.log("⚡ refundFullPayment ~ chargeId:", chargeId);
 
-    // Create a full refund for the charge
     const refund = await stripe.refunds.create({
       charge: chargeId,
-      amount: paymentIntent.amount, // Full amount of the PaymentIntent in the smallest currency unit
-    });
+      amount: paymentIntent.amount,
+    }, stripeOptions); // ✅ refund within connected account context
 
-    console.log(
-      `Full refund successful: ${paymentIntent.amount / 100}`,
-      refund.id
-    );
+    console.log(`✅ Full refund successful: ${paymentIntent.amount / 100}`, refund.id);
     return refund;
   } catch (error) {
-    console.log("Ã°Å¸Å¡â‚¬ ~ refundFullPayment ~ error:", error);
+    console.error("❌ refundFullPayment ~ error:", error);
     throw new AppError(`${error.message}`, 200);
   }
 }
+
 
 const getPriceById = async (priceId) => {
   try {

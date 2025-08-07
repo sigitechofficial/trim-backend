@@ -2365,23 +2365,42 @@ exports.addReasons = async (req, res, next) => {
 //^ 2.Fetch Reasons  ----------------------------
 
 exports.fetchReasons = async (req, res, next) => {
-  const data = await reason.findAll({
-    where: { type: req.params?.type },
-  })
+    const whereCondition = req.params?.type ? { type: req.params.type } : {};
 
-  return res.status(200).json(
-    response({
-      message: 'Reasons',
-      data: { reasons: data.reverse() },
-    }),
-  )
-}
+    const data = await reason.findAll({
+      where: whereCondition,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return res.status(200).json(
+      response({
+        message: 'Reasons',
+        data: { reasons: data },
+      }),
+    );
+};
+
 
 //^ 2.Update Reasons  ----------------------------
 
 exports.updateReasons = async (req, res, next) => {
-  const data = await reason.update(
-    { reason: req.body?.reason },
+  const record = await reason.findOne({
+    where: {
+      type: req.params?.type,
+      id: req.params?.id
+    }
+  })
+
+  if (!record) {
+    throw new AppError('No record found with that ID', 200)
+  }
+
+  await reason.update(
+    { 
+        reason: req.body?.reason,
+        type: req.body?.type,
+        
+    },
     {
       where: {
         type: req.params?.type,
@@ -2401,15 +2420,15 @@ exports.updateReasons = async (req, res, next) => {
 //^ 3.Update Status  ----------------------------
 
 exports.changeReasonStatus = async (req, res, next) => {
-  await reason.update(
-    { reason: req.body?.status },
+  const data=await reason.update(
+    { status: req.body?.status },
     { where: { type: req.params?.type, id: req.params?.id } },
   )
 
   return res.status(200).json(
     response({
       message: 'Success',
-      data: {},
+      data: {status:req.body.status},
     }),
   )
 }
