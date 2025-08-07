@@ -848,3 +848,121 @@ exports.hourlyIncomeReportAdmin = async (req, res, next) => {
     }),
   )
 }
+
+
+//Admin Subscription Summary Data
+exports.adminSubscriptionSummaryOnly = async (req, res, next) => {
+  const allSubs = await subscriptions.findAll();
+
+  let totalRevenue = 0;
+  let totalVAT = 0;
+  let netRevenue = 0;
+  let activeSubscriptions = 0;
+  const today = new Date();
+
+  allSubs.forEach((sub) => {
+    const amountPaid = Number(sub.amountPaid || 0);
+    const vat = Number(sub.VAT || 0);
+    const base = amountPaid - vat;
+
+    totalRevenue += amountPaid;
+    totalVAT += vat;
+    netRevenue += base;
+
+    const startDate = new Date(sub.periodStart);
+    const endDate = new Date(sub.periodEnd);
+
+    const isActive =
+      sub.status === 'payment_succeeded' &&
+      today >= startDate &&
+      today <= endDate;
+
+    if (isActive) {
+      activeSubscriptions++;
+    }
+  });
+
+  const averagePerSalon =
+    allSubs.length > 0 ? totalRevenue / allSubs.length : 0;
+
+  return res.json(
+    response({
+      message: 'Subscription Summary Only',
+      data: {
+        summary: {
+          totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+          totalVAT: parseFloat(totalVAT.toFixed(2)),
+          netRevenue: parseFloat(netRevenue.toFixed(2)),
+          activeSubscriptions,
+          averagePerSalon: parseFloat(averagePerSalon.toFixed(2)),
+        }
+      }
+    })
+  );
+};
+
+
+
+//Subscription Table Data
+exports.adminSubscriptionTableData = async (req, res, next) => {
+     // Dynamically import p-limit
+  const { default: pLimit } = await import('p-limit');
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = parseInt(req.query.offset) || 0;
+
+  const allSubs = await subscriptions.findAll({
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['salonName']
+      }
+    ],
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset
+  });
+
+  // ✅ Limit concurrent Stripe requests to 5 at a time
+  const limitConcurrency = pLimit(5);
+
+  const table = await Promise.all(
+    allSubs.map((sub, index) =>
+      limitConcurrency(async () => {
+        const amountPaid = Number(sub.amountPaid || 0);
+        const vatAmount = Number(sub.VAT);
+        const basePayment = amountPaid - vatAmount;
+
+        let subscriptionStatus = 'Unavailable';
+        if (sub.subscriptionId) {
+          try {
+            const stripeSub = await Stripe.getSubscription(sub.subscriptionId);
+            if (stripeSub) {
+              subscriptionStatus = stripeSub.status || 'Unavailable';
+            }
+          } catch (e) {
+            console.warn(`⚠️ Stripe fetch failed for ${sub.subscriptionId}: ${e.message}`);
+          }
+        }
+
+        return {
+          ref: offset + index + 1,
+          salonName: sub.salonDetail?.salonName || 'N/A',
+          subscriptionPlan: sub.name || 'N/A',
+          amountPaid,
+          basePayment,
+          vatAmount,
+          paymentStatus: sub.status || 'Unknown',
+          subscriptionStatus
+        };
+      })
+    )
+  );
+
+  return res.json(
+    response({
+      message: 'Subscription Table Data',
+      data: table
+    })
+  );
+};
+

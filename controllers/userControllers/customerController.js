@@ -461,19 +461,16 @@ exports.home = async (req, res, next) => {
   const rangeInKm = req.body.rangeInKm || 15
   const condition = { status: true }
 
-  // Build price condition if provided
   const priceCondition = req.body?.price
     ? { price: { [Op.lte]: req.body?.price } }
     : {}
 
-  // Build time condition if day and time are provided
   if (req.body.day && req.body.startTime && req.body.endTime) {
     condition.day = req.body.day
     condition.openingTime = { [Op.lte]: req.body.startTime }
     condition.closingTime = { [Op.gte]: req.body.endTime }
   }
 
-  // Fetch liked salons if favorite filter is applied
   const likedSalons = await favorite.findAll({
     where: { userId: req?.user?.id || 0 },
     attributes: ['salonDetailId'],
@@ -481,7 +478,6 @@ exports.home = async (req, res, next) => {
   const likeIds =
     likedSalons?.length > 0 ? likedSalons.map((ele) => ele.salonDetailId) : []
 
-  // Initialize salon conditions
   const salonCondition = {
     [Op.or]: [
       { isExternalEmployee: true },
@@ -492,7 +488,6 @@ exports.home = async (req, res, next) => {
     deleted: 0,
   }
 
-  // Apply favorite filter if requested
   if (req.params?.favorite && req?.user) {
     if (likedSalons.length < 1) {
       return res.status(200).json(response({ data: { slons: [] } }))
@@ -500,7 +495,6 @@ exports.home = async (req, res, next) => {
     salonCondition.id = { [Op.or]: likeIds }
   }
 
-  // Haversine formula for distance calculation
   const formula = `(6371 * 
     acos(
       cos(radians(${targetLat})) * cos(radians(lat)) * 
@@ -509,16 +503,12 @@ exports.home = async (req, res, next) => {
     )
   )`
 
-  // Refactored salon conditions incorporating service and time filters
   const finalSalonCondition = {
     ...salonCondition,
-    // Distance filter
     ...(targetLat &&
       targetLng && {
         [Op.and]: literal(`${formula} <= ${rangeInKm}`),
       }),
-
-    // Service price filter
     ...(req.body.price && {
       id: {
         [Op.in]: literal(`(
@@ -528,7 +518,6 @@ exports.home = async (req, res, next) => {
         )`),
       },
     }),
-    // Time filter
     ...(req.body.day &&
       req.body.time && {
         id: {
@@ -552,9 +541,8 @@ exports.home = async (req, res, next) => {
     }),
   }
 
-  console.log('ðŸš€ ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
+  console.log('🚀 ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
 
-  // Construct the query body without including 'service' and 'time'
   const body = {
     where: finalSalonCondition,
     attributes: [
@@ -581,12 +569,6 @@ exports.home = async (req, res, next) => {
       ],
     ],
     include: [
-      // {
-      //   model: rating,
-      //   attributes: [],
-      //   on: { salonDetailId: col('salonDetail.id') },
-      //   required: false,
-      // },
       {
         model: addressDBS,
         required: true,
@@ -615,42 +597,32 @@ exports.home = async (req, res, next) => {
         attributes: ['id'],
       },
     ],
-    // group: ['salonDetail.id'],
     having: req.params?.favorite
       ? undefined
       : literal(`${formula} <= ${rangeInKm}`),
   }
 
-  // Add distance attribute if not filtering by favorites
   if (!req.params?.favorite) {
     body.attributes.push([literal(`${formula}`), 'distance'])
   }
 
- let results = await salonDetail.findAll(body)
-results = JSON.parse(JSON.stringify(results))
+  let results = await salonDetail.findAll(body)
+  results = JSON.parse(JSON.stringify(results))
 
-   console.log('ðŸš€ ~ exports.home= ~ results:', results)
+  console.log('🚀 ~ exports.home= ~ results:', results)
 
+  if (results.length > 0) {
+    results = results.map((salon) => {
+  const found = likeIds.some((id) => id === salon.id);
 
-if (results.length > 0) {
-  results = results.map((salon) => {
-    const found = likeIds.some((id) => id === salon.id);
-    
-    // Default to 0 if no discount exists
-    const discounts = (salon.services || []).map((s) => s.discount || 0);
-    const averageDiscount =
-      discounts.length > 0
-        ? parseFloat(
-            (discounts.reduce((a, b) => a + b, 0) / discounts.length).toFixed(2)
-          )
-        : 0; // No discount is treated as 0
+  const discounts = (salon.services || []).map((s) => s.discount || 0);
+  const maxDiscount = discounts.length > 0 ? Math.max(...discounts) : 0;
 
-    return { ...salon, like: found, averageDiscount };
-  });
+  return { ...salon, like: found, averageDiscount: maxDiscount };
+});
 
-  // Sort by averageDiscount in descending order; salons with no discount are treated as 0
-  results.sort((a, b) => b.averageDiscount - a.averageDiscount);
-}
+results.sort((a, b) => b.averageDiscount - a.averageDiscount);
+  }
 
   let appointments = []
   if (req.user && req.user.id) {
@@ -674,7 +646,6 @@ if (results.length > 0) {
           'serviceCount',
         ],
       ],
-
       include: [
         {
           model: salonDetail,
@@ -682,8 +653,6 @@ if (results.length > 0) {
             'id',
             `salonName`,
             'coverImage',
-            // [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-            // [fn('COUNT', col('ratings.id')), 'ratingCount']
           ],
           include: [
             { model: addressDBS, attributes: [`streetAddress`, `city`] },
@@ -697,7 +666,6 @@ if (results.length > 0) {
       ],
     })
   }
-
 
   const output = {
     data: {

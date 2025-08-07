@@ -455,7 +455,7 @@ router.get(
 //! Resons
 router.post('/add-new-reason/:type', catchAsync(adminController.addReasons))
 
-router.get('/fetch-reasons/:type', catchAsync(adminController.fetchReasons))
+router.get('/fetch-reasons/:type?', catchAsync(adminController.fetchReasons))
 router.put('/edit-reason/:type/:id', catchAsync(adminController.updateReasons))
 router.put(
   '/change-reason-status/:type/:id',
@@ -502,5 +502,20 @@ router.get(
 router.put('/edit-faq/:id', catchAsync(adminController.updateFAQs))
 router.put('/change-faq-status/:id', catchAsync(adminController.updateFAQs))
 router.delete('/delete-faq/:id', catchAsync(adminController.deleteFAQs))
+
+
+
+// Admin Report Summary Data
+router.get(
+  '/reports/subscriptions',
+  catchAsync(adminReports.adminSubscriptionSummaryOnly)
+);
+
+
+// Admin Report Table Data
+router.get(
+  '/reports/subscriptions/table',
+  catchAsync(adminReports.adminSubscriptionTableData)
+);
 
 module.exports = router
