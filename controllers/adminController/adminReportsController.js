@@ -12,6 +12,7 @@ const {
   otpVerification,
   deviceToken,
   wagesMethod,
+  subscriptions,
   employeeWagesMethod,
   salonDetail,
   booking,
@@ -44,6 +45,7 @@ const {
 } = require('../../utils/reportsFormator/numberofMonths')
 
 const CustomDate = require('../../utils/currentDay')
+const Stripe = require('../stripe')
 
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
@@ -905,64 +907,71 @@ exports.adminSubscriptionSummaryOnly = async (req, res, next) => {
 
 //Subscription Table Data
 exports.adminSubscriptionTableData = async (req, res, next) => {
-     // Dynamically import p-limit
   const { default: pLimit } = await import('p-limit');
-  const limit = parseInt(req.query.limit) || 10;
-  const offset = parseInt(req.query.offset) || 0;
 
-  const allSubs = await subscriptions.findAll({
-    include: [
-      {
-        model: salonDetail,
-        attributes: ['salonName']
-      }
-    ],
-    order: [['createdAt', 'DESC']],
-    limit,
-    offset
-  });
+  try {
+    const { startDate, endDate } = req.query;
 
-  // ✅ Limit concurrent Stripe requests to 5 at a time
-  const limitConcurrency = pLimit(5);
+    // Filter by date range if provided
+    const whereClause = {};
+    if (startDate && endDate) {
+      whereClause.periodStart = {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      };
+    }
 
-  const table = await Promise.all(
-    allSubs.map((sub, index) =>
-      limitConcurrency(async () => {
-        const amountPaid = Number(sub.amountPaid || 0);
-        const vatAmount = Number(sub.VAT);
-        const basePayment = amountPaid - vatAmount;
+    // Fetch all subscriptions with salon name
+    const allSubs = await subscriptions.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: salonDetail,
+          attributes: ['salonName'],
+        },
+      ],
+      order: [['id', 'DESC']],
+    });
 
-        let subscriptionStatus = 'Unavailable';
-        if (sub.subscriptionId) {
-          try {
-            const stripeSub = await Stripe.getSubscription(sub.subscriptionId);
-            if (stripeSub) {
-              subscriptionStatus = stripeSub.status || 'Unavailable';
-            }
-          } catch (e) {
-            console.warn(`⚠️ Stripe fetch failed for ${sub.subscriptionId}: ${e.message}`);
-          }
-        }
+    // Limit concurrent Stripe status checks
+    const limitConcurrency = pLimit(50);
+    const statusResults = await Promise.allSettled(
+      allSubs.map((sub) =>
+        limitConcurrency(() =>
+          Stripe.getSubscriptionStatus(sub.subscriptionId)
+        )
+      )
+    );
 
-        return {
-          ref: offset + index + 1,
-          salonName: sub.salonDetail?.salonName || 'N/A',
-          subscriptionPlan: sub.name || 'N/A',
-          amountPaid,
-          basePayment,
-          vatAmount,
-          paymentStatus: sub.status || 'Unknown',
-          subscriptionStatus
-        };
+    // Build response table
+    const table = allSubs.map((sub, i) => {
+      const amountPaid = Number(sub.amountPaid || 0);
+      const vatAmount = Number(sub.VAT || 0); // ✅ Get VAT from DB directly
+      const basePayment = +(amountPaid - vatAmount).toFixed(2);
+
+      const subscriptionStatus =
+        statusResults[i].status === 'fulfilled'
+          ? statusResults[i].value
+          : 'Unavailable';
+
+      return {
+        id: sub.id,
+        salonName: sub.salonDetail?.salonName || 'N/A',
+        subscriptionPlan: sub.name || 'N/A',
+        amountPaid,
+        basePayment,
+        vatAmount,
+        paymentStatus: sub.status || 'Unknown',
+        subscriptionStatus,
+      };
+    });
+
+    return res.json(
+      response({
+        message: 'Filtered Subscription Table Data',
+        data: table,
       })
-    )
-  );
-
-  return res.json(
-    response({
-      message: 'Subscription Table Data',
-      data: table
-    })
-  );
+    );
+  } catch (error) {
+    next(error);
+  }
 };
-
