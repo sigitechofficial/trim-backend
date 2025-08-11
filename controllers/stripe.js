@@ -473,6 +473,23 @@ async function getSubscription(subscriptionPlan) {
   }
 }
 
+
+//Get Subscription Status
+async function getSubscriptionStatus(subscriptionId){
+  console.log("Going into this -------------->",subscriptionId)
+if (!subscriptionId) return 'Unavailable';
+
+try {
+  const stripeSub = await getSubscription(subscriptionId);
+  console.log("stripeSub+++_+_+_+_+_+_+_++++++++++++++++++_________",stripeSub.status)
+  return stripeSub?.status || 'Unavailable';
+} catch (e) {
+  console.warn(`⚠️ Stripe fetch failed for ${subscriptionId}: ${e.message}`);
+  return 'Unavailable';
+}
+};
+
+
 async function cancelSubscription(subscriptionPlan) {
   const subscription = await stripe.subscriptions.cancel(`${subscriptionPlan}`);
   return subscription;
@@ -1304,6 +1321,7 @@ module.exports = {
   createDirectCharge,
   getCustomer,
   getPlatformAccountId,
+  getSubscriptionStatus,
   transferToPlatform
 };
 // sessionCheckoutPaymnet --- check payment destination

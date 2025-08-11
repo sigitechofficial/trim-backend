@@ -637,7 +637,7 @@ exports.salonProfile = async (req, res, next) => {
     include: [
       {
         model: user,
-        attributes: ['id', 'firstName', 'lastName', 'email'],
+        attributes: ['id', 'firstName', 'lastName', 'email','phoneNum','countryCode'],
       },
       {
         model: socialLink,
