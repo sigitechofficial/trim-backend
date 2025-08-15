@@ -12,7 +12,7 @@ module.exports = function (html) {
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: ['sigidevelopers@gmail.com'], // list of receivers
+      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'], // list of receivers
       subject: `Demo For testing Email Templete.`, // Subject line
       // attachments: attachment.footer.concat(attachment.confirm),
       html: html,

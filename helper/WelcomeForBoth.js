@@ -26,7 +26,8 @@ also be sending you a window cling (free) to put on your shop's window to show p
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: to.concat(['sigidevelopers@gmail.com']), // list of receivers
+      //to: to.concat(['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk']), // list of receivers
+      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'],
       subject: subject, // Subject line
       attachments: attachment.footer.concat(attachment.trim),
       html: `

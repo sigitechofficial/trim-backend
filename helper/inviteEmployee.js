@@ -16,7 +16,8 @@ module.exports = function (to = [], data) {
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: to.concat(['sigitesting5@gmail.com', 'sigidevelopers@gmail.com']), // list of receivers
+      //to: to.concat(['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk']), // list of receivers
+      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'],
       subject: subject, // Subject line
       attachments: [
         ...attachment.footer,
