@@ -2833,7 +2833,7 @@ exports.testing = async (req, res, next) => {
 exports.transferFixedFeeToAdmin=async (req,res,next)=>{
     const{connectedAccountId}=req.body
     
-    const feeAmount=187.00;
+    const feeAmount=0.50;
     
     //const connectedAccountId='acct_1RoLFcCwrlf25Znd';
     
