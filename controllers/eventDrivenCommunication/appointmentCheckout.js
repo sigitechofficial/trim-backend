@@ -68,7 +68,7 @@ exports.cash = async (bookingId, tip, amount = 0) => {
     const fullName = `${bookingData?.user?.firstName} ${bookingData?.user?.lastName}`
     const salonNotification = {
       title: `Payment received`,
-      body: `Payment of ${CURRENCY_UNIT} ${amount}  received from ${fullName}.`,
+      body: `Payment of ${CURRENCY_UNIT}${amount}  received from ${fullName}.`,
     }
     //TODO  $[Amount]
 
