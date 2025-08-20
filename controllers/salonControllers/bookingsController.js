@@ -300,7 +300,7 @@ exports.calendarAppointments = async (req, res, next) => {
       salonTimes,
       employees: results || [],
       parentSalonName,
-      onlinePayments: salon?.onlinePayments || false,
+      onlinePayments: salon?.onlinePayments || true,
     },
   })
 

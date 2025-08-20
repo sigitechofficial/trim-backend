@@ -142,11 +142,25 @@ exports.addSalonDetail = async (req, res, next) => {
   //     salonDetailId: newEntry.id,
   //   }
   // })
-  cancellationPolicy.create({
+  
+  console.log("Create Cancellation Policy +++++++++++++++++++++++++")
+  await cancellationPolicy.bulkCreate([
+  {
+    hoursBeforeBooking: 24,
+    refundPercentage: 50,
+    salonDetailId: newEntry.id,
+  },
+  {
+    hoursBeforeBooking: 48,
+    refundPercentage: 25,
+    salonDetailId: newEntry.id,
+  },
+  {
     hoursBeforeBooking: 72,
     refundPercentage: 0,
-    salonDetailId: newEntry.id,
-  })
+    salonDetailId: newEntry.id, // ✅ this matches your current single-create logic
+  },
+])
 
   //  paymentPolicy.create({
   //   salonDetailId: newEntry.id,

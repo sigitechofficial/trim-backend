@@ -2738,7 +2738,7 @@ if (salonDetails?.hasObtainedFreeTrial) {
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
   }
-  const output = response({ status: '1', message: 'Payment', data })
+  const output = response({ status: '1', message: 'Subscription active', data })
 
   return res.status(200).json(output)
 }
@@ -2791,7 +2791,7 @@ exports.forSubcriptionUpdate = async (req, res, next) => {
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
   }
-  const output = response({ status: '1', message: 'Payment', data })
+  const output = response({ status: '1', message: 'Subscription active', data })
 
   return res.status(200).json(output)
 }
