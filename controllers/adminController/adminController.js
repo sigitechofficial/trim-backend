@@ -955,7 +955,7 @@ exports.addSubscription = async (req, res, next) => {
   const featureData = await subscriptionFeature.bulkCreate(featureInput)
   return res.status(200).json(
     response({
-      message: 'Subscription Plan added',
+      message: 'Subscription plan added',
       data: { id: plan.id },
     }),
   )
@@ -1494,7 +1494,7 @@ exports.peakTimesReport = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(response({ message: 'Peak Times report', data: { report, status } }))
+    .json(response({ message: 'Peak times report', data: { report, status } }))
 }
 
 //* 2.Reports > Financial Performance Report-----------------
@@ -1566,7 +1566,7 @@ exports.financialPerformanceReport = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'Financial Performance Report',
+      message: 'Financial performance report',
       data: { report, status, currencyUnit: CURRENCY_UNIT },
     }),
   )
@@ -1726,7 +1726,7 @@ exports.appointmentConversionReport = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'Financial Performance Report',
+      message: 'Financial performance report',
       data: { report, currencyUnit: CURRENCY_UNIT },
     }),
   )
@@ -2094,7 +2094,7 @@ exports.topPerformingServices = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: 'Top Performing Services',
+      message: 'Top performing services',
       data: { currencyUnit: CURRENCY_UNIT, graph: output },
     }),
   )
@@ -2159,7 +2159,7 @@ exports.topPerformingSalons = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: `Top ${limit} Performing Salons.`,
+      message: `Top ${limit} performing salons.`,
       data: { currencyUnit: CURRENCY_UNIT, graph: output },
     }),
   )

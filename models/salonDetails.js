@@ -69,7 +69,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     onlinePayments: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      defaultValue: true,
     },
     isOnline: {
       type: DataTypes.BOOLEAN,

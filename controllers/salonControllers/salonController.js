@@ -100,7 +100,7 @@ exports.addSalonDetail = async (req, res, next) => {
   if (salon) {
     console.log('---------------------> 2nd Attempt')
     return res.json(
-      returnFunction('1', 'Salon Details Successfully Added!', salon, ''),
+      returnFunction('1', 'Salon details successfully added!', salon, ''),
     )
   }
   const exist = await salonDetail.findOne({
@@ -187,7 +187,7 @@ exports.addSalonDetail = async (req, res, next) => {
     { where: { userId } },
   )
   return res.json(
-    returnFunction('1', 'Salon Details Added Successfully!', newEntry, ''),
+    returnFunction('1', 'Salon details added successfully!', newEntry, ''),
   )
 }
 /*
@@ -198,7 +198,7 @@ exports.SubscriptionPlans = async (req, res, next) => {
   const listOfPlans = await Stripe.AllProducts(3)
 
   return res.json(
-    returnFunction('1', 'All Subscription Plan', { listOfPlans }, ''),
+    returnFunction('1', 'All subscription plan', { listOfPlans }, ''),
   )
 }
 /*
@@ -222,7 +222,7 @@ exports.addCard = async (req, res, next) => {
     cardCVC,
   }
   const payment_method = await Stripe.addCard(data)
-  return res.json(returnFunction('1', 'Card Added Successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Card added successfully!', {}, ''))
 }
 /*
             3.Choose SubsCription Plan 
@@ -418,7 +418,7 @@ exports.salonTiming = async (req, res, next) => {
 
   // Respond with a success message
   return res.json(
-    returnFunction('1', 'Salon Timing Added Successfully!', {}, ''),
+    returnFunction('1', 'Salon timing added successfully!', {}, '')
   )
 }
 /*
@@ -451,7 +451,7 @@ exports.getSalonTiming = async (req, res, next) => {
       : ''
   })
 
-  return res.json(returnFunction('1', 'Salon Timings', { salonTiming }, ''))
+  return res.json(returnFunction('1', 'Salon timings', { salonTiming }, ''))
 }
 /*
             4.Serviece Images 
@@ -475,7 +475,7 @@ exports.addImages = async (req, res, next) => {
 
   const serviceImages = await serviceImage.bulkCreate(imagesArr)
   return res.json(
-    returnFunction('1', 'Service Images Added Succesfully!', {}, ''),
+    returnFunction('1', 'Service images added successfully!', {}, ''),
   )
 }
 /*
@@ -509,7 +509,7 @@ exports.addSocialLinks = async (req, res, next) => {
   const { links } = req.body
   const addLinks = await socialLink.bulkCreate(links)
   return res.json(
-    returnFunction('1', 'Social Links Added Successfully!', {}, ''),
+    returnFunction('1', 'Social links added successfully!', {}, '')
   )
 }
 //* UPDATE SocialLinks
@@ -520,7 +520,7 @@ exports.updateSocialLinks = async (req, res, next) => {
   socialLink.destroy({ where: { salonDetailId: salon.id } })
   await socialLink.bulkCreate(finalInput)
   return res.json(
-    returnFunction('1', 'Social Links Added Successfully!', {}, ''),
+    returnFunction('1', 'Social links added successfully!', {}, '')
   )
 }
 
@@ -567,7 +567,7 @@ exports.getAllServices = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'All Salon Services', { allServices }, ''),
+    returnFunction('1', 'All salon services', { allServices }, ''),
   )
 }
 /*
@@ -633,7 +633,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon Details Updated Successfully!', {}, ''),
+    returnFunction('1', 'Salon details updated successfully!', {}, ''),
   )
 }
 //! Salon profile Edit /Location, Services and social links
@@ -760,11 +760,11 @@ exports.salonProfile = async (req, res, next) => {
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
     const output = JSON.parse(JSON.stringify(salonData))
     let stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Salon Profile', { salonData,stripeDashboardlink }, ''))
+    return res.json(returnFunction('1', 'Salon profile', { salonData,stripeDashboardlink }, ''))
 
   } else {
     const output = JSON.parse(JSON.stringify(salonData))
-    return res.json(returnFunction('1', 'Salon Profile', { salonData }, ''))
+    return res.json(returnFunction('1', 'Salon profile', { salonData }, ''))
 
   }
 
@@ -799,7 +799,7 @@ exports.addGalleryImages = async (req, res, next) => {
   }
 
   return res.json(
-    returnFunction('1', 'Gallery Images Added Succesfully!', {}, ''),
+    returnFunction('1', 'Gallery images added successfully!', {}, ''),
   )
 }
 /*
@@ -819,7 +819,7 @@ exports.getGalleryImages = async (req, res, next) => {
     },
   })
   return res.json(
-    returnFunction('1', 'All Gallery Images !', { galleryImages }, ''),
+    returnFunction('1', 'All gallery images!', { galleryImages }, ''),
   )
 }
 /*
@@ -841,7 +841,7 @@ exports.deleteGalleryImages = async (req, res, next) => {
       id: ImageId,
     },
   })
-  return res.json(returnFunction('1', 'Picture Deleted Successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Picture deleted successfully!', {}, ''))
 }
 /*
               4.Update Salon Gallery Images 
@@ -862,7 +862,7 @@ exports.updateGalleryImages = async (req, res, next) => {
     const Gallery = await salonImage.bulkCreate(imagesArr)
   }
   return res.json(
-    returnFunction('1', 'Gallery Images Updated Succesfully!', {}, ''),
+    returnFunction('1', 'Gallery images updated successfully!', {}, ''),
   )
 }
 /*
@@ -911,7 +911,7 @@ exports.updateSalonTimings = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Salon Timings Updated Successfully!', {}, ''),
+    returnFunction('1', 'Salon timings updated successfully!', {}, ''),
   )
 }
 /*
@@ -950,7 +950,7 @@ exports.updateService = async (req, res, next) => {
   console.log('🚀 ~ exports.updateService= ~ req.body:', req.body)
   let Service = await service.findByPk(serviceId)
   if (!Service) {
-    return res.json(returnFunction('1', 'No Service Found!', {}, ''))
+    return res.json(returnFunction('1', 'No service found!', {}, ''))
   }
   Service.serviceName = serviceName ? serviceName : Service.serviceName
   Service.price = price ? price : Service.price
@@ -962,7 +962,7 @@ exports.updateService = async (req, res, next) => {
   await Service.save()
 
   return res.json(
-    returnFunction('1', 'Salon Services Updated Successfully!', {}, ''),
+    returnFunction('1', 'Salon services updated successfully!', {}, ''),
   )
 }
 /*
@@ -978,7 +978,7 @@ exports.defaultCategories = async (req, res, next) => {
   const output = data.map((cat) => ({ ...cat, isSelected: false }))
 
   return res.json(
-    returnFunction('1', 'Categories.', { categories: output }, ''),
+    returnFunction('1', 'Categories.', { categories: output }, '')
   )
 }
 //* Add multiple categories
@@ -1009,7 +1009,7 @@ exports.addMultipleCategories = async (req, res, next) => {
   if (finalInput.length > 0) await category.bulkCreate(finalInput)
 
   return res.json(
-    returnFunction('1', 'Categories have been successfully added!', {}, ''),
+    returnFunction('1', 'Categories have been successfully added!', {}, '')
   )
 }
 
@@ -1026,7 +1026,7 @@ exports.getCategories = async (req, res, next) => {
     },
   })
   return res.json(
-    returnFunction('1', 'All Categories of Salon', { categories }, ''),
+    returnFunction('1', 'All categories of salon', { categories }, ''),
   )
 }
 /*
@@ -1046,7 +1046,7 @@ exports.updateCategory = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon Category Updated Successfully!', {}, ''),
+    returnFunction('1', 'Salon category updated successfully!', {}, ''),
   )
 }
 
@@ -1081,7 +1081,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon category status updated successfully!', {}, ''),
+    returnFunction('1', 'Salon category status updated successfully!', {}, '')
   )
 }
 //! Coupon
@@ -1092,7 +1092,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
 exports.fecthCoupons = async (req, res, next) => {
   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
   }
   const results = await coupon.findAll({
     where: { salonDetailId: salon.id },
@@ -1112,7 +1112,7 @@ exports.fecthCoupons = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'All Coupons.', { coupons: results }, ''))
+    .json(returnFunction('1', 'All coupons.', { coupons: results }, ''))
 }
 /*
             6.Add Coupons
@@ -1122,7 +1122,7 @@ exports.addCoupons = async (req, res, next) => {
   const input = req.body
   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
   }
   const exist = await coupon.findOne({ where: { promoCode: input.promoCode } })
   if (exist) {
@@ -1136,7 +1136,7 @@ exports.addCoupons = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'Coupon created Successfully!', {}, ''))
+    .json(returnFunction('1', 'Coupon created successfully!', {}, ''))
 }
 //! Subscription
 /*
@@ -1151,7 +1151,7 @@ exports.customerSubscription = async (req, res, next) => {
     },
   })
   if (!salonData?.subscriptionPlan) {
-    return res.json(returnFunction('2', 'No Subcription Plan', {}, ''))
+    return res.json(returnFunction('2', 'No subscription plan', {}, ''))
   }
   const customerSubscription = await Stripe.getSubscription(
     salonData.subscriptionPlan,
@@ -1176,20 +1176,20 @@ exports.customerSubscription = async (req, res, next) => {
       }
     }
   } else {
-    return res.json(returnFunction('2', 'No Subcription Plan', {}, ''))
+    return res.json(returnFunction('2', 'No subscription plan', {}, ''))
   }
 
   const currentDate = new Date()
   const expiryDate = new Date(salonData.registrationExpiryDate)
 
   if (customerSubscription.status == 'canceled' && expiryDate < currentDate) {
-    return res.json(
-      returnFunction('2', 'Subscription Expired', { customerSubscription }, ''),
-    )
+      return res.json(
+    returnFunction('2', 'Subscription expired', { customerSubscription }, ''),
+  )
   }
 
   return res.json(
-    returnFunction('1', 'All Subscription Plan', { customerSubscription }, ''),
+    returnFunction('1', 'All subscription plan', { customerSubscription }, ''),
   )
 }
 /*
@@ -1255,7 +1255,7 @@ exports.addAnotherCard = async (req, res, next) => {
   }
   const payment_method = await Stripe.addCard(data)
   return res.json(
-    returnFunction('1', 'Card Added Successfully!', { payment_method }, ''),
+    returnFunction('1', 'Card added successfully!', { payment_method }, ''),
   )
 }
 /*
@@ -2015,7 +2015,7 @@ exports.saleDetails = async (req, res, next) => {
   };
 
   return res.json(
-    returnFunction('1', 'Booking Details', { bookingDetail }, '')
+    returnFunction('1', 'Booking details', { bookingDetail }, '')
   );
 };
 

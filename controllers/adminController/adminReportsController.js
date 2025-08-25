@@ -432,7 +432,7 @@ exports.IncomeReportYearAdmin = async (req, res, next) => {
   // Format the response
   return res.status(200).json(
     response({
-      message: 'Income Report.',
+      message: 'Income report.',
       data: { currencyUnit: CURRENCY_UNIT, report },
     }),
   )
@@ -666,7 +666,7 @@ exports.weeklyIncomeReportAdmin = async (req, res, next) => {
   // Structure the response
   return res.status(200).json(
     response({
-      message: 'Income Report.',
+      message: 'Income report.',
       data: { currencyUnit: CURRENCY_UNIT, report },
     }),
   )
@@ -843,7 +843,7 @@ exports.hourlyIncomeReportAdmin = async (req, res, next) => {
   // Structure the response
   return res.status(200).json(
     response({
-      message: 'Hourly Income Report.',
+      message: 'Hourly income report.',
       data: {
         report: orderedHours,
       },
@@ -889,7 +889,7 @@ exports.adminSubscriptionSummaryOnly = async (req, res, next) => {
 
   return res.json(
     response({
-      message: 'Subscription Summary Only',
+      message: 'Subscription summary only',
       data: {
         summary: {
           totalRevenue: parseFloat(totalRevenue.toFixed(2)),
@@ -967,7 +967,7 @@ exports.adminSubscriptionTableData = async (req, res, next) => {
 
     return res.json(
       response({
-        message: 'Filtered Subscription Table Data',
+        message: 'Filtered subscription table data',
         data: table,
       })
     );

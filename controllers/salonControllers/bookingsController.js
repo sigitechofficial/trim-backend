@@ -300,7 +300,7 @@ exports.calendarAppointments = async (req, res, next) => {
       salonTimes,
       employees: results || [],
       parentSalonName,
-      onlinePayments: salon?.onlinePayments || true,
+      onlinePayments: salon?.onlinePayments ?? true,
     },
   })
 
@@ -474,7 +474,7 @@ exports.salonBookings = async (req, res, next) => {
   return res.json(
     returnFunction(
       '1',
-      'Salon All Bookings',
+      'Salon all bookings',
       { salonEmployee, bookings: bookings.reverse() },
       '',
     ),
@@ -595,7 +595,7 @@ exports.getbookingByFilter = async (req, res, next) => {
   })
   const response = returnFunction(
     '1',
-    'List of Bookings',
+      'List of bookings',
     { salonEmployee, bookings: filteredBooking },
     '',
   )
@@ -743,7 +743,7 @@ exports.bookingDetails = async (req, res, next) => {
     connectAccountId: salon?.connectAccountId || '', // ✅ added here
   };
 
-  return res.json(returnFunction('1', 'Booking Details', { bookingDetail }, ''));
+  return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));
 };
 
 /*
@@ -755,7 +755,7 @@ exports.reasons = async (req, res, next) => {
     attributes: ['id', 'reason'],
   })
   return res.json(
-    returnFunction('1', 'Booking Cancelled Reasons', { reasons }, ''),
+    returnFunction('1', 'Booking cancelled reasons', { reasons }, ''),
   )
 }
 /*
@@ -866,7 +866,7 @@ exports.cancelBooking = async (req, res, next) => {
   });
 
   return res.json(
-    returnFunction('1', 'Booking Cancelled Successfully!', {}, '')
+    returnFunction('1', 'Booking cancelled successfully!', {}, '')
   );
 };
 
@@ -917,7 +917,7 @@ exports.getServices = async (req, res, next) => {
       services,
     }
   })
-  return res.json(returnFunction('1', 'Salon Services', { allServices }, ''))
+  return res.json(returnFunction('1', 'Salon services', { allServices }, ''))
 }
 /*
               4.Get Services of Ctegories
@@ -936,7 +936,7 @@ exports.getServicesofCategories = async (req, res, next) => {
       attributes: [],
     },
   })
-  return res.json(returnFunction('1', 'Salon Services', { Services }, ''))
+  return res.json(returnFunction('1', 'Salon services', { Services }, ''))
 }
 /*
               4.Find Employees That provides all selected services
@@ -1028,7 +1028,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
     return obj
   })
   return res.json(
-    returnFunction('1', "Salon Employee's", { employees: result }, ''),
+    returnFunction('1', "Salon employee's", { employees: result }, ''),
   )
 }
 /*
@@ -1301,7 +1301,7 @@ exports.addExtraService = async (req, res, next) => {
   socketForCalendar({ appointmentId: bookingData?.id, type: 'new' })
 
   return res.json(
-    returnFunction('1', 'Extra Service Added Successfully!', {}, ''),
+    returnFunction('1', 'Extra service added successfully!', {}, ''),
   )
 }
 /*
@@ -1381,7 +1381,7 @@ exports.getSalonCustomer = async (req, res, next) => {
   })
 
   return res.json(
-    returnFunction('1', 'Customer Added Successfully!', { salonCustomers }, ''),
+    returnFunction('1', 'Customer added successfully!', { salonCustomers }, ''),
   )
 }
 /*
@@ -1687,7 +1687,7 @@ exports.jobStatus = async (req, res, next) => {
   })
 
   return res.json(
-    returnFunction('1', 'Job Status Updated Successfully!', {}, ''),
+    returnFunction('1', 'Job status updated successfully!', {}, ''),
   )
 }
 /*
@@ -1970,7 +1970,7 @@ exports.checkoutCash = async (req, res, next) => {
   )
   distributeTip(bookingData, tip || 0)
 
-  return res.json(returnFunction('1', 'Cash Payment Successfully Done', {}, ''))
+  return res.json(returnFunction('1', 'Cash payment successfully done', {}, ''))
 }
 
 /*
@@ -2013,7 +2013,7 @@ exports.saveUnpaid = async (req, res, next) => {
 
   await bookingData.save(bookingData)
   Communication.saveUnpaid(bookingData)
-  return res.json(returnFunction('1', 'Booking Saved UnPaid', {}, ''))
+  return res.json(returnFunction('1', 'Booking saved unpaid', {}, ''))
 }
 /*
               4.Remove Client
@@ -2032,7 +2032,7 @@ exports.removeClient = async (req, res, next) => {
       },
     },
   )
-  return res.json(returnFunction('1', 'Client Removed Successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Client removed successfully!', {}, ''))
 }
 //* 4.Reschedule Solo Employee Appointment -----------------
 
@@ -2127,7 +2127,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
 
   return res.json(
-    returnFunction('1', 'Appointment Reschedule Successfully!', {}, ''),
+    returnFunction('1', 'Appointment reschedule successfully!', {}, ''),
   )
 }
 
@@ -2254,7 +2254,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   fromSalonMultipleEmployees(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   return res.json(
-    returnFunction('1', 'Appointment Reschedule Successfully!', {}, ''),
+    returnFunction('1', 'Appointment reschedule successfully!', {}, ''),
   )
 }
 
@@ -2294,7 +2294,7 @@ exports.salonAvailability = async (req, res, next) => {
     [],
   )
   return res.json(
-    returnFunction('1', 'Available TimeSlots', { availableTimeSlots }, ''),
+    returnFunction('1', 'Available timeslots', { availableTimeSlots }, ''),
   )
 }
 
@@ -2316,7 +2316,7 @@ exports.salonServices = async (req, res, next) => {
     attributes: ['id', 'serviceName', 'duration'],
   })
   return res.json(
-    returnFunction('1', 'All Services of Salon', { salonServices }, ''),
+    returnFunction('1', 'All services of salon', { salonServices }, ''),
   )
 }
 /*
@@ -2628,7 +2628,7 @@ exports.serviceData = async (req, res, next) => {
   }
 
   return res.json(
-    returnFunction('1', 'Service Data!', { serviceData, teamMembers }, ''),
+    returnFunction('1', 'Service data!', { serviceData, teamMembers }, ''),
   )
 }
 /*
@@ -2781,7 +2781,7 @@ exports.editService = async (req, res, next) => {
   editJob(jobId, jobStatus, startFrom, endsAt)
   socketForCalendar({ appointmentId: jobData?.bookingId, type: 'reschedule' })
 
-  return res.json(returnFunction('1', 'Service Edit Successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Service edit successfully!', {}, ''))
 }
 
 //! -- New Controllers
@@ -2986,7 +2986,7 @@ exports.updateOnlibePayment = async (req, res, next) => {
     onlinePayments: onlinePayments,
   }, { where: { id: salonDetailId } })
 
-  return res.json(returnFunction("1", 'Updated SucessFully', {}, ""))
+  return res.json(returnFunction("1", 'Updated successfully', {}, ""))
 }
 
 
