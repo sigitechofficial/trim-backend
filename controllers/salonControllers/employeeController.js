@@ -364,7 +364,7 @@ exports.getEmployeeTiming = async (req, res, next) => {
           : Convert.convertTo12HourFormat(timeSlot.closingTime)
   })
   return res.json(
-    returnFunction('1', 'Opening Hours', { employeeTiming }, ''),
+    returnFunction('1', 'Opening hours', { employeeTiming }, ''),
   )
 }
 /*
@@ -399,7 +399,7 @@ exports.getServices = async (req, res, next) => {
     where: condition,
   })
 
-  return res.json(returnFunction('1', 'Services of Salon', { serviceData }, ''))
+  return res.json(returnFunction('1', 'Services of salon', { serviceData }, ''))
 }
 /*
             4.Add Employee Services
@@ -421,7 +421,7 @@ exports.addEmployeeService = async (req, res, next) => {
     await newService.save()
   })
   return res.json(
-    returnFunction('1', 'Services of Employee added successfully!', {}, ''),
+    returnFunction('1', 'Services of employee added successfully!', {}, ''),
   )
 }
 /*
@@ -434,7 +434,7 @@ exports.getWagesMethod = async (req, res, next) => {
     attributes: ['id', 'methodName', 'description'],
   })
 
-  return res.json(returnFunction('1', 'Services of Salon', { WagesMethod }, ''))
+  return res.json(returnFunction('1', 'Services of salon', { WagesMethod }, ''))
 }
 /*
             4.Add wages method
@@ -443,7 +443,7 @@ exports.getWagesMethod = async (req, res, next) => {
 exports.addWagesMethod = async (req, res, next) => {
   const method = await employeeWagesMethod.create(req.body)
   return res.json(
-    returnFunction('1', 'Wages Method Added Successfully!', {}, ''),
+    returnFunction('1', 'Wages method added successfully!', {}, ''),
   )
 }
 
@@ -636,7 +636,7 @@ exports.employeeDetail = async (req, res, next) => {
   employeeData.times = sortAndCompleteTimes(employeeData?.times || [])
 
   employeeData.paymentPending = paymentPending
-  return res.json(returnFunction('1', 'Employee Deyails', employeeData, ''))
+  return res.json(returnFunction('1', 'Employee details', employeeData, ''))
 }
 
 /*
@@ -703,7 +703,7 @@ exports.updateEmployee = async (req, res, next) => {
     ; (employeeData.position = position ?? employeeData.position),
       await employeeData.save()
 
-  return res.json(returnFunction('1', 'Employee Updated Successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Employee updated successfully!', {}, ''))
 }
 /*
             4.Update Employee Timings
@@ -751,7 +751,7 @@ exports.updateEmployeTimings = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Employee timings updated successfully', {}, ''),
+    returnFunction('1', 'Employee timings updated successfully', {}, '')
   )
 }
 /*
@@ -784,7 +784,7 @@ exports.updateEmployeeService = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Employee Services Updated Successfully!', {}, ''),
+    returnFunction('1', 'Employee services updated successfully!', {}, ''),
   )
 }
 /*
@@ -805,7 +805,7 @@ exports.updateWagesMethod = async (req, res, next) => {
     await employeeWagesMethod.create(req.body)
   }
   return res.json(
-    returnFunction('1', 'Employee Wages Method Updated Successfully!', {}, ''),
+    returnFunction('1', 'Employee wages method updated successfully!', {}, ''),
   )
 }
 

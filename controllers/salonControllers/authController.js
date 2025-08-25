@@ -139,7 +139,7 @@ exports.googleSignIn = async (req, res) => {
       error: '',
     })
   } else if (!userData) {
-    return res.json(returnFunction('2', 'Email not Exist ', {}, ''))
+    return res.json(returnFunction('2', 'Email not exist ', {}, ''))
   }
 }
 /*

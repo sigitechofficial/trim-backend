@@ -84,7 +84,7 @@ exports.emailChecker = async (req, res, next) => {
     }
     createSendToken(existUser, dvToken, 200, res)
   } else if (!existUser) {
-    return res.json(returnFunction('2', 'User not Exist ', {}, ''))
+    return res.json(returnFunction('2', 'User not exist ', {}, ''))
   }
 }
 /*
