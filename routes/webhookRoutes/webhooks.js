@@ -11,4 +11,10 @@ router.post(
   catchAsync(Controller.stripeSubscriptionWebhookEventHandler),
 )
 
+
+router.post(
+  '/stripe-connect',
+  catchAsync(Controller.stripeConnectWebhookEventHandler),
+)
+
 module.exports = router

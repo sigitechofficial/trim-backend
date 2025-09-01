@@ -35,17 +35,17 @@ async function addCustomer(name, email, accountId = null) {
 }
 
 
-async function getCustomer(customerId,accountId) {
-    console.log("customerId===========================>>>>",customerId)
+async function getCustomer(customerId, accountId) {
+  console.log("customerId===========================>>>>", customerId)
   try {
-        const customer = await stripe.customers.retrieve(customerId, {
-          stripeAccount: accountId,
-        });
-        if (customer && !customer.deleted) {
-          console.log("✅ Found existing customer:", customer.id);
-          return customer.id;
-        }
-      }  catch (error) {
+    const customer = await stripe.customers.retrieve(customerId, {
+      stripeAccount: accountId,
+    });
+    if (customer && !customer.deleted) {
+      console.log("✅ Found existing customer:", customer.id);
+      return customer.id;
+    }
+  } catch (error) {
     console.error("❌ Stripe error:", error);
     //throw new AppError(`${error.message}`, 200);
   }
@@ -63,23 +63,28 @@ async function getPlatformAccountId() {
   }
 }
 
-async function transferToPlatform(amountPounds, connectedAccountId) {
+async function transferToPlatform(amountPounds, connectedAccountId, meta = {}) {
   try {
-    const platformAccountId = await getPlatformAccountId(); // Your own logic to fetch platform ID
-    console.log("🔁 Platform Account ID:", platformAccountId);
+    const platformAccountId = await getPlatformAccountId();
 
     const transfer = await stripe.transfers.create(
       {
-        amount: Math.round(amountPounds * 100), // amount in pence
-        currency: 'gbp',
+        amount: Math.round(amountPounds * 100),
+        currency: "gbp",
         destination: platformAccountId,
+        description: `Booking #${meta.bookingId} | Salon: ${meta.salonName} (${meta.salonId}) | Customer: ${meta.customerName} (${meta.customerId})`,
+        metadata: {
+          bookingId: meta.bookingId,
+          salonId: meta.salonId,
+          salonName: meta.salonName,
+          customerName: meta.customerName,
+          customerId: meta.customerId,
+        }
       },
-      {
-        stripeAccount: connectedAccountId, // ✅ called from the connected account
-      }
+      { stripeAccount: connectedAccountId }
     );
 
-    console.log(`✅ £${amountPounds} transferred from ${connectedAccountId} ➡️ ${platformAccountId}`);
+
     return transfer;
   } catch (error) {
     console.error("❌ transferToPlatform error:", error.message);
@@ -215,7 +220,7 @@ async function createPaymentIntendForUpFrontPayments(
   console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ customerId ====================================>>>>>>>>>>NEWNEW:', customerId)
   try {
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: convertToCents(amount+0.50),
+      amount: convertToCents(amount + 0.50),
       currency: 'gbp',
       //customer: customerId,
       //payment_method: 'pm_1RpnnUCwrlf25ZndWHZGWJ3B',
@@ -234,23 +239,23 @@ async function createPaymentIntendForUpFrontPayments(
 }
 
 async function createDirectCharge(amount, customerId, connectedAccountId) {
-    console.log("connectedAccountId========Stripe===>",connectedAccountId)
-    try{
-  const paymentIntent = await stripe.paymentIntents.create(
-    {
-      amount: convertToCents(amount+0.50),
-      currency: 'gbp',
-      customer: customerId,
-      //setup_future_usage: 'off_session',
-      payment_method_types: ['card'],
-    },
-    {
-      stripeAccount: connectedAccountId,
-    }
-  );
-  return paymentIntent;
-}
-catch (error) {
+  console.log("connectedAccountId========Stripe===>", connectedAccountId)
+  try {
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: convertToCents(amount + 0.50),
+        currency: 'gbp',
+        customer: customerId,
+        //setup_future_usage: 'off_session',
+        payment_method_types: ['card'],
+      },
+      {
+        stripeAccount: connectedAccountId,
+      }
+    );
+    return paymentIntent;
+  }
+  catch (error) {
     throw new AppError(`${error.message} `, 200);
   }
 }
@@ -475,18 +480,18 @@ async function getSubscription(subscriptionPlan) {
 
 
 //Get Subscription Status
-async function getSubscriptionStatus(subscriptionId){
-  console.log("Going into this -------------->",subscriptionId)
-if (!subscriptionId) return 'Unavailable';
+async function getSubscriptionStatus(subscriptionId) {
+  console.log("Going into this -------------->", subscriptionId)
+  if (!subscriptionId) return 'Unavailable';
 
-try {
-  const stripeSub = await getSubscription(subscriptionId);
-  console.log("stripeSub+++_+_+_+_+_+_+_++++++++++++++++++_________",stripeSub.status)
-  return stripeSub?.status || 'Unavailable';
-} catch (e) {
-  console.warn(`⚠️ Stripe fetch failed for ${subscriptionId}: ${e.message}`);
-  return 'Unavailable';
-}
+  try {
+    const stripeSub = await getSubscription(subscriptionId);
+    console.log("stripeSub+++_+_+_+_+_+_+_++++++++++++++++++_________", stripeSub.status)
+    return stripeSub?.status || 'Unavailable';
+  } catch (e) {
+    console.warn(`⚠️ Stripe fetch failed for ${subscriptionId}: ${e.message}`);
+    return 'Unavailable';
+  }
 };
 
 
@@ -635,9 +640,9 @@ async function createCheckoutSession(line_items, accountId, applicationFee) {
 async function retrievePaymentMethod(paymentMethodId, connectedAccountId = null) {
   try {
     const options = connectedAccountId ? { stripeAccount: connectedAccountId } : {};
-const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId, options);
-console.log("paymentMethod-------------====================>>>",paymentMethod)
-return paymentMethod.card;
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId, options);
+    console.log("paymentMethod-------------====================>>>", paymentMethod)
+    return paymentMethod.card;
   } catch (error) {
     throw new AppError(`${error.message}`, 200);
   }
@@ -715,7 +720,7 @@ async function capturePayment(
     // CASE 2: 💸 Refund to customer
     if (amount < 0) {
       const lastPaymentIntent =
-        await getMatchingPaymentIntentForCustomer(customerId, targetAmount,accountId);
+        await getMatchingPaymentIntentForCustomer(customerId, targetAmount, accountId);
 
       if (!lastPaymentIntent) {
         throw new AppError("No previous payment found to refund.", 200);
@@ -778,12 +783,12 @@ async function createStripeAccountLink(accountId) {
 // create Ephemeral Key to open Stripe sheet on mobile app
 async function createEphemeralKey(customerId, accountId) {
   const key = await stripe.ephemeralKeys.create(
-  { customer: customerId },
-  {
-    apiVersion: '2022-11-15', // ✅ correct key
-    stripeAccount: accountId,
-  }
-);
+    { customer: customerId },
+    {
+      apiVersion: '2022-11-15', // ✅ correct key
+      stripeAccount: accountId,
+    }
+  );
   return key;
 }
 
@@ -1273,6 +1278,128 @@ async function createStripeLoginLink(accountId) {
   }
 }
 
+
+
+
+// controllers/stripe.js
+async function listInvoicesForSubscription(subscriptionId, limit = 30) {
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+    expand: ['default_payment_method'],
+  });
+  const item = sub.items.data[0];
+
+  const invoices = await stripe.invoices.list({
+    subscription: subscriptionId,
+    limit,
+    expand: ['data.payment_intent.payment_method'],
+  });
+
+  function formatDate(unix) {
+    if (!unix) return null;
+    const ts = typeof unix === 'string' ? parseInt(unix, 10) : unix;
+    return new Date(ts * 1000).toISOString().split('T')[0];
+  }
+
+  return {
+    invoices: invoices.data.map(inv => {
+      const pm = inv.payment_intent?.payment_method;
+      const card = pm?.card;
+
+      return {
+        id: inv.id,
+        number: inv.number,
+        status: inv.status,
+        created: formatDate(inv.created),
+        hostedInvoiceUrl: inv.hosted_invoice_url,
+        invoicePdf: inv.invoice_pdf,
+        amountPaid: (inv.amount_paid ?? 0) / 100,
+        currency: (inv.currency || 'gbp').toUpperCase(),
+        vatAmount: (inv.tax ?? 0) / 100,
+        vatPercent: inv.total_tax_amounts?.[0]?.percentage ?? null,
+        paymentMethodBrand: card?.brand || null,
+        paymentMethodLast4: card?.last4 || null,
+      };
+    }),
+  };
+}
+
+
+async function listSubscriptionsForCustomer(customerId, limit = 30) {
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit,
+    expand: ['data.items.data.price'], // expand price only
+  });
+
+  function formatDate(unix) {
+    if (!unix) return null;
+    const ts = typeof unix === 'string' ? parseInt(unix, 10) : unix;
+    return new Date(ts * 1000).toISOString().split('T')[0];
+  }
+
+  const results = [];
+  for (const sub of subs.data) {
+    const item = sub.items.data[0];
+    const price = item?.price;
+
+    let product = null;
+    if (price?.product) {
+      try {
+        product = await stripe.products.retrieve(price.product);
+      } catch (err) {
+        console.error("❌ Failed to fetch product", price.product, err.message);
+      }
+    }
+
+    results.push({
+      id: sub.id,
+      status: sub.status,
+      planName:
+        price?.nickname ||
+        product?.name ||
+        product?.metadata?.subscriptionName ||
+        'Subscription',
+      priceUnitAmount: price?.unit_amount, // might be null for tiered
+      priceCurrency: price?.currency,
+      interval: price?.recurring?.interval,
+      currentPeriodStart: formatDate(sub.current_period_start),
+      currentPeriodEnd: formatDate(sub.current_period_end),
+      teamSize: product?.metadata?.teamSize || null,
+      VAT: product?.metadata?.VAT || null,
+    });
+  }
+
+  return results;
+}
+
+/*
+ *  Check The Connect Account Status
+*/
+async function checkStripeAccountStatus(connectAccountId) {
+  try {
+    const account = await stripe.accounts.retrieve(connectAccountId);
+
+    const isConnected =
+      account.charges_enabled &&
+      account.payouts_enabled &&
+      (!account.requirements?.disabled_reason) &&
+      (account.requirements?.currently_due?.length === 0);
+
+    return {
+      isConnected,
+      reason: account.requirements?.disabled_reason || null,
+      currentlyDue: account.requirements?.currently_due || [],
+    };
+  } catch (err) {
+    console.error("❌ Stripe account check failed:", err.message);
+    return { isConnected: false, reason: "api_error" };
+  }
+}
+
+
+
+
 module.exports = {
   createStripeLoginLink,
   retrieveConnectAccount,
@@ -1322,7 +1449,10 @@ module.exports = {
   getCustomer,
   getPlatformAccountId,
   getSubscriptionStatus,
-  transferToPlatform
+  transferToPlatform,
+  listInvoicesForSubscription,
+  listSubscriptionsForCustomer,
+  checkStripeAccountStatus,
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
