@@ -17,6 +17,7 @@ const {
   booking,
   jobs,
   opportunities,
+  subscriptions,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
@@ -991,3 +992,60 @@ exports.averageJobsReport = async (req, res, next) => {
     .status(200)
     .json(response({ message: 'Success', data: { report } }))
 }
+
+
+
+
+//* 12.Reports-> Subscription History------------------------------------------------------------------------------
+exports.subscriptionHistory = async (req, res, next) => {
+
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    include: [{ model: user, attributes: ['stripeCustomerId'] }],
+  });
+
+  if (!salon?.user?.stripeCustomerId) {
+    return res.status(200).json(response({ message: 'No subscriptions found', data: [] }));
+  }
+
+
+  const plans = await Stripe.listSubscriptionsForCustomer(salon.user.stripeCustomerId, 30);
+
+  const results = [];
+  for (const plan of plans) {
+
+    const info = await Stripe.listInvoicesForSubscription(plan.id, 48);
+
+    const dbRows = await subscriptions.findAll({
+      where: { subscriptionId: plan.id },
+      attributes: ['invoiceId', 'VAT'],
+    });
+    const vatMap = new Map(dbRows.map(r => [r.invoiceId, Number(r.VAT || 0)]));
+
+
+    const history = info.invoices.map(inv => ({
+      ...inv,
+      vatAmount: vatMap.has(inv.id) ? vatMap.get(inv.id) : inv.vatAmount,
+    }));
+
+    results.push({
+      plan: {
+        id: plan.id,
+        name: plan.planName,
+        status: plan.status,
+        price: (plan.priceUnitAmount || 0) / 100,
+        currency: (plan.priceCurrency || 'gbp').toUpperCase(),
+        interval: plan.interval,
+        currentPeriodStart: plan.currentPeriodStart,
+        nextRenewal: plan.currentPeriodEnd,
+      },
+      history,
+    });
+  }
+
+  return res.status(200).json(response({
+    message: 'All subscription histories with VAT',
+    data: results,
+  }));
+
+};

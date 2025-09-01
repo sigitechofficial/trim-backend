@@ -504,30 +504,17 @@ exports.verifyOTP = async (req, res, next) => {
     ________________________________________
 */
 exports.login = async (req, res, next) => {
-  const { email, password, dvToken } = req.body
+  const { email, password, dvToken } = req.body;
 
-  if (!req.body?.loginBy) req.body.loginBy = 'email'
-  if (!email) {
-    // !password
-    throw new appError('Please provide Email', 200)
-  } else if (req.body.loginBy == 'email' && !password) {
-    throw new appError('Please provide Password', 200)
-  }
+  if (!req.body?.loginBy) req.body.loginBy = 'email';
+  if (!email) throw new appError('Please provide Email', 200);
+  else if (req.body.loginBy == 'email' && !password)
+    throw new appError('Please provide Password', 200);
 
   const User = await user.findOne({
-    where: {
-      email,
-      deleted: false,
-      //   userTypeId:[2,3]
-    },
-    include: [
-      {
-        model: deviceToken,
-        required: false,
-        attributes: ['tokenId', 'userId'],
-      },
-    ],
-  })
+    where: { email, deleted: false },
+    include: [{ model: deviceToken, required: false, attributes: ['tokenId', 'userId'] }],
+  });
 
   if (!User && !password) {
     return res.json(
@@ -537,7 +524,7 @@ exports.login = async (req, res, next) => {
         {},
         '',
       ),
-    )
+    );
   }
 
   if (!User) {
@@ -546,7 +533,7 @@ exports.login = async (req, res, next) => {
         `No account found with this email. Please check your email or sign up.`,
         200,
       ),
-    )
+    );
   }
 
   if (User.userTypeId == 1) {
@@ -555,7 +542,7 @@ exports.login = async (req, res, next) => {
         `An account with this email (${email}) is already registered as a customer. Please use a different email address to continue.`,
         200,
       ),
-    )
+    );
   }
   if (!User.status) {
     return next(
@@ -563,10 +550,8 @@ exports.login = async (req, res, next) => {
         'Your account is currently restricted. Please contact support for further assistance.',
         200,
       ),
-    )
+    );
   }
-
-  // console.log(JSON.parse(JSON.stringify(User)))
 
   if (req.body?.loginBy != User?.signedFrom) {
     return next(
@@ -574,7 +559,7 @@ exports.login = async (req, res, next) => {
         `An account with this email (${email}) is not registered by this singin method`,
         200,
       ),
-    )
+    );
   }
 
   if (
@@ -583,25 +568,20 @@ exports.login = async (req, res, next) => {
   ) {
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
-    )
+    );
   }
 
-  // Check Device Token
+  // Device Token check
   const found = User.deviceTokens.find(
     (ele) => ele.tokenId === dvToken && ele.userId == User.id,
-  )
-  console.log('FOUND FOUND', found)
+  );
   if (!found) {
-    await deviceToken.create({
-      tokenId: dvToken,
-      status: true,
-      userId: User.id,
-    })
+    await deviceToken.create({ tokenId: dvToken, status: true, userId: User.id });
   }
 
-  let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : ''
-  redis_Client.hSet(`trim${User.id}`, dvToken, token)
-  // Response object without salon details or employee
+  let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : '';
+  redis_Client.hSet(`trim${User.id}`, dvToken, token);
+
   const response = {
     status: '1',
     message: 'Successful login',
@@ -618,50 +598,34 @@ exports.login = async (req, res, next) => {
       phoneNum: `${User.countryCode} ${User.phoneNum}`,
     },
     error: '',
-  }
+  };
 
-  // Check user type and include appropriate details
+  // -----------------------------
+  // Salon Login
+  // -----------------------------
   if (User.userTypeId === 2) {
-    // If user is a salon
     const salon = await salonDetail.findOne({
-      where: {
-        userId: User.id,
-      },
+      where: { userId: User.id },
       include: [
-        {
-          model: category,
-          required: false,
-          attributes: ['id', 'categoryName', 'color'],
-        },
-        {
-          model: service,
-          attributes: ['id', 'serviceName', 'price', 'duration', 'description'],
-        },
-        {
-          model: time,
-          attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'],
-        },
+        { model: category, required: false, attributes: ['id', 'categoryName', 'color'] },
+        { model: service, attributes: ['id', 'serviceName', 'price', 'duration', 'description'] },
+        { model: time, attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'] },
         { model: addressDBS },
         {
           model: employee,
-          include: {
-            model: user,
-            attributes: ['id', 'firstName', 'lastName', 'image'],
-          },
+          include: { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
         },
         { model: wallet, required: false },
       ],
-    })
-    response.data.businessEmail = salon?.businessEmail
-    response.data.businessCountryCode = salon?.businessCountryCode
-    response.data.businessPhoneNum = salon?.businessPhoneNum
-    // return res.json(salon)
+    });
+
+    response.data.businessEmail = salon?.businessEmail;
+    response.data.businessCountryCode = salon?.businessCountryCode;
+    response.data.businessPhoneNum = salon?.businessPhoneNum;
+
     if (!salon || User.verifiedAt === null) {
-      response.status = User.verifiedAt === null ? '3' : '2'
-      response.message =
-        User.verifiedAt === null
-          ? 'Please Verify First!'
-          : 'Login successful'
+      response.status = User.verifiedAt === null ? '3' : '2';
+      response.message = User.verifiedAt === null ? 'Please Verify First!' : 'Login successful';
       response.data.profileCompletion = {
         salonDetailId: '',
         salonName: '',
@@ -673,46 +637,17 @@ exports.login = async (req, res, next) => {
         hasTeamMembers: false,
         hasSubscription: false,
         accountConnected: false,
-      }
+      };
     } else {
       const isAllDataAvailable =
-        // salon.categories.length !== 0 &&
         salon.services.length !== 0 &&
         salon.times.length !== 0 &&
-        salon.approvedByAdmin &&
-        // salon?.wallet?.accountConnected && // change require
-        salon.approvedByAdmin
+        salon.approvedByAdmin;
 
-      const hasEmployee = salon.employees.length !== 0
-      console.log(
-        '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
-        salon.approvedByAdmin,
-      )
-      // console.log(
-      //   '🚀 ~ exports.login= ~ salon.connectAccountId :',
-      //   salon.connectAccountId,
-      // )
-      console.log(
-        '🚀 ~ exports.login= ~  salon.approvedByAdmin:',
-        salon.approvedByAdmin,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.times.length:',
-        salon.times.length,
-      )
-      console.log(
-        '🚀 ~ exports.login= ~ salon.services.length:',
-        salon.services.length,
-      )
+      const hasEmployee = salon.employees.length !== 0;
 
-      console.log(
-        '🚀 ~ exports.login= ~  isAllDataAvailable ',
-        isAllDataAvailable,
-      )
-      console.log('🚀 ~ exports.login= ~  hasEmployee:', hasEmployee)
-
-      response.status = isAllDataAvailable && hasEmployee ? '1' : '2'
-      response.message = 'Login successful'
+      response.status = isAllDataAvailable && hasEmployee ? '1' : '2';
+      response.message = 'Login successful';
       response.data.profileCompletion = {
         salonDetailId: salon.id ?? '',
         salonName: salon.salonName,
@@ -724,52 +659,57 @@ exports.login = async (req, res, next) => {
         hasTeamMembers: salon.employees.length !== 0,
         hasSubscription: salon.approvedByAdmin,
         accountConnected: salon?.wallet?.accountConnected ? true : false,
+      };
+
+      // 🔹 Live Stripe check
+      if (salon?.connectAccountId) {
+        const { isConnected, reason, currentlyDue } =
+          await Stripe.checkStripeAccountStatus(salon.connectAccountId);
+
+        if (salon.wallet) {
+          await salon.wallet.update({ accountConnected: isConnected });
+        }
+
+        response.data.profileCompletion.accountConnected = isConnected;
+        response.data.stripeRestrictions = { reason, currentlyDue };
       }
     }
-  } else if (User.userTypeId === 3) {
-    // If user is an employee
-    const employeeDetails = await employee.findOne({
-      where: {
-        userId: User.id,
-      },
-      include: [
-        {
-          model: employeeService,
-        },
-        { model: employeeWagesMethod },
-        { model: time },
-      ],
-    })
+  }
 
-    let access = await employeeAccess.findAll({
-      where: { employeeId: employeeDetails.id },
-    })
+  // -----------------------------
+  // Employee Login
+  // -----------------------------
+  else if (User.userTypeId === 3) {
+    const employeeDetails = await employee.findOne({
+      where: { userId: User.id },
+      include: [{ model: employeeService }, { model: employeeWagesMethod }, { model: time }],
+    });
+
+    let access = await employeeAccess.findAll({ where: { employeeId: employeeDetails.id } });
     if (access.length < 1)
       access = await employeeAccessDefault.findAll({
         where: { salonDetailId: employeeDetails.salonDetailId },
-      })
-    if (access.length < 1) access = defaultAccess
+      });
+    if (access.length < 1) access = defaultAccess;
 
-    const result = {}
+    const result = {};
     access.forEach((item) => {
-      result[item.key] = item.level
-    })
-    //For AccessToken
-    const salon = await salonDetail.findOne({
-      where: {
-        id: employeeDetails.salonDetailId,
-      },
-      attributes: ['userId'],
-    })
+      result[item.key] = item.level;
+    });
 
-    token = signTocken(salon.userId, dvToken)
-    redis_Client.hSet(`trim${salon.userId}`, dvToken, token)
-    response.data.accessLevels = result
+    const salon = await salonDetail.findOne({
+      where: { id: employeeDetails.salonDetailId },
+      attributes: ['userId'],
+    });
+
+    token = signTocken(salon.userId, dvToken);
+    redis_Client.hSet(`trim${salon.userId}`, dvToken, token);
+    response.data.accessLevels = result;
 
     if (!employeeDetails) {
-      response.status = '5'
-      response.message = 'Login successful'
-      response.data.accessToken = token
+      response.status = '5';
+      response.message = 'Login successful';
+      response.data.accessToken = token;
       response.data.profileCompletion = {
         salonDetailId: employeeDetails.salonDetailId,
         employeeId: '',
@@ -777,30 +717,30 @@ exports.login = async (req, res, next) => {
         hasServiceList: false,
         hasWorkingHours: false,
         hasWagesMethod: false,
-      }
+      };
     } else {
       const isAllDataAvailable =
         employeeDetails.employeeServices.length !== 0 &&
         employeeDetails.times.length !== 0 &&
-        employeeDetails.employeeWagesMethod
+        employeeDetails.employeeWagesMethod;
 
-      response.status = isAllDataAvailable ? '4' : '5'
-      response.message = 'Login successful'
-      response.data.accessToken = token
+      response.status = isAllDataAvailable ? '4' : '5';
+      response.message = 'Login successful';
+      response.data.accessToken = token;
       response.data.profileCompletion = {
         salonDetailId: employeeDetails.salonDetailId,
         employeeId: employeeDetails.id,
         position: employeeDetails.position,
         hasServiceList: employeeDetails.employeeServices.length !== 0,
         hasWorkingHours: employeeDetails.times.length !== 0,
-        hasWagesMethod: employeeDetails.employeeWagesMethod ? true : false,
-      }
+        hasWagesMethod: !!employeeDetails.employeeWagesMethod,
+      };
     }
   }
 
-  response.data.isExternalEmployee = User.isExternalEmployee
+  response.data.isExternalEmployee = User.isExternalEmployee;
   if (response && response.data && response.data.isExternalEmployee) {
-    response.data.profileCompletion.hasSubscription = true
+    response.data.profileCompletion.hasSubscription = true;
   }
 
   return res.json(
@@ -810,8 +750,8 @@ exports.login = async (req, res, next) => {
       response.data,
       response.error,
     ),
-  )
-}
+  );
+};
 
 /*
             7. OTP request for changing password
@@ -984,44 +924,20 @@ exports.session = async (req, res, next) => {
       {
         model: salonDetail,
         include: [
-          {
-            model: category,
-            required: false,
-            attributes: ['id', 'categoryName', 'color'],
-          },
-          {
-            model: service,
-            attributes: [
-              'id',
-              'serviceName',
-              'price',
-              'duration',
-              'description',
-            ],
-          },
-          {
-            model: time,
-            attributes: ['id', 'day', 'openingTime', 'closingTime', 'status'],
-          },
-          {
-            model: addressDBS,
-          },
+          { model: category, required: false, attributes: ['id', 'categoryName', 'color'] },
+          { model: service, attributes: ['id','serviceName','price','duration','description'] },
+          { model: time, attributes: ['id','day','openingTime','closingTime','status'] },
+          { model: addressDBS },
           {
             model: employee,
-            include: {
-              model: user,
-              attributes: ['id', 'firstName', 'lastName', 'image'],
-            },
+            include: { model: user, attributes: ['id','firstName','lastName','image'] },
           },
-          {
-            model: wallet,
-            required: false,
-          },
+          { model: wallet, required: false },
         ],
       },
     ],
   })
-  // return res.json(User)
+
   if (!User.status) {
     return next(
       new appError(
@@ -1058,11 +974,13 @@ exports.session = async (req, res, next) => {
           hasTeamMembers: false,
           hasSubscription: false,
           accountConnected: false,
+          stripeRestrictionReason: null,
         },
       },
       error: '',
     })
   }
+
   if (User.salonDetails.length === 0) {
     return res.status(200).json({
       status: '2',
@@ -1090,52 +1008,43 @@ exports.session = async (req, res, next) => {
           hasTeamMembers: false,
           hasSubscription: false,
           accountConnected: false,
+          stripeRestrictionReason: null,
         },
       },
       error: '',
     })
   }
 
-  const isCategoryDataAvailable = User.salonDetails[0].categories.length !== 0
-  console.log(
-    '🚀 ~ exports.session= ~ isCategoryDataAvailable:',
-    isCategoryDataAvailable,
-  )
-  const isServiceDataAvailable = User.salonDetails[0].services.length !== 0
-  console.log(
-    '🚀 ~ exports.session= ~ isServiceDataAvailable:',
-    isServiceDataAvailable,
-  )
-  const isTimeDataAvailable = User.salonDetails[0].times.length !== 0
-  console.log(
-    '🚀 ~ exports.session= ~ isTimeDataAvailable:',
-    isTimeDataAvailable,
-  )
-  const isAddressDataAvailable = User.salonDetails[0].addressDB !== null
-  console.log(
-    '🚀 ~ exports.session= ~ isAddressDataAvailable:',
-    isAddressDataAvailable,
-  )
-  const isSubscription = User?.isExternalEmployee
-    ? true
-    : User.salonDetails[0].approvedByAdmin
-  console.log('🚀 ~ exports.session= ~ isSubscription:', isSubscription)
-  const isaccountConnected = User.salonDetails[0]?.wallet?.accountConnected
-    ? true
-    : false
-  console.log('🚀 ~ exports.session= ~ isaccountConnected:', isaccountConnected)
+  const salon = User.salonDetails[0]
+  let stripeReason = null
+
+  // 🔹 Live Stripe check
+  if (salon?.connectAccountId) {
+    try {
+      const { isConnected, reason } = await Stripe.checkStripeAccountStatus(salon.connectAccountId)
+      stripeReason = reason
+      if (salon.wallet) {
+        await salon.wallet.update({ accountConnected: isConnected })
+      }
+    } catch (err) {
+      console.error("❌ Stripe check in session failed:", err.message)
+    }
+  }
+
+  const isCategoryDataAvailable = salon.categories.length !== 0
+  const isServiceDataAvailable = salon.services.length !== 0
+  const isTimeDataAvailable = salon.times.length !== 0
+  const isAddressDataAvailable = salon.addressDB !== null
+  const isSubscription = User?.isExternalEmployee ? true : salon.approvedByAdmin
+  const isaccountConnected = salon?.wallet?.accountConnected ? true : false
 
   const isAllDataAvailable =
-    // isCategoryDataAvailable &&
     isServiceDataAvailable &&
     isTimeDataAvailable &&
     isSubscription &&
-    // isaccountConnected &&
     isAddressDataAvailable
 
-  console.log('🚀 ~ exports.session= ~ isAllDataAvailable:', isAllDataAvailable)
-  const hasEmployee = User.salonDetails[0].employees.length !== 0
-  console.log('🚀 ~ exports.session= ~ hasEmployee:', hasEmployee)
+  const hasEmployee = salon.employees.length !== 0
 
   return res.status(200).json({
     status: isAllDataAvailable && hasEmployee ? '1' : '2',
@@ -1149,25 +1058,21 @@ exports.session = async (req, res, next) => {
       accessToken: req.header('accessToken'),
       phoneNum: `${User.countryCode} ${User.phoneNum}`,
       isExternalEmployee: User.isExternalEmployee,
-      businessEmail: User?.salonDetails[0]?.businessEmail,
-      businessCountryCode: User?.salonDetails[0]?.businessCountryCode,
-      businessPhoneNum: User?.salonDetails[0]?.businessPhoneNum,
+      businessEmail: salon?.businessEmail,
+      businessCountryCode: salon?.businessCountryCode,
+      businessPhoneNum: salon?.businessPhoneNum,
       profileCompletion: {
-        salonDetailId: User.salonDetails[0].id ?? '',
-        salonName: User.salonDetails[0].salonName,
-        subscriptionLatestPaymentStatus:
-          User.salonDetails[0].subscriptionLatestPaymentStatus,
-        hasBusinessDetails: User.salonDetails[0] ? true : false,
-        hasBusinessAddress: User.salonDetails[0].addressDB !== null,
-        hasServiceList: User.salonDetails[0].services.length !== 0,
-        hasWorkingHours: User.salonDetails[0].times.length !== 0,
-        hasTeamMembers: User.salonDetails[0].employees.length !== 0,
-        hasSubscription: User?.isExternalEmployee
-          ? true
-          : User.salonDetails[0].approvedByAdmin,
-        accountConnected: User.salonDetails[0]?.wallet?.accountConnected
-          ? true
-          : false,
+        salonDetailId: salon.id ?? '',
+        salonName: salon.salonName,
+        subscriptionLatestPaymentStatus: salon?.subscriptionLatestPaymentStatus,
+        hasBusinessDetails: salon ? true : false,
+        hasBusinessAddress: salon.addressDB !== null,
+        hasServiceList: salon.services.length !== 0,
+        hasWorkingHours: salon.times.length !== 0,
+        hasTeamMembers: salon.employees.length !== 0,
+        hasSubscription: isSubscription,
+        accountConnected: salon?.wallet?.accountConnected ? true : false,
+        stripeRestrictionReason: stripeReason, // 🔹 added
       },
     },
     error: '',

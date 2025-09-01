@@ -5,7 +5,8 @@ const { Op, literal, col, fn, where } = require('sequelize')
 const StripeHandler = require('../stripe')
 const AppError = require('../../utils/appError')
 const dateManipulation = require('../../utils/dateManipulation')
-const { salonDetail, user, subscriptions } = require('../../models')
+const ThrowNotification = require('../../utils/throwNotification')
+const { salonDetail, user, subscriptions, deviceToken } = require('../../models')
 
 // const subscriptions = require('../models/subscriptions')
 const DEMO = require('../../helper/demo')
@@ -94,11 +95,11 @@ const handleInvoicePayment = async (invoice, state, status) => {
 
     const lineItem = invoice.lines?.data[invoice.lines.data.length - 1];
     const metadata = lineItem?.metadata || {};
-    console.log("MetaData=======================>>>>",metadata);
+    console.log("MetaData=======================>>>>", metadata);
     const vatAmount = parseFloat(metadata?.VAT || '0');
-    
-    
-    console.log("vatAmount=======================>>>>",vatAmount);
+
+
+    console.log("vatAmount=======================>>>>", vatAmount);
 
 
 
@@ -114,7 +115,7 @@ const handleInvoicePayment = async (invoice, state, status) => {
       subscriptionId,
       invoiceId,
       priceId,
-      VAT:vatAmount,
+      VAT: vatAmount,
     }
     console.log('🚀 ~ handleInvoicePaymentSucceeded ~ input:', input)
     // Find the user by Stripe Customer ID
@@ -325,6 +326,79 @@ exports.emailtesting = async (req, res, next) => {
   return res.status(200).json(response({ data: { data } }))
 }
 
+
+//====================================================================================================//
+
+let connectEndpointSecret='whsec_SEhbpAjhCx2naWI3Y5hnfLJy8l4fvev4'
+
+exports.stripeConnectWebhookEventHandler = async (req, res) => {
+  let event;
+  try {
+    const sig = req.headers['stripe-signature'];
+    event = stripe.webhooks.constructEvent(req.body, sig, connectEndpointSecret);
+    console.log('тЪая╕ПтЪая╕ПтЪая╕П Webhook signature verification DONE =====================>>>.')
+  } catch (err) {
+    console.error('⚠️  Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    switch (event.type) {
+case 'account.updated': {
+  const account = event.data.object;
+
+  const salon = await salonDetail.findOne({
+    where: { connectAccountId: account.id },
+  });
+
+  if (!salon) break;
+
+  // Always fetch tokens once
+  const tokens = await deviceToken.findAll({
+    where: { userId: salon.userId },
+    attributes: ['tokenId'],
+  });
+  const tokenArray = tokens.map(t => t.tokenId);
+
+  if (account.requirements?.currently_due?.length > 0) {
+    await salon.update({ accountConnected: false });
+
+    const onboardingLink = await StripeHandler.createStripeAccountLink(account.id);
+
+    ThrowNotification(tokenArray, {
+      title: 'Action Required',
+      body: 'Your payout account needs additional documents.',
+      link: onboardingLink?.url,
+    });
+  }
+
+  if (
+    account.requirements?.currently_due?.length === 0 &&
+    !account.requirements?.disabled_reason
+  ) {
+    await salon.update({ accountConnected: true });
+    ThrowNotification(tokenArray, {
+      title: 'Account Verified',
+      body: 'Your payout account is fully verified.',
+    });
+  }
+  break;
+}
+
+      case 'account.application.deauthorized':
+        console.log('⚠️ Account disconnected:', event.data.object.id);
+        break;
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('❌ Error in Connect webhook:', err);
+    res.status(500).send('Webhook handler failed');
+  }
+};
 // TODO Work Pending if auto payment failed then we have to change default payment method then make payments fro subscribtions
 
 // router.post('/update-payment-method', async (req, res) => {

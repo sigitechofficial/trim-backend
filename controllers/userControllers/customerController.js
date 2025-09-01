@@ -457,20 +457,26 @@ exports.notificationTesting = async (req, res, next) => {
 
 exports.home = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
-  const { targetLat, targetLng } = req.body
-  const rangeInKm = req.body.rangeInKm || 15
+
+  // ✅ Support both POST (body) and GET (query)
+  const targetLat = req.body?.targetLat || req.query?.targetLat
+  const targetLng = req.body?.targetLng || req.query?.targetLng
+  const rangeInKm = req.body?.rangeInKm || req.query?.rangeInKm || 15
   const condition = { status: true }
 
-  const priceCondition = req.body?.price
-    ? { price: { [Op.lte]: req.body?.price } }
+  // Price condition for filtering salons
+  const priceCondition = req.body?.price || req.query?.price
+    ? { price: { [Op.lte]: req.body?.price || req.query?.price } }
     : {}
 
-  if (req.body.day && req.body.startTime && req.body.endTime) {
-    condition.day = req.body.day
-    condition.openingTime = { [Op.lte]: req.body.startTime }
-    condition.closingTime = { [Op.gte]: req.body.endTime }
+  // Filter by day and time
+  if ((req.body.day || req.query.day) && (req.body.startTime || req.query.startTime) && (req.body.endTime || req.query.endTime)) {
+    condition.day = req.body.day || req.query.day
+    condition.openingTime = { [Op.lte]: req.body.startTime || req.query.startTime }
+    condition.closingTime = { [Op.gte]: req.body.endTime || req.query.endTime }
   }
 
+  // Fetch favorite salon IDs
   const likedSalons = await favorite.findAll({
     where: { userId: req?.user?.id || 0 },
     attributes: ['salonDetailId'],
@@ -478,6 +484,7 @@ exports.home = async (req, res, next) => {
   const likeIds =
     likedSalons?.length > 0 ? likedSalons.map((ele) => ele.salonDetailId) : []
 
+  // Base salon condition
   const salonCondition = {
     [Op.or]: [
       { isExternalEmployee: true },
@@ -495,6 +502,7 @@ exports.home = async (req, res, next) => {
     salonCondition.id = { [Op.or]: likeIds }
   }
 
+  // Haversine formula for distance calculation
   const formula = `(6371 * 
     acos(
       cos(radians(${targetLat})) * cos(radians(lat)) * 
@@ -503,46 +511,48 @@ exports.home = async (req, res, next) => {
     )
   )`
 
+  // Final conditions with optional filters
   const finalSalonCondition = {
     ...salonCondition,
     ...(targetLat &&
       targetLng && {
         [Op.and]: literal(`${formula} <= ${rangeInKm}`),
       }),
-    ...(req.body.price && {
+    ...((req.body.price || req.query.price) && {
       id: {
         [Op.in]: literal(`(
           SELECT DISTINCT salonDetailId FROM services
           WHERE services.salonDetailId = salonDetail.id 
-            AND services.price <= ${req.body.price}
+            AND services.price <= ${req.body.price || req.query.price}
         )`),
       },
     }),
-    ...(req.body.day &&
-      req.body.time && {
+    ...((req.body.day || req.query.day) &&
+      (req.body.time || req.query.time) && {
         id: {
           [Op.in]: literal(`(
           SELECT DISTINCT salonDetailId FROM times
           WHERE times.salonDetailId = salonDetail.id 
-            AND times.day = '${req.body.day}' 
-            AND times.openingTime <= '${req.body.time}' 
-            AND times.closingTime >= '${req.body.time}'
+            AND times.day = '${req.body.day || req.query.day}' 
+            AND times.openingTime <= '${req.body.time || req.query.time}' 
+            AND times.closingTime >= '${req.body.time || req.query.time}'
         )`),
         },
       }),
-    ...(req?.body?.serviceType && {
-      id: {
-        [Op.in]: literal(`(
-            SELECT DISTINCT salonDetailId FROM services
-          WHERE services.salonDetailId = salonDetail.id 
-              AND services.serviceTypeId = ${req?.body?.serviceType}
-          )`),
-      },
-    }),
+    ...(req?.body?.serviceType || req?.query?.serviceType
+      ? {
+          id: {
+            [Op.in]: literal(`(
+              SELECT DISTINCT salonDetailId FROM services
+              WHERE services.salonDetailId = salonDetail.id 
+                AND services.serviceTypeId = ${req?.body?.serviceType || req?.query?.serviceType}
+            )`),
+          },
+        }
+      : {}),
   }
 
-  console.log('🚀 ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
-
+  // Query salons
   const body = {
     where: finalSalonCondition,
     attributes: [
@@ -597,33 +607,33 @@ exports.home = async (req, res, next) => {
         attributes: ['id'],
       },
     ],
-    having: req.params?.favorite
-      ? undefined
-      : literal(`${formula} <= ${rangeInKm}`),
+    // ✅ Only apply HAVING filter if not favorites
+    having: !req.params?.favorite
+      ? literal(`${formula} <= ${rangeInKm}`)
+      : undefined,
   }
 
-  if (!req.params?.favorite) {
+  // ✅ Always include distance if lat/lng are provided
+  if (targetLat && targetLng) {
     body.attributes.push([literal(`${formula}`), 'distance'])
+    body.order = [[literal('distance'), 'ASC']]  // 👈 SORT BY DISTANCE ASC
   }
 
+  // Fetch salon results
   let results = await salonDetail.findAll(body)
   results = JSON.parse(JSON.stringify(results))
 
-  console.log('🚀 ~ exports.home= ~ results:', results)
-
+  // Map salons with like and max discount
   if (results.length > 0) {
     results = results.map((salon) => {
-  const found = likeIds.some((id) => id === salon.id);
-
-  const discounts = (salon.services || []).map((s) => s.discount || 0);
-  const maxDiscount = discounts.length > 0 ? Math.max(...discounts) : 0;
-
-  return { ...salon, like: found, averageDiscount: maxDiscount };
-});
-
-results.sort((a, b) => b.averageDiscount - a.averageDiscount);
+      const found = likeIds.some((id) => id === salon.id)
+      const discounts = (salon.services || []).map((s) => s.discount || 0)
+      const maxDiscount = discounts.length > 0 ? Math.max(...discounts) : 0
+      return { ...salon, like: found, averageDiscount: maxDiscount }
+    })
   }
 
+  // Fetch customer appointments
   let appointments = []
   if (req.user && req.user.id) {
     appointments = await booking.findAll({
@@ -649,39 +659,51 @@ results.sort((a, b) => b.averageDiscount - a.averageDiscount);
       include: [
         {
           model: salonDetail,
-          attributes: [
-            'id',
-            `salonName`,
-            'coverImage',
-          ],
+          attributes: ['id', 'salonName', 'coverImage'],
           include: [
             { model: addressDBS, attributes: [`streetAddress`, `city`] },
             { model: rating, attributes: [] },
           ],
         },
-        {
-          model: jobs,
-          attributes: [],
-        },
+        { model: jobs, attributes: [] },
       ],
     })
   }
 
+  // Compute global highest and lowest service prices across all salons
+  const allServicePrices = results.flatMap(salon =>
+    (salon.services || []).map(s => Number(s.price))
+  )
+
+  const highestPriceAcrossAllSalons = allServicePrices.length > 0
+    ? Number(Math.max(...allServicePrices)).toFixed(2)
+    : "0.00"
+
+  const lowestPriceAcrossAllSalons = allServicePrices.length > 0
+    ? Number(Math.min(...allServicePrices)).toFixed(2)
+    : "0.00"
+
+  // Final response
   const output = {
     data: {
       slons: results,
       appointments,
       currencyUnit: CURRENCY_UNIT,
       distanceUnit: 'km',
+      highestPriceAcrossAllSalons,
+      lowestPriceAcrossAllSalons,
     },
   }
 
+  // ✅ For favorites: keep distance + other salon fields, just drop appointments
   if (req.params.favorite) {
-    output.data = { slons: results }
+    delete output.data.appointments
   }
 
   return res.status(200).json(response(output))
 }
+
+
 
 
 
@@ -1012,6 +1034,8 @@ exports.session = async (req, res, next) => {
       'email',
       'status',
       'image',
+      'phoneNum',
+      'countryCode',
       'stripeCustomerId',
     ],
   })
@@ -1022,6 +1046,7 @@ exports.session = async (req, res, next) => {
   output.accessToken = accessToken
   output.userId = `${userId}`
   delete output.id
+  output.phoneNum = `${output.countryCode} ${output.phoneNum}`
   return res.status(200).json(response({ data: output }))
 }
 
@@ -1519,7 +1544,7 @@ exports.cancelAppointment = async (req, res, next) => {
     appointment.by === 'online' &&
     appointment?.stripeCardId &&
     appointment.initialPaymentIntend &&
-    req.body.cancellationCharges > 0
+    req.body.cancellationCharges >= 0
   ) {
     const paid =
       parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
@@ -1537,6 +1562,7 @@ exports.cancelAppointment = async (req, res, next) => {
         const refund = await Stripe.refundPartialPayment(
           appointment.initialPaymentIntend,
           refundAmount,
+          appointment.salonDetail?.connectAccountId,
         )
         if (refund?.id) {
           updatedBooking.refundAmount = refundAmount
@@ -1549,10 +1575,24 @@ exports.cancelAppointment = async (req, res, next) => {
       updatedBooking.finalPayment = 'paid'
     } else if (paid * 1 < cancellationCharges * 1) {
       console.log('-----------> ~CASE~ cancellationCharges Greater (penalty)')
+      const customerOnConnect = await customerOnConnectAccount.findOne({
+        where: {
+          userId: appointment.customerId,
+          connectAccountId: appointment.salonDetail?.connectAccountId,
+        },
+        attributes: ['customerId'],
+      });
+      
+      if (!customerOnConnect) {
+        throw new AppError(
+          `Customer not found on this connected account`,
+          400
+        );
+      }
       const fineAmount = cancellationCharges - paid
       const fine = await Stripe.capturePayment(
         fineAmount,
-        appointment.user?.stripeCustomerId,
+        customerOnConnect.customerId,
         appointment.stripeCardId,
         appointment.salonDetail?.connectAccountId,
       )
@@ -2830,17 +2870,56 @@ exports.testing = async (req, res, next) => {
 /*
 * Transfer 0.50 Amouunt from To Admin Stripe
 */
-exports.transferFixedFeeToAdmin=async (req,res,next)=>{
-    const{connectedAccountId}=req.body
-    
-    const feeAmount=0.50;
-    
-    //const connectedAccountId='acct_1RoLFcCwrlf25Znd';
-    
-    const result= await Stripe.transferToPlatform(feeAmount, connectedAccountId)
-    
-    return res.json(response({ status: '1', message: 'Amount Transferred', result }))
-}
+exports.transferFixedFeeToAdmin = async (req, res, next) => {
+  try {
+    const { connectedAccountId, bookingId } = req.body;
+    const feeAmount = 0.50;
+
+    // 1. Fetch booking with relations
+    const appointment = await booking.findOne({
+      where: { id: bookingId },
+      attributes: ["id", "customerId", "salonDetailId"],
+      include: [
+        {
+          model: salonDetail,
+          attributes: ["id", "salonName"],
+        },
+        {
+          model: user,
+          as: "user", // customer
+          attributes: ["id", "firstName", "lastName"],
+        },
+      ],
+    });
+
+    if (!appointment) {
+      return res
+        .status(404)
+        .json(response({ status: "0", message: "Booking not found" }));
+    }
+
+    // 2. Prepare metadata
+    const meta = {
+      bookingId: appointment.id.toString(),
+      salonName: appointment.salonDetail?.salonName || "",
+      salonId: appointment.salonDetail?.id.toString() || "",
+      customerName: `${appointment.user?.firstName || ""} ${appointment.user?.lastName || ""}`,
+      customerId: appointment.user?.id.toString() || "",
+    };
+
+    // 3. Call Stripe transfer
+    const result = await Stripe.transferToPlatform(
+      feeAmount,
+      connectedAccountId,
+      meta
+    );
+
+    return res.json(response({ status: "1", message: "Amount Transferred", result }));
+  } catch (err) {
+    console.error("❌ transferFixedFeeToAdmin error:", err);
+    return next(new AppError("Failed to transfer fixed fee", 500));
+  }
+};
 
 /*
 * Create Customer on the Stripe Connect Account

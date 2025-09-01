@@ -2938,7 +2938,6 @@ exports.accountDelete = async (req, res, next) => {
 }
 
 exports.updateSubscriptionsPriceId = async (req, res, next) => {
-  try {
     // Dynamically import p-limit
     const { default: pLimit } = await import('p-limit');
 
@@ -2987,10 +2986,7 @@ exports.updateSubscriptionsPriceId = async (req, res, next) => {
     const summary = results.map(r => (r.status === 'fulfilled' ? r.value : { success: false, reason: r.reason }));
 
     return res.json(response({ message: 'Subscriptions updated', data: summary }));
-  } catch (err) {
-    console.error('❌ updateSubscriptionsPriceId failed:', err);
-    return res.status(500).json(response({ status: 0, message: 'Internal Server Error', error: err.message }));
-  }
+  
 };
 
 
