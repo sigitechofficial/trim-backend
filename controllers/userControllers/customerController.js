@@ -2874,46 +2874,45 @@ exports.testing = async (req, res, next) => {
 */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
   try {
-    const { connectedAccountId, bookingId } = req.body;
+    const { connectedAccountId } = req.body;
     const feeAmount = 0.50;
 
     // 1. Fetch booking with relations
-    const appointment = await booking.findOne({
-      where: { id: bookingId },
-      attributes: ["id", "customerId", "salonDetailId"],
-      include: [
-        {
-          model: salonDetail,
-          attributes: ["id", "salonName"],
-        },
-        {
-          model: user,
-          as: "user", // customer
-          attributes: ["id", "firstName", "lastName"],
-        },
-      ],
-    });
+    // const appointment = await booking.findOne({
+    //   where: { id: bookingId },
+    //   attributes: ["id", "customerId", "salonDetailId"],
+    //   include: [
+    //     {
+    //       model: salonDetail,
+    //       attributes: ["id", "salonName"],
+    //     },
+    //     {
+    //       model: user,
+    //       as: "user", // customer
+    //       attributes: ["id", "firstName", "lastName"],
+    //     },
+    //   ],
+    // });
 
-    if (!appointment) {
-      return res
-        .status(404)
-        .json(response({ status: "0", message: "Booking not found" }));
-    }
+    // if (!appointment) {
+    //   return res
+    //     .status(404)
+    //     .json(response({ status: "0", message: "Booking not found" }));
+    // }
 
-    // 2. Prepare metadata
-    const meta = {
-      bookingId: appointment.id.toString(),
-      salonName: appointment.salonDetail?.salonName || "",
-      salonId: appointment.salonDetail?.id.toString() || "",
-      customerName: `${appointment.user?.firstName || ""} ${appointment.user?.lastName || ""}`,
-      customerId: appointment.user?.id.toString() || "",
-    };
+    // // 2. Prepare metadata
+    // const meta = {
+    //   bookingId: appointment.id.toString(),
+    //   salonName: appointment.salonDetail?.salonName || "",
+    //   salonId: appointment.salonDetail?.id.toString() || "",
+    //   customerName: `${appointment.user?.firstName || ""} ${appointment.user?.lastName || ""}`,
+    //   customerId: appointment.user?.id.toString() || "",
+    // };
 
     // 3. Call Stripe transfer
     const result = await Stripe.transferToPlatform(
       feeAmount,
       connectedAccountId,
-      meta
     );
 
     return res.json(response({ status: "1", message: "Amount Transferred", result }));

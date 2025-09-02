@@ -72,14 +72,14 @@ async function transferToPlatform(amountPounds, connectedAccountId, meta = {}) {
         amount: Math.round(amountPounds * 100),
         currency: "gbp",
         destination: platformAccountId,
-        description: `Booking #${meta.bookingId} | Salon: ${meta.salonName} (${meta.salonId}) | Customer: ${meta.customerName} (${meta.customerId})`,
-        metadata: {
-          bookingId: meta.bookingId,
-          salonId: meta.salonId,
-          salonName: meta.salonName,
-          customerName: meta.customerName,
-          customerId: meta.customerId,
-        }
+        //description: `Booking #${meta.bookingId} | Salon: ${meta.salonName} (${meta.salonId}) | Customer: ${meta.customerName} (${meta.customerId})`,
+        // metadata: {
+        //   bookingId: meta.bookingId,
+        //   salonId: meta.salonId,
+        //   salonName: meta.salonName,
+        //   customerName: meta.customerName,
+        //   customerId: meta.customerId,
+        // }
       },
       { stripeAccount: connectedAccountId }
     );
@@ -246,7 +246,7 @@ async function createDirectCharge(amount, customerId, connectedAccountId) {
         amount: convertToCents(amount + 0.50),
         currency: 'gbp',
         customer: customerId,
-        //setup_future_usage: 'off_session',
+        setup_future_usage: 'off_session',
         payment_method_types: ['card'],
       },
       {
