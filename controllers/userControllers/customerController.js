@@ -2064,6 +2064,8 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
               `country`,
               `lat`,
               `lng`,
+              `postalCode`,
+              `province`,
             ],
           },
           {

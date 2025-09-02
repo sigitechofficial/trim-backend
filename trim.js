@@ -5,6 +5,8 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const cors = require('cors')
 const morgan = require('morgan') // Added for logging
+const swaggerUi = require('swagger-ui-express')
+const swaggerSpec = require('./docs/swagger')
 const { initializeWebSocket } = require('./socket_io')
 const db = require('./models')
 const errorHandler = require('./middlewares/errorHandler')
@@ -52,6 +54,9 @@ app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cors())
 app.use(morgan('dev')) // Added for logging
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
 // General routes use express.json() for parsing JSON bodies
 app.use('/salon/v1/auth',express.json(), salonAuth)
@@ -135,5 +140,23 @@ process.on('SIGINT', gracefulShutdown)
 // Start the server
 server.listen(serverPort, (err) => {
   if (err) throw err
-  console.log(`Server is listening on :http://${serverPort}`)
+  
+  const env = process.env.NODE_ENV || 'development'
+  let baseUrl
+  
+  switch(env) {
+    case 'production':
+      baseUrl = 'https://api.trimworldwide.com'
+      break
+    case 'test':
+      baseUrl = 'https://stage.trimworldwide.com'
+      break
+    default:
+      baseUrl = `http://localhost:${serverPort}`
+  }
+
+  console.log('\x1b[32m%s\x1b[0m', `Server is running in ${env.toUpperCase()} mode`)
+  console.log('\x1b[36m%s\x1b[0m', `Server is listening on: ${baseUrl}`)
+  console.log('\x1b[35m%s\x1b[0m', `Swagger Documentation: ${baseUrl}/api-docs`)
+  console.log('\x1b[33m%s\x1b[0m', `Environment: ${env}`)
 })
