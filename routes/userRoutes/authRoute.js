@@ -2,21 +2,22 @@ const express = require('express')
 const router = express.Router()
 const authController = require('../../controllers/userControllers/authController')
 const validateToken = require('../../middlewares/accessCheck')
+const catchAsync = require('../../middlewares/catchAync')
 
 // !Module:1 Auth
-router.post('/emailChecker', authController.emailChecker)
-router.post('/signup', authController.signup)
-router.post('/verify-otp', authController.verifyOTP)
-router.post('/login', authController.login)
+router.post('/emailChecker', catchAsync(authController.emailChecker))
+router.post('/signup', catchAsync(authController.signup))
+router.post('/verify-otp', catchAsync(authController.verifyOTP))
+router.post('/login', catchAsync(authController.login))
 router.post(
   '/verify-otp-forget-password',
-  authController.verifyOTPInForgetpassword,
+  catchAsync(authController.verifyOTPInForgetpassword),
 )
-router.post('/forgot-password', authController.requestOtp)
-router.post('/resend-otp', authController.requestOtp)
-router.patch('/reset-password', authController.resetPassword)
+router.post('/forgot-password', catchAsync(authController.requestOtp))
+router.post('/resend-otp', catchAsync(authController.requestOtp))
+router.patch('/reset-password', catchAsync(authController.resetPassword))
 
 // router.use(validateToken);
-router.patch('/change-password', validateToken, authController.updatePassword)
+router.patch('/change-password', validateToken, catchAsync(authController.updatePassword))
 
 module.exports = router
