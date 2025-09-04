@@ -146,7 +146,7 @@ server.listen(serverPort, (err) => {
   
   switch(env) {
     case 'production':
-      baseUrl = 'https://api.trimworldwide.com'
+      baseUrl = 'https://backend.trimworldwide.com'
       break
     case 'test':
       baseUrl = 'https://stage.trimworldwide.com'
