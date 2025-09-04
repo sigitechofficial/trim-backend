@@ -2873,7 +2873,6 @@ exports.testing = async (req, res, next) => {
 * Transfer 0.50 Amouunt from To Admin Stripe
 */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
-  try {
     const { connectedAccountId } = req.body;
     const feeAmount = 0.50;
 
@@ -2916,10 +2915,6 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
     );
 
     return res.json(response({ status: "1", message: "Amount Transferred", result }));
-  } catch (err) {
-    console.error("❌ transferFixedFeeToAdmin error:", err);
-    return next(new AppError("Failed to transfer fixed fee", 500));
-  }
 };
 
 /*
@@ -2927,7 +2922,6 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
 */
 
 exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
-  try {
     const customerId = req.user.id;
 
     // Step 1: Get salon's connected account
@@ -2937,7 +2931,7 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     });
 
     if (!account) {
-      return res.status(404).json({
+      return res.status(200).json({
         status: '0',
         message: 'Salon account not found',
       });
@@ -3008,13 +3002,6 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
         stripeAccountId: connectAccountId,
       },
     });
-  } catch (error) {
-    console.error('🚀 Error in initStripeCustomeronConnectAccount:', error);
-    return res.status(500).json({
-      status: '0',
-      message: 'Something went wrong while initializing Stripe customer',
-    });
-  }
 };
 
 
