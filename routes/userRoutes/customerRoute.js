@@ -233,6 +233,11 @@ protect,
 catchAsync(appController.initStripeCustomeronConnectAccount),
 )
 
+//Post Route to Attach Meta Data to Transfer
+router.post('/update-transfer-metadata',
+protect,
+catchAsync(appController.updateTransferMetadata),
+)
 
 
 module.exports = router

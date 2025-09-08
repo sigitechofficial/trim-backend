@@ -1836,6 +1836,15 @@ exports.bookAppointment = async (req, res, next) => {
     message: 'Booked',
     data: { appointment: book?.id },
   })
+
+
+  const salon = await salonDetail.findByPk(book.salonDetailId, {
+    attributes: ['connectAccountId']
+  });
+
+  if(book.initialPaymentIntend){
+        Stripe.updatePaymentIntentDescription(book.initialPaymentIntend, book, salon.connectAccountId)
+  }
   return res.status(200).json(output)
 }
 
@@ -2914,8 +2923,78 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
       connectedAccountId,
     );
 
-    return res.json(response({ status: "1", message: "Amount Transferred", result }));
+    return res.json(response({ status: "1", message: "Amount Transferred",transferId:result.transferId }));
 };
+
+
+/*
+ * Attach Meta Data to Transfer
+*/
+exports.updateTransferMetadata = async (req, res, next) => {
+  try {
+    const { transferId, bookingId, connectedAccountId } = req.body;
+
+    if (!transferId || !bookingId || !connectedAccountId) {
+      return res
+        .status(400)
+        .json(response({ status: "0", message: "transferId, bookingId, and connectedAccountId are required" }));
+    }
+
+    // 🔎 Fetch booking details (you said you'll do this part)
+    const appointment = await booking.findOne({
+      where: { id: bookingId },
+      attributes: ["id", "customerId", "salonDetailId"],
+      include: [
+        {
+          model: salonDetail,
+          attributes: ["id", "salonName"],
+        },
+        {
+          model: user,
+          as: "user", // customer
+          attributes: ["id", "firstName", "lastName"],
+        },
+      ],
+    });
+
+    if (!appointment) {
+      return res
+        .status(404)
+        .json(response({ status: "0", message: "Booking not found" }));
+    }
+
+    // Prepare metadata
+    const meta = {
+      salonId: appointment.salonDetail?.id.toString() || "",
+      salonName: appointment.salonDetail?.salonName || "",
+      customerId: appointment.user?.id.toString() || "",
+      customerName: `${appointment.user?.firstName || ""} ${appointment.user?.lastName || ""}`,
+    };
+
+    // Call Stripe util
+    const updatedTransfer = await Stripe.updateTransferMetadata(
+      transferId,
+      bookingId,
+      connectedAccountId,
+      meta
+    );
+
+    return res.json(
+      response({
+        status: "1",
+        message: "Transfer metadata updated",
+        transfer: updatedTransfer,
+      })
+    );
+  } catch (error) {
+    console.error("Error in updateTransferMetadata controller:", error);
+    return res
+      .status(500)
+      .json(response({ status: "0", message: error.message || "Update failed" }));
+  }
+};
+
+
 
 /*
 * Create Customer on the Stripe Connect Account

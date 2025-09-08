@@ -84,10 +84,33 @@ async function transferToPlatform(amountPounds, connectedAccountId, meta = {}) {
       { stripeAccount: connectedAccountId }
     );
 
-
-    return transfer;
+    return {
+      transferId: transfer.id,
+      transfer: transfer
+    };
   } catch (error) {
     console.error("❌ transferToPlatform error:", error.message);
+    throw new AppError(`${error.message}`, 200);
+  }
+}
+
+/*
+* Attach Meta Data to Transfer
+*/
+async function updateTransferMetadata(transferId, bookingId, connectedAccountId, meta = {}) {
+  try {
+    const updated = await stripe.transfers.update(transferId, {
+      description: `Platform fee for booking ${bookingId}`,
+      metadata: {
+        bookingId: bookingId?.toString() || "",
+        ...meta,
+      },
+    }, {
+      stripeAccount: connectedAccountId
+    });
+    return updated;
+  } catch (error) {
+    console.error("❌ Stripe error (updateTransferMetadata):", error);
     throw new AppError(`${error.message}`, 200);
   }
 }
@@ -238,7 +261,7 @@ async function createPaymentIntendForUpFrontPayments(
   }
 }
 
-async function createDirectCharge(amount, customerId, connectedAccountId) {
+async function  createDirectCharge(amount, customerId, connectedAccountId) {
   console.log("connectedAccountId========Stripe===>", connectedAccountId)
   try {
     const paymentIntent = await stripe.paymentIntents.create(
@@ -681,7 +704,8 @@ async function capturePayment(
   customerId,
   paymentMethodId,
   accountId,     // ✅ Stripe Connect Account ID
-  targetAmount
+  targetAmount,
+  booking
 ) {
   try {
     console.log("🔌 capturePayment accountId:", accountId);
@@ -704,6 +728,13 @@ async function capturePayment(
           capture_method: "manual",
           confirm: true,
           return_url: "https://example.com/reauth",
+          description: `Penalty for No-Show Booking BK-${booking.id}`,
+          metadata: {
+            bookingId: booking.id,
+            shopId: booking.salonDetailId,
+            customerId: booking.customerId,
+            payment_Type: "no-show",
+          },
         },
         stripeOptions // ✅ run on behalf of connected account
       );
@@ -730,6 +761,13 @@ async function capturePayment(
         {
           payment_intent: lastPaymentIntent.id,
           amount: convertToCents(Math.abs(amount)),
+          description: `Refund for No-Show Booking BK-${booking.id}`,
+          metadata: {
+            bookingId: booking.id,
+            shopId: booking.salonDetailId,
+            customerId: booking.customerId,
+            payment_Type: "no-show",
+          },
         },
         stripeOptions // ✅ refund scoped to connected account
       );
@@ -740,6 +778,7 @@ async function capturePayment(
     throw new AppError(`${error.message} `, 200);
   }
 }
+
 
 
 async function getMatchingPaymentIntentForCustomer(customerId, targetAmount, connectAccountId) {
@@ -938,7 +977,7 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
   }
 }
 // refund Payment
-async function refundPartialPayment(paymentIntentId, amountToRefund, connectAccountId) {
+async function refundPartialPayment(paymentIntentId, amountToRefund, connectAccountId, booking) {
   console.log("🚀 ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
   try {
     const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
@@ -960,6 +999,13 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
       {
         charge: chargeId,
         amount: convertToCents(amountToRefund),
+        description: `Refund for No-Show Booking BK-${booking.id}`,
+        metadata: {
+          bookingId: booking.id,
+          shopId: booking.salonDetailId,
+          customerId: booking.customerId,
+          payment_Type: "no-show",
+        },
       },
       stripeOptions
     );
@@ -971,6 +1017,7 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
     throw new AppError(`${error.message}`, 200);
   }
 }
+
 
 
 async function refundFullPayment(paymentIntentId, connectAccountId = null) {
@@ -1398,6 +1445,28 @@ async function checkStripeAccountStatus(connectAccountId) {
 }
 
 
+/*
+ * Update Booking Description
+*/
+async function updatePaymentIntentDescription(paymentIntentId, booking, connectAccountId) {
+  try {
+    const updated = await stripe.paymentIntents.update(
+      paymentIntentId,
+      {
+        description: `Payment for Booking BK-${booking.id}`,
+      },
+      {
+        stripeAccount: connectAccountId, // 👈 tells Stripe which account owns the PI
+      }
+    );
+    console.log("✅ Description updated for PI:", updated.id, updated.description);
+    return updated;
+  } catch (err) {
+    console.error("❌ Failed to update PaymentIntent description:", err.message);
+    throw err;
+  }
+}
+    
 
 
 module.exports = {
@@ -1453,6 +1522,8 @@ module.exports = {
   listInvoicesForSubscription,
   listSubscriptionsForCustomer,
   checkStripeAccountStatus,
+  updateTransferMetadata,
+  updatePaymentIntentDescription
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
