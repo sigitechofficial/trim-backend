@@ -22,7 +22,7 @@ const {
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
 const { response } = require('../../utils/response')
-
+const Stripe = require('../stripe')
 const {
   busiestQuietestDays,
   busiestQuietestHours,
