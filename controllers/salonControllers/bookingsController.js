@@ -2787,57 +2787,57 @@ exports.editService = async (req, res, next) => {
 //! -- New Controllers
 
 exports.markAppointmentAsNoShow = async (req, res, next) => {
-  const { bookingId } = req.params
+  const { bookingId } = req.params;
 
   const appointment = await booking.findByPk(bookingId, {
     attributes: [
-      'id',
-      'status',
-      'on',
-      'startTime',
-      'endTime',
-      'duration',
-      'discount',
-      'total',
-      'subTotal',
-      'initialPayment',
-      'initialPaymentIntend',
-      'actualCapturedAmount',
-      'tip',
-      'salonDetailId',
-      'paymentMethod',
-      'stripeCardId',
-      'customerId',
-      'noshowPolicyVersion',
-      'cancellationPolicyVersion',
-      'by',
+      "id",
+      "status",
+      "on",
+      "startTime",
+      "endTime",
+      "duration",
+      "discount",
+      "total",
+      "subTotal",
+      "initialPayment",
+      "initialPaymentIntend",
+      "actualCapturedAmount",
+      "tip",
+      "salonDetailId",
+      "paymentMethod",
+      "stripeCardId",
+      "customerId",
+      "noshowPolicyVersion",
+      "cancellationPolicyVersion",
+      "by",
     ],
     include: [
-      { model: user, attributes: ['id', 'stripeCustomerId'] },
-      { model: salonDetail, attributes: ['id', 'connectAccountId'] },
+      { model: user, attributes: ["id", "stripeCustomerId"] },
+      { model: salonDetail, attributes: ["id", "connectAccountId"] },
     ],
-  })
+  });
 
   if (!appointment) {
-    throw new AppError('resource not found', 404)
+    throw new AppError("resource not found", 404);
   }
 
-  let finePercentage = 0
+  let finePercentage = 0;
   if (
-    appointment?.status === 'complete' ||
-    appointment?.status === 'no-show' ||
-    appointment?.status === 'cancel'
+    appointment?.status === "complete" ||
+    appointment?.status === "no-show" ||
+    appointment?.status === "cancel"
   ) {
     throw new AppError(
       `The appointment has already been marked as : ${appointment.status}.`,
-      200,
-    )
+      200
+    );
   }
-  //!TODO Term and Condition on cancel charges and time ---->>> after discuss
-  const updatedBooking = { tip: 0 }
+
+  const updatedBooking = { tip: 0 };
 
   if (
-    appointment?.by == 'online' &&
+    appointment?.by == "online" &&
     appointment?.noshowPolicyVersion &&
     appointment?.stripeCardId &&
     appointment.initialPaymentIntend
@@ -2847,124 +2847,97 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
         version: appointment.noshowPolicyVersion,
         salonDetailId: appointment.salonDetailId,
       },
-    })
+    });
 
-    finePercentage = refundPercentage
-    console.log(
-      'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ refundPercentage:',
-      refundPercentage,
-    )
-    console.log(
-      'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ finePercentage:',
-      finePercentage,
-    )
+    finePercentage = refundPercentage;
 
     const paid =
-      parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip)
+      parseFloat(appointment.actualCapturedAmount) +
+      parseFloat(appointment.tip);
 
     const noshowCharges = parseFloat(
-      (appointment.total * (refundPercentage / 100)).toFixed(2),
-    )
+      (appointment.total * (refundPercentage / 100)).toFixed(2)
+    );
 
-    console.log(
-      'Ã°Å¸Å¡â‚¬ ~ exports.as= ~ appointment.actualCapturedAmount:',
-      appointment.actualCapturedAmount,
-    )
-
-    console.log('Ã°Å¸Å¡â‚¬ ~ exports.as= ~ appointment.tip:', appointment.tip)
-
-    console.log('Ã°Å¸Å¡â‚¬ ~ exports.as= ~ paid:', paid)
-    console.log('Ã°Å¸Å¡â‚¬ ~ ~ noshowCharges:', noshowCharges)
-
-    console.log('ðŸš€ ~ exports.markAppointmentAsNoShow= ~ paid:', paid)
     if (paid > noshowCharges) {
-      console.log(
-        'ðŸš€ ~ exports.markAppointmentAsNoShow= ~ noshowCharges:',
-        noshowCharges,
-      )
-      console.log('-----> ~CASE~ intialPayment Greater (penalty) ')
-
-      const refundAmount = paid - noshowCharges
+      // -----> CASE: Initial payment greater, refund the difference
+      const refundAmount = paid - noshowCharges;
       const refund = await Stripe.refundPartialPayment(
         appointment.initialPaymentIntend,
         refundAmount,
         appointment.salonDetail?.connectAccountId,
-      )
+        appointment // 👈 pass appointment for metadata
+      );
 
-      console.log("FROM this error coming =-=-=-=-=-")
       if (refund?.id) {
-        updatedBooking.status = 'no-show'
-        updatedBooking.finalPayment = 'paid'
-        updatedBooking.refundAmount = refundAmount
-        updatedBooking.refundPaymentIntend = refund?.id
+        updatedBooking.status = "no-show";
+        updatedBooking.finalPayment = "paid";
+        updatedBooking.refundAmount = refundAmount;
+        updatedBooking.refundPaymentIntend = refund?.id;
       }
-
-      console.log('--------------->ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~Refund Success', refund)
     } else if (paid < noshowCharges) {
-      console.log('-----------> ~CASE~ noshowCharges Greater (penalty)')
-      const fineAmount = noshowCharges - paid
+      // -----> CASE: Charges greater, capture penalty
+      const fineAmount = noshowCharges - paid;
       const fine = await Stripe.capturePayment(
         fineAmount,
         appointment.user?.stripeCustomerId,
         appointment.stripeCardId,
         appointment.salonDetail?.connectAccountId,
-      )
+        appointment.total,
+        appointment // 👈 pass appointment for metadata
+      );
+
       if (fine?.id) {
-        updatedBooking.status = 'no-show'
-        updatedBooking.finalPayment = 'paid'
-        updatedBooking.penaltyPaymentIntend = fine?.id
-        updatedBooking.penaltyAmount = fineAmount
+        updatedBooking.status = "no-show";
+        updatedBooking.finalPayment = "paid";
+        updatedBooking.penaltyPaymentIntend = fine?.id;
+        updatedBooking.penaltyAmount = fineAmount;
       }
-      console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ----------->~Fine Captured Success', fine)
     } else {
-      // Cancellation charges equal to upfront payment
-      updatedBooking.status = 'no-show'
-      updatedBooking.finalPayment = 'paid'
-
-      console.log('-----> ~ Equal')
+      // -----> CASE: Equal
+      updatedBooking.status = "no-show";
+      updatedBooking.finalPayment = "paid";
     }
-    updatedBooking.noshowCharges = noshowCharges
-    updatedBooking.actualCapturedAmount = noshowCharges
-    updatedBooking.total = noshowCharges
-    updatedBooking.initialPayment = paid
-  } else {
-    updatedBooking.status = 'no-show'
-    updatedBooking.finalPayment = 'paid'
-    updatedBooking.total = appointment.actualCapturedAmount
-  }
-  updatedBooking.subTotal = appointment.total
-  console.log(
-    'Ã°Å¸Å¡â‚¬ ~ exports.cancelAppointment= ~ updatedBooking:',
-    updatedBooking,
-  )
 
-  await booking.update(updatedBooking, { where: { id: bookingId } })
+    updatedBooking.noshowCharges = noshowCharges;
+    updatedBooking.actualCapturedAmount = noshowCharges;
+    updatedBooking.total = noshowCharges;
+    updatedBooking.initialPayment = paid;
+  } else {
+    updatedBooking.status = "no-show";
+    updatedBooking.finalPayment = "paid";
+    updatedBooking.total = appointment.actualCapturedAmount;
+  }
+
+  updatedBooking.subTotal = appointment.total;
+
+  await booking.update(updatedBooking, { where: { id: bookingId } });
 
   await wallet.increment(
     { onlineAmount: updatedBooking.total },
-    { where: { salonDetailId: appointment.salonDetailId } },
-  )
+    { where: { salonDetailId: appointment.salonDetailId } }
+  );
 
-  if (updatedBooking.status == 'no-show') {
-    await jobs.update({ status: 'no-show' }, { where: { bookingId } })
-    noShowMessages(appointment?.id, finePercentage, true)
+  if (updatedBooking.status == "no-show") {
+    await jobs.update({ status: "no-show" }, { where: { bookingId } });
+    noShowMessages(appointment?.id, finePercentage, true);
   } else {
-    noShowMessages(appointment?.id, finePercentage)
+    noShowMessages(appointment?.id, finePercentage);
   }
 
   socketForCalendar({
     appointmentId: bookingId,
-    type: 'finish',
-    status: 'no-show',
-  })
+    type: "finish",
+    status: "no-show",
+  });
 
-  //notifications
   const output = response({
-    message: 'Booking marked as no-show',
+    message: "Booking marked as no-show",
     data: {},
-  })
-  return res.status(200).json(output)
-}
+  });
+  return res.status(200).json(output);
+};
+
 
 
 //Online Payment Key update
