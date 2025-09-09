@@ -1090,31 +1090,97 @@ exports.changeCategoryStatus = async (req, res, next) => {
             6.Fetch Coupons
     ________________________________________
 */
-exports.fecthCoupons = async (req, res, next) => {
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+// exports.fecthCoupons = async (req, res, next) => {
+//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   if (!salon) {
+//     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
+//   }
+//   const results = await coupon.findAll({
+//     where: { salonDetailId: salon.id },
+//     attributes: [
+//       `id`,
+//       `promoCode`,
+//       `type`,
+//       `status`,
+//       `limit`,
+//       `from`,
+//       `till`,
+//       'value',
+//       `createdAt`,
+//     ],
+//     order: [['id', 'DESC']],
+//   })
+
+//   return res
+//     .status(200)
+//     .json(returnFunction('1', 'All coupons.', { coupons: results }, ''))
+// }
+
+exports.fetchCoupons = async (req, res, next) => {
+  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Data not found.', {}, ''));
   }
+
   const results = await coupon.findAll({
     where: { salonDetailId: salon.id },
     attributes: [
-      `id`,
-      `promoCode`,
-      `type`,
-      `status`,
-      `limit`,
-      `from`,
-      `till`,
+      'id',
+      'promoCode',
+      'type',
+      'status',
+      'limit',
+      'from',
+      'till',
       'value',
-      `createdAt`,
+      'createdAt',
+    ],
+    include: [
+      {
+        model: couponTimeSlot,
+        attributes: ['day', 'timeFrom', 'timeTo'],
+      },
     ],
     order: [['id', 'DESC']],
-  })
+  });
+  
+  //return res.json(results)
+
+  // Transform the response so slots are grouped by day
+  const coupons = results.map(c => {
+    const couponData = c.toJSON();
+
+    // Group slots by day
+    const groupedDays = {};
+    couponData.couponTimeSlots.forEach(slot => {
+      if (!groupedDays[slot.day]) groupedDays[slot.day] = [];
+      groupedDays[slot.day].push({
+        from: slot.timeFrom,
+        to: slot.timeTo,
+      });
+    });
+
+    return {
+      id: couponData.id,
+      promoCode: couponData.promoCode,
+      type: couponData.type,
+      status: couponData.status,
+      limit: couponData.limit,
+      from: couponData.from,
+      till: couponData.till,
+      value: couponData.value,
+      createdAt: couponData.createdAt,
+      validDays: groupedDays, // 👈 Days with their multiple time ranges
+    };
+  });
 
   return res
     .status(200)
-    .json(returnFunction('1', 'All coupons.', { coupons: results }, ''))
-}
+    .json(returnFunction('1', 'All coupons.', { coupons }, ''));
+};
+
 /*
             6.Add Coupons
     ________________________________________
@@ -1145,20 +1211,59 @@ exports.addCoupons = async (req, res, next) => {
   const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
 
   const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
-  if (!salon) return res.status(200).json(returnFunction('0','Data not found',{},''));
+  if (!salon)
+    return res.status(200).json(returnFunction('0', 'Data not found', {}, ''));
 
   const exist = await coupon.findOne({ where: { promoCode } });
-  if (exist) return res.status(200).json(returnFunction('0','Promo code already taken',{},''));
+  if (exist)
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Promo code already taken', {}, ''));
 
   // 1️⃣ Create coupon
-  const newCoupon = await coupon.create({ promoCode, limit, from, till, value, salonDetailId: salon.id });
+  const newCoupon = await coupon.create({
+    promoCode,
+    limit,
+    from,
+    till,
+    value,
+    salonDetailId: salon.id,
+  });
 
-  // 2️⃣ Create time slots for each day
-  const validWeekDays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  for (const day of days) {
+  // 2️⃣ Define default days & time range
+  const validWeekDays = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+  const selectedDays = days && days.length > 0 ? days : validWeekDays;
+  const selectedTimeRanges =
+    timeRanges && timeRanges.length > 0
+      ? timeRanges
+      : [{ from: '12:00 AM', to: '11:59 PM' }];
+
+  // 3️⃣ Validate time format (12-hour format)
+  const validTimeFormat = /^(0?[1-9]|1[0-2]):([0-5][0-9]) (AM|PM)$/;
+  for (const range of selectedTimeRanges) {
+    if (!validTimeFormat.test(range.from) || !validTimeFormat.test(range.to)) {
+      return next(
+        new appError(
+          'Invalid time format. Use HH:mm AM/PM format (e.g., 01:30 PM)',
+          400
+        )
+      );
+    }
+  }
+
+  // 4️⃣ Create time slots
+  for (const day of selectedDays) {
     if (!validWeekDays.includes(day)) continue;
 
-    for (const range of timeRanges) {
+    for (const range of selectedTimeRanges) {
       await couponTimeSlot.create({
         couponId: newCoupon.id,
         day,
@@ -1168,9 +1273,96 @@ exports.addCoupons = async (req, res, next) => {
     }
   }
 
-  return res.status(200).json(returnFunction('1','Coupon created successfully!',{},''));
+  return res
+    .status(200)
+    .json(returnFunction('1', 'Coupon created successfully!', {}, ''));
 };
 
+/*
+
+            6.Update Coupons
+    ________________________________________
+*/
+exports.updateCoupon = async (req, res, next) => {
+  const { couponId } = req.params;
+  const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
+
+  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  if (!salon)
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Data not found', {}, ''));
+
+  // 1️⃣ Check coupon exists
+  const existingCoupon = await coupon.findOne({
+    where: { id: couponId, salonDetailId: salon.id },
+  });
+  if (!existingCoupon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Coupon not found', {}, ''));
+  }
+
+  // 2️⃣ Update main coupon fields
+  await existingCoupon.update({
+    promoCode: promoCode ?? existingCoupon.promoCode,
+    limit: limit ?? existingCoupon.limit,
+    from: from ?? existingCoupon.from,
+    till: till ?? existingCoupon.till,
+    value: value ?? existingCoupon.value,
+  });
+
+  // 3️⃣ Handle days + time ranges update
+  const validWeekDays = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+
+  // If no days or times provided → default all days, full day
+  const selectedDays = days && days.length > 0 ? days : validWeekDays;
+  const selectedTimeRanges =
+    timeRanges && timeRanges.length > 0
+      ? timeRanges
+      : [{ from: '12:00 AM', to: '11:59 PM' }];
+
+  // Validate time format
+  const validTimeFormat = /^(0?[1-9]|1[0-2]):([0-5][0-9]) (AM|PM)$/;
+  for (const range of selectedTimeRanges) {
+    if (!validTimeFormat.test(range.from) || !validTimeFormat.test(range.to)) {
+      return next(
+        new appError(
+          'Invalid time format. Use HH:mm AM/PM format (e.g., 01:30 PM)',
+          400
+        )
+      );
+    }
+  }
+
+  // 4️⃣ Delete old time slots & insert new ones
+  await couponTimeSlot.destroy({ where: { couponId: existingCoupon.id } });
+
+  for (const day of selectedDays) {
+    if (!validWeekDays.includes(day)) continue;
+
+    for (const range of selectedTimeRanges) {
+      await couponTimeSlot.create({
+        couponId: existingCoupon.id,
+        day,
+        timeFrom: range.from,
+        timeTo: range.to,
+      });
+    }
+  }
+
+  return res
+    .status(200)
+    .json(returnFunction('1', 'Coupon updated successfully!', {}, ''));
+};
 
 
 //! Subscription
