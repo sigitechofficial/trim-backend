@@ -37,7 +37,8 @@ const {
   allergies,
   clientNotes,
   deletedCustomer,
-  subscriptions
+  subscriptions,
+  couponTimeSlot
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -1118,26 +1119,60 @@ exports.fecthCoupons = async (req, res, next) => {
             6.Add Coupons
     ________________________________________
 */
+// exports.addCoupons = async (req, res, next) => {
+//   const input = req.body
+//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   if (!salon) {
+//     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
+//   }
+//   const exist = await coupon.findOne({ where: { promoCode: input.promoCode } })
+//   if (exist) {
+//     return res
+//       .status(200)
+//       .json(returnFunction('0', 'Promo code already taken.', {}, ''))
+//   }
+
+//   input.salonDetailId = salon.id
+//   await coupon.create(input)
+
+//   return res
+//     .status(200)
+//     .json(returnFunction('1', 'Coupon created successfully!', {}, ''))
+// }
+
+
 exports.addCoupons = async (req, res, next) => {
-  const input = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
-  if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
-  }
-  const exist = await coupon.findOne({ where: { promoCode: input.promoCode } })
-  if (exist) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Promo code already taken.', {}, ''))
+  const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
+
+  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  if (!salon) return res.status(200).json(returnFunction('0','Data not found',{},''));
+
+  const exist = await coupon.findOne({ where: { promoCode } });
+  if (exist) return res.status(200).json(returnFunction('0','Promo code already taken',{},''));
+
+  // 1️⃣ Create coupon
+  const newCoupon = await coupon.create({ promoCode, limit, from, till, value, salonDetailId: salon.id });
+
+  // 2️⃣ Create time slots for each day
+  const validWeekDays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  for (const day of days) {
+    if (!validWeekDays.includes(day)) continue;
+
+    for (const range of timeRanges) {
+      await couponTimeSlot.create({
+        couponId: newCoupon.id,
+        day,
+        timeFrom: range.from,
+        timeTo: range.to,
+      });
+    }
   }
 
-  input.salonDetailId = salon.id
-  await coupon.create(input)
+  return res.status(200).json(returnFunction('1','Coupon created successfully!',{},''));
+};
 
-  return res
-    .status(200)
-    .json(returnFunction('1', 'Coupon created successfully!', {}, ''))
-}
+
+
 //! Subscription
 /*
     Get Customer Subscription Plans
