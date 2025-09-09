@@ -1365,6 +1365,44 @@ exports.updateCoupon = async (req, res, next) => {
 };
 
 
+/*
+
+            6.Delete Coupons
+    ________________________________________
+*/
+exports.deleteCoupon = async (req, res, next) => {
+  const { couponId } = req.params;
+
+  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Data not found', {}, ''));
+  }
+
+  // 1️⃣ Check coupon exists
+  const existingCoupon = await coupon.findOne({
+    where: { id: couponId, salonDetailId: salon.id },
+  });
+
+  if (!existingCoupon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Coupon not found', {}, ''));
+  }
+
+  // 2️⃣ Delete related time slots
+  await couponTimeSlot.destroy({ where: { couponId: existingCoupon.id } });
+
+  // 3️⃣ Delete the coupon
+  await existingCoupon.destroy();
+
+  return res
+    .status(200)
+    .json(returnFunction('1', 'Coupon deleted successfully!', {}, ''));
+};
+
+
 //! Subscription
 /*
     Get Customer Subscription Plans
