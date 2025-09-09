@@ -150,8 +150,8 @@ router.get('/getCategories', catchAsync(salonController.getCategories))
 router.get('/default-categories', catchAsync(salonController.defaultCategories))
 
 router.post('/add-coupon', catchAsync(salonController.addCoupons))
-router.get('/coupons', catchAsync(salonController.fecthCoupons))
-
+router.get('/coupons', catchAsync(salonController.fetchCoupons))
+router.patch('/update-coupon/:couponId', catchAsync(salonController.updateCoupon))
 router.get(
   '/customerSubscription',
   catchAsync(salonController.customerSubscription),
