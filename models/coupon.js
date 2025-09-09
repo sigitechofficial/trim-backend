@@ -40,13 +40,16 @@ module.exports = (sequelize, DataTypes) => {
     {
       paranoid: true,
       timestamps: true,
-    },
-  )
+    }
+  );
 
   coupon.associate = (models) => {
-    models.salonDetail.hasMany(coupon)
-    coupon.belongsTo(models.salonDetail)
-  }
+    models.salonDetail.hasMany(coupon);
+    coupon.belongsTo(models.salonDetail);
 
-  return coupon
-}
+    coupon.hasMany(models.couponTimeSlot);
+    models.couponTimeSlot.belongsTo(coupon);
+  };
+
+  return coupon;
+};

@@ -96,7 +96,7 @@ const syncDb = false // Use environment variable for flexibility
 
 if (syncDb) {
   db.sequelize
-    .sync({ force: true })
+    .sync({ alter: true })
     .then(() => {
       console.log('Database synchronized successfully.')
     })
