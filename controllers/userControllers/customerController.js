@@ -37,6 +37,7 @@ const {
   rentChairPayout,
   pushNotification,
   customerOnConnectAccount,
+  couponTimeSlot,
   wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
@@ -2261,8 +2262,63 @@ exports.detachCard = async (req, res, next) => {
 
 //* 1.Apply Coupon -----------------
 
+// exports.applyCoupon = async (req, res, next) => {
+//   const currentDay = CustomDate.currentDay()
+//   await coupon.update(
+//     { status: 'expire' },
+//     {
+//       where: {
+//         [Op.and]: [
+//           { till: { [Op.lt]: currentDay.currentDateOnly } },
+//           { status: 'active' },
+//         ],
+//       },
+//     },
+//   )
+//   const { salonId, promoCode } = req.body
+//   console.log("req.body==================>",req.body)
+//   let data = await coupon.findOne({
+//   where: {
+//     promoCode,
+//     salonDetailId: salonId,
+//     from: { [Op.lte]: currentDay.currentDateOnly },
+//     till: { [Op.gte]: currentDay.currentDateOnly },
+//   },
+//   attributes: [`id`, `promoCode`, `type`, `status`, `value`, `limit`],
+// });
+  
+//   console.log("data===============================>>>>>>",data)
+
+//   if (!data) throw new AppError('Invalid promo code', 200)
+//   if (data.status === 'expire') throw new AppError('Promo code Exprie.', 200)
+//   data = JSON.parse(JSON.stringify(data))
+//   if (data?.limit == null || data?.limit < 1) {
+//     const exist = await booking.findOne({
+//       where: {
+//         customerId: req.user?.id,
+//         //couponId: data?.id,
+//         salonDetailId: salonId,
+//       },
+//     })
+//     if (exist) {
+//       throw new AppError(
+//         `You've already redeemed this one-time coupon, so it can't be used again.`,
+//         200,
+//       )
+//     }
+//     data.limit = 1
+//     data.applied = 0
+//   }
+//   const output = response({ message: 'Success', data: { promoCode: data } })
+//   return res.status(200).json(output)
+// }
+
+
 exports.applyCoupon = async (req, res, next) => {
-  const currentDay = CustomDate.currentDay()
+  const currentDay = CustomDate.currentDay(); 
+  // e.g. { currentDateOnly: '2025-09-09', dayName: 'Tuesday', currentTime: '03:30 PM' }
+
+  // 1️⃣ Expire old coupons
   await coupon.update(
     { status: 'expire' },
     {
@@ -2272,46 +2328,108 @@ exports.applyCoupon = async (req, res, next) => {
           { status: 'active' },
         ],
       },
-    },
-  )
-  const { salonId, promoCode } = req.body
-  console.log("req.body==================>",req.body)
-  let data = await coupon.findOne({
-  where: {
-    promoCode,
-    salonDetailId: salonId,
-    from: { [Op.lte]: currentDay.currentDateOnly },
-    till: { [Op.gte]: currentDay.currentDateOnly },
-  },
-  attributes: [`id`, `promoCode`, `type`, `status`, `value`, `limit`],
-});
-  
-  console.log("data===============================>>>>>>",data)
+    }
+  );
 
-  if (!data) throw new AppError('Invalid promo code', 200)
-  if (data.status === 'expire') throw new AppError('Promo code Exprie.', 200)
-  data = JSON.parse(JSON.stringify(data))
-  if (data?.limit == null || data?.limit < 1) {
+  const { salonId, promoCode, bookingDate, bookingStartTime, bookingEndTime } = req.body;
+  console.log("req.body================>>>",req.body)
+
+  if (!salonId || !promoCode || !bookingStartTime || !bookingEndTime) {
+    throw new AppError(
+      'salonId, promoCode, bookingStartTime, and bookingEndTime are required',
+      200
+    );
+  }
+
+  // 2️⃣ Determine date and day to check
+  const dateToCheck = bookingDate || currentDay.currentDateOnly;
+  const dayName = CustomDateNew.getDayName(dateToCheck); // returns "Monday", "Tuesday", etc.
+
+  // 3️⃣ Find coupon
+  let data = await coupon.findOne({
+    where: {
+      promoCode,
+      salonDetailId: salonId,
+      from: { [Op.lte]: dateToCheck },
+      till: { [Op.gte]: dateToCheck },
+      status: 'active',
+    },
+    attributes: ['id', 'promoCode', 'type', 'status', 'value', 'limit', 'applied'],
+    include: [
+      {
+        model: couponTimeSlot,
+        attributes: ['day', 'timeFrom', 'timeTo'],
+      },
+    ],
+  });
+
+  if (!data) throw new AppError('Invalid promo code', 200);
+  if (data.status === 'expire') throw new AppError('Promo code expired.', 200);
+
+  data = JSON.parse(JSON.stringify(data));
+  
+  console.log("Data====>",data)
+
+  // 4️⃣ Check if coupon is valid for this day
+  const slotsForToday = data.couponTimeSlots.filter(slot => slot.day === dayName);
+  if (!slotsForToday || slotsForToday.length === 0) {
+    throw new AppError(`Coupon not valid on ${dayName}`, 200);
+  }
+
+  // 5️⃣ Check booking time overlaps with at least one slot
+  const moment = require('moment');
+  const bookingStart = moment(bookingStartTime, 'hh:mm A');
+  const bookingEnd = moment(bookingEndTime, 'hh:mm A');
+
+  let isTimeValid = false;
+  for (const slot of slotsForToday) {
+    const slotStart = moment(slot.timeFrom, 'hh:mm A');
+    const slotEnd = moment(slot.timeTo, 'hh:mm A');
+
+    if (bookingStart.isBefore(slotEnd) && bookingEnd.isAfter(slotStart)) {
+      isTimeValid = true;
+      break;
+    }
+  }
+
+  if (!isTimeValid) {
+    throw new AppError(
+      `Coupon not valid for booking time ${bookingStartTime} - ${bookingEndTime}`,
+      200
+    );
+  }
+
+  // 6️⃣ Handle limit usage
+  if (data.limit == null || data.limit < 1) {
     const exist = await booking.findOne({
       where: {
         customerId: req.user?.id,
-        //couponId: data?.id,
         salonDetailId: salonId,
+        couponId: data.id,
       },
-    })
+    });
+
     if (exist) {
       throw new AppError(
         `You've already redeemed this one-time coupon, so it can't be used again.`,
-        200,
-      )
+        200
+      );
     }
-    data.limit = 1
-    data.applied = 0
+    data.limit = 1;
+    data.applied = 0;
+  } else {
+    if (data.applied >= data.limit) {
+      throw new AppError(`This coupon has reached its usage limit.`, 200);
+    }
   }
-  const output = response({ message: 'Success', data: { promoCode: data } })
-  return res.status(200).json(output)
-}
 
+  // 7️⃣ Return success
+  const output = response({
+    message: 'Success',
+    data: { promoCode: data },
+  });
+  return res.status(200).json(output);
+};
 
 //~ Reschedule & cancel
 
