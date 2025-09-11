@@ -1467,8 +1467,44 @@ async function updatePaymentIntentDescription(paymentIntentId, booking, connectA
   }
 }
     
+/*
+ * Get Invoice History
+*/
+async function getInvoiceDetails(invoiceId) {
+  try {
+    const invoice = await stripe.invoices.retrieve(invoiceId);
 
+    const lineItems = await stripe.invoiceItems.list({
+      invoice: invoiceId,
+    });
 
+    const lineItemsData = lineItems.data.map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      amount: item.amount / 100,
+    }));
+
+    return {
+      invoiceNumber: invoice.number,
+      amountDue: invoice.amount_due / 100,
+      amountPaid: invoice.amount_paid / 100,
+      amountRemaining: invoice.amount_remaining / 100,
+      currency: invoice.currency,
+      status: invoice.status,
+      customerId: invoice.customer,
+      billingReason: invoice.billing_reason,
+      subscriptionId: invoice.subscription,
+      lineItems: lineItemsData,
+      paymentMethod: invoice.payment_method,
+      receiptNumber: invoice.receipt_number,
+      created: new Date(invoice.created * 1000).toISOString(),
+      dueDate: new Date(invoice.due_date * 1000).toISOString(),
+    };
+  } catch (error) {
+    console.error('Error fetching invoice details:', error);
+    throw new AppError('Failed to fetch invoice details');
+  }
+}
 module.exports = {
   createStripeLoginLink,
   retrieveConnectAccount,
@@ -1523,7 +1559,8 @@ module.exports = {
   listSubscriptionsForCustomer,
   checkStripeAccountStatus,
   updateTransferMetadata,
-  updatePaymentIntentDescription
+  updatePaymentIntentDescription,
+  getInvoiceDetails
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination

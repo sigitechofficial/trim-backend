@@ -3255,4 +3255,42 @@ exports.updateSubscriptionsPriceId = async (req, res, next) => {
 };
 
 
+/*
+ * Get Invoice Details
+*/
+exports.fetchInvoice = async (req, res, next) => {
+  const { invoiceId } = req.params;
+
+  if (!invoiceId) {
+    return next(new appError('Invoice ID is required', 400));
+  }
+
+  try {
+    
+    const invoiceData = await Stripe.getInvoiceDetails(invoiceId);
+
+    
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        invoiceNumber: invoiceData.invoiceNumber,
+        amountDue: invoiceData.amountDue,
+        amountPaid: invoiceData.amountPaid,
+        amountRemaining: invoiceData.amountRemaining,
+        currency: invoiceData.currency,
+        status: invoiceData.status,
+        customerId: invoiceData.customerId,
+        billingReason: invoiceData.billingReason,
+        subscriptionId: invoiceData.subscriptionId,
+        lineItems: invoiceData.lineItems,
+        paymentMethod: invoiceData.paymentMethod,
+        receiptNumber: invoiceData.receiptNumber,
+        created: invoiceData.created,
+        dueDate: invoiceData.dueDate,
+      },
+    });
+  } catch (error) {
+    return next(new appError('Failed to fetch invoice details', 500));
+  }
+};
 
