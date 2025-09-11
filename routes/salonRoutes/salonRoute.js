@@ -337,4 +337,6 @@ router.patch(
 
 router.post('/update-subscriptions-price-id', catchAsync(salonController.updateSubscriptionsPriceId))
 
+router.get('/fetch-invoice/:invoiceId', catchAsync(salonController.fetchInvoice))
+
 module.exports = router
