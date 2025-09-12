@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
   const cancellationPolicy = sequelize.define('cancellationPolicy', {
     hoursBeforeBooking: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING(),
       allowNull: false,
       defaultValue: 24,
     },

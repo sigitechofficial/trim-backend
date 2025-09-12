@@ -96,27 +96,30 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
-  } = req.body
-  const salon = await salonDetail.findOne({ where: { userId } })
+  } = req.body;
+
+  const salon = await salonDetail.findOne({ where: { userId } });
   if (salon) {
-    console.log('---------------------> 2nd Attempt')
+    console.log('---------------------> 2nd Attempt');
     return res.json(
       returnFunction('1', 'Salon details successfully added!', salon, ''),
-    )
+    );
   }
+
   const exist = await salonDetail.findOne({
     where: {
       [Op.or]: [{ businessEmail }, { businessCountryCode, businessPhoneNum }],
     },
-  })
+  });
   if (exist) {
-    let message = `It appears this phone number is already associated with an account. Please use a different number.`
+    let message = `It appears this phone number is already associated with an account. Please use a different number.`;
     if (businessEmail == exist?.businessEmail) {
-      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`;
     }
-    throw new appError(message, 200)
+    throw new appError(message, 200);
   }
-  const addressData = await addressDBS.create(addressDetail)
+
+  const addressData = await addressDBS.create(addressDetail);
   const newEntry = await salonDetail.create({
     salonName,
     description,
@@ -127,57 +130,48 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
-  })
+  });
 
   await employee.create({
     position: 'Owner',
     userId,
     salonDetailId: newEntry.id,
     isOwner: true,
-  })
-  // const durations = [24, 48, 72] // Durations in hours
-  // const cancelationPolicies = durations.map((duration) => {
-  //   return {
-  //     hoursBeforeBooking: duration,
-  //     refundPercentage: 10,
-  //     salonDetailId: newEntry.id,
-  //   }
-  // })
-  
-  console.log("Create Cancellation Policy +++++++++++++++++++++++++")
+  });
+
+  // --------------- UPDATED CANCELLATION POLICY -----------------
+  console.log("Create Cancellation Policy +++++++++++++++++++++++++");
   await cancellationPolicy.bulkCreate([
-  {
-    hoursBeforeBooking: 24,
-    refundPercentage: 50,
-    salonDetailId: newEntry.id,
-  },
-  {
-    hoursBeforeBooking: 48,
-    refundPercentage: 25,
-    salonDetailId: newEntry.id,
-  },
-  {
-    hoursBeforeBooking: 72,
-    refundPercentage: 0,
-    salonDetailId: newEntry.id, // ✅ this matches your current single-create logic
-  },
-])
+    {
+      timeRange: "0-6",
+      refundPercentage: 50,
+      salonDetailId: newEntry.id,
+    },
+    {
+      timeRange: "6-24",
+      refundPercentage: 25,
+      salonDetailId: newEntry.id,
+    },
+    {
+      timeRange: "24-48",
+      refundPercentage: 0,
+      salonDetailId: newEntry.id,
+    },
+  ]);
 
-  //  paymentPolicy.create({
-  //   salonDetailId: newEntry.id,
-  // });
-
+  // Other policies remain the same
   paymentPolicy.create({
     salonDetailId: newEntry.id,
-  })
+  });
 
   reschedulePolicy.create({
     salonDetailId: newEntry.id,
-  })
+  });
 
   noShowPolicy.create({
     salonDetailId: newEntry.id,
-  })
+  });
+
   await salonProfiles.update(
     {
       hasTeamMembers: true,
@@ -186,11 +180,13 @@ exports.addSalonDetail = async (req, res, next) => {
       salonDetailId: newEntry.id,
     },
     { where: { userId } },
-  )
+  );
+
   return res.json(
     returnFunction('1', 'Salon details added successfully!', newEntry, ''),
-  )
-}
+  );
+};
+
 /*
     Get All Subscription Plans
     __________________________
