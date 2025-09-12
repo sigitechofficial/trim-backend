@@ -143,17 +143,17 @@ exports.addSalonDetail = async (req, res, next) => {
   console.log("Create Cancellation Policy +++++++++++++++++++++++++");
   await cancellationPolicy.bulkCreate([
     {
-      timeRange: "0-6",
+      hoursBeforeBooking: "0-6",
       refundPercentage: 50,
       salonDetailId: newEntry.id,
     },
     {
-      timeRange: "6-24",
+      hoursBeforeBooking: "6-24",
       refundPercentage: 25,
       salonDetailId: newEntry.id,
     },
     {
-      timeRange: "24-48",
+      hoursBeforeBooking: "24-48",
       refundPercentage: 0,
       salonDetailId: newEntry.id,
     },
