@@ -73,36 +73,32 @@ exports.stripeSubscriptionWebhookEventHandler = async (req, res) => {
 }
 const handleInvoicePayment = async (invoice, state, status) => {
   try {
-    const subscriptionId = invoice.subscription
-    const customerId = invoice.customer
-    const amountPaid = invoice.amount_paid / 100
-    const currency = invoice.currency
+    const subscriptionId = invoice.subscription;
+    const customerId = invoice.customer;
+    const amountPaid = invoice.amount_paid / 100;
+    const currency = invoice.currency;
     const name =
       invoice.lines?.data.length > 0
         ? invoice.lines?.data[invoice.lines?.data.length - 1]?.metadata
           ?.subscriptionName ||
         invoice.lines?.data[invoice.lines?.data.length - 1]?.description
-        : ''
+        : '';
 
-    const invoiceId = invoice.id
-    const subscribtionData =
-      await StripeHandler.subscriptionsRetrieve(subscriptionId)
+    const invoiceId = invoice.id;
 
-    const periodEnd = new Date(subscribtionData?.current_period_end * 1000)
-    const periodStart = new Date(subscribtionData?.current_period_start * 1000)
+    // Step 1: Fetch subscription data, including metadata
+    const subscribtionData = await StripeHandler.subscriptionsRetrieve(subscriptionId);
+    
+    // Step 2: Extract the metadata from the subscription
+    const metadata = subscribtionData.metadata || {};
+    console.log("Subscription Metadata =====================>>>>", metadata);
+
+    // Step 3: Process the period data
+    const periodEnd = new Date(subscribtionData?.current_period_end * 1000);
+    const periodStart = new Date(subscribtionData?.current_period_start * 1000);
     const priceId = subscribtionData?.items?.data?.[0]?.price?.id || null;
 
-
-    const lineItem = invoice.lines?.data[invoice.lines.data.length - 1];
-    const metadata = lineItem?.metadata || {};
-    console.log("MetaData=======================>>>>", metadata);
-    const vatAmount = parseFloat(metadata?.VAT || '0');
-
-
-    console.log("vatAmount=======================>>>>", vatAmount);
-
-
-
+    // Step 4: Prepare the input for the subscription (already done in your code)
     const input = {
       status: status,
       name,
@@ -115,16 +111,18 @@ const handleInvoicePayment = async (invoice, state, status) => {
       subscriptionId,
       invoiceId,
       priceId,
-      VAT: vatAmount,
-    }
-    console.log('🚀 ~ handleInvoicePaymentSucceeded ~ input:', input)
-    // Find the user by Stripe Customer ID
+      VAT: parseFloat(metadata?.VAT || '0'),
+    };
+
+    console.log('🚀 ~ handleInvoicePaymentSucceeded ~ input:', input);
+
+    // Step 5: Find the salon details
     const salon = await salonDetail.findOne({
       where: {
         userId: {
           [Op.in]: literal(`(
-        SELECT id FROM users WHERE stripeCustomerId = '${customerId}'
-      )`),
+            SELECT id FROM users WHERE stripeCustomerId = '${customerId}'
+          )`),
         },
       },
       attributes: [
@@ -135,36 +133,48 @@ const handleInvoicePayment = async (invoice, state, status) => {
         'subscriptionPlan',
         'registrationExpiryDate',
       ],
-    })
+    });
 
     if (!salon) {
-      console.warn(`User or subscriptions not found for Customer ID: ${salon}`)
-      return 0
-    }
-    if (state && state == 'success') {
-      salon.approvedByAdmin = true
-      salon.subscriptionPlan = subscriptionId
-      salon.registrationExpiryDate = periodEnd
-      salon.registrationDate = periodStart
-      salon.hasObtainedFreeTrial = 1
-      salon.subscriptionLatestPaymentStatus = status
-      await salon.save()
-    } else {
-      salon.hasObtainedFreeTrial = 1
-      salon.subscriptionLatestPaymentStatus = status
-      await salon.save()
+      console.warn(`User or subscriptions not found for Customer ID: ${salon}`);
+      return 0;
     }
 
-    input.salonDetailId = salon.id
-    subscriptions.create(input)
+    if (state && state === 'success') {
+      salon.approvedByAdmin = true;
+      salon.subscriptionPlan = subscriptionId;
+      salon.registrationExpiryDate = periodEnd;
+      salon.registrationDate = periodStart;
+      salon.hasObtainedFreeTrial = 1;
+      salon.subscriptionLatestPaymentStatus = status;
+      await salon.save();
+    } else {
+      salon.hasObtainedFreeTrial = 1;
+      salon.subscriptionLatestPaymentStatus = status;
+      await salon.save();
+    }
+
+    input.salonDetailId = salon.id;
+    subscriptions.create(input);
 
     console.log(
       `Payment succeeded for user ${salon.salonName} with ID ${salon.id}, subscriptions ID: ${subscriptionId}`,
-    )
+    );
+
+    // Step 6: Update invoice metadata
+    const updatedInvoice = await stripe.invoices.update(invoiceId, {
+      metadata: {
+        // Use the same metadata from the subscription here
+        ...metadata,
+      },
+    });
+
+    console.log('Updated Invoice Metadata:', updatedInvoice.metadata);
+
   } catch (error) {
-    console.error('Error handling invoice.payment_succeeded:', error)
+    console.error('Error handling invoice.payment_succeeded:', error);
   }
-}
+};
 
 const handleInvoicePaymentFailed = async (invoice) => {
   try {
