@@ -783,6 +783,16 @@ exports.cancelBooking = async (req, res, next) => {
       'subTotal',
       'initialPayment',
       'salonDetailId',
+      'customerId',
+      'clientFirstName',
+      'clientLastName',
+    ],
+    include: [
+      {
+        model: user,
+        attributes: ['firstName', 'lastName'],
+        required: false,
+      },
     ],
   });
 
@@ -808,10 +818,10 @@ exports.cancelBooking = async (req, res, next) => {
     );
   }
 
-  // ✅ Get connectAccountId for the salon
+  // ✅ Get connectAccountId and salon name for the salon
   const salon = await salonDetail.findOne({
     where: { id: appointment.salonDetailId },
-    attributes: ['connectAccountId'],
+    attributes: ['connectAccountId', 'salonName'],
   });
   const connectAccountId = salon?.connectAccountId;
 
@@ -826,9 +836,27 @@ exports.cancelBooking = async (req, res, next) => {
     appointment.initialPaymentIntend
   ) {
     const refundAmount = paid;
+    
+    // Prepare customer name
+    const customerName = appointment.user 
+      ? `${appointment.user.firstName} ${appointment.user.lastName}`
+      : `${appointment.clientFirstName || ''} ${appointment.clientLastName || ''}`.trim();
+    
+    // Prepare metadata for Stripe refund
+    const metadata = {
+      customerName: customerName,
+      salonName: salon?.salonName || 'Unknown Salon',
+      salonDetailId: appointment.salonDetailId.toString(),
+      bookingId: bookingId.toString(),
+      case: 'cancel',
+      refundAmount: refundAmount.toString(),
+      description: `Cancel: Refund of $${(refundAmount / 100).toFixed(2)} for booking #${bookingId}`
+    };
+    
     const refund = await Stripe.refundFullPayment(
       appointment?.initialPaymentIntend,
-      connectAccountId // ✅ passed here
+      connectAccountId, // ✅ passed here
+      metadata // ✅ pass metadata
     );
     if (refund?.id) {
       updatedBooking.finalPayment = 'paid';
@@ -1776,11 +1804,11 @@ exports.checkOutBooking = async (req, res, next) => {
     include: [
       {
         model: salonDetail,
-        attributes: ['id', 'connectAccountId'],
+        attributes: ['id', 'connectAccountId', 'salonName'],
       },
       {
         model: user,
-        attributes: ['id'], // ✅ only need ID
+        attributes: ['id', 'firstName', 'lastName'], // ✅ include customer name
       },
       { model: jobs },
     ],
@@ -1796,6 +1824,9 @@ exports.checkOutBooking = async (req, res, next) => {
       'stripeCardId',
       'actualCapturedAmount',
       'salonDetailId',
+      'customerId',
+      'clientFirstName',
+      'clientLastName',
     ],
   });
 
@@ -1836,12 +1867,29 @@ exports.checkOutBooking = async (req, res, next) => {
   const targetAmount = req.body.targetAmount;
   const salonEarning = amount + parseFloat(bookingData.actualCapturedAmount);
 
+  // Prepare customer name
+  const customerName = bookingData.user 
+    ? `${bookingData.user.firstName} ${bookingData.user.lastName}`
+    : `${bookingData.clientFirstName || ''} ${bookingData.clientLastName || ''}`.trim();
+
+  // Prepare metadata for Stripe payment capture
+  const metadata = {
+    customerName: customerName,
+    salonName: bookingData.salonDetail?.salonName || 'Unknown Salon',
+    salonDetailId: bookingData.salonDetailId.toString(),
+    bookingId: bookingId.toString(),
+    case: 'complete',
+    paymentAmount: amount.toString(),
+    description: `Complete: Payment of $${(amount / 100).toFixed(2)} for booking #${bookingId}`
+  };
+
   const payments = await Stripe.capturePayment(
     amount,
     customerId,
     bookingData.stripeCardId,
     accountId,
-    targetAmount
+    targetAmount,
+    metadata // ✅ pass metadata
   );
 
   if (payments.status === 'succeeded') {
@@ -2808,13 +2856,15 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       "paymentMethod",
       "stripeCardId",
       "customerId",
+      "clientFirstName",
+      "clientLastName",
       "noshowPolicyVersion",
       "cancellationPolicyVersion",
       "by",
     ],
     include: [
-      { model: user, attributes: ["id", "stripeCustomerId"] },
-      { model: salonDetail, attributes: ["id", "connectAccountId"] },
+      { model: user, attributes: ["id", "stripeCustomerId", "firstName", "lastName"] },
+      { model: salonDetail, attributes: ["id", "connectAccountId", "salonName"] },
     ],
   });
 
@@ -2862,11 +2912,28 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     if (paid > noshowCharges) {
       // -----> CASE: Initial payment greater, refund the difference
       const refundAmount = paid - noshowCharges;
+      
+      // Prepare customer name
+      const customerName = appointment.user 
+        ? `${appointment.user.firstName} ${appointment.user.lastName}`
+        : `${appointment.clientFirstName || ''} ${appointment.clientLastName || ''}`.trim();
+      
+      // Prepare metadata for Stripe refund
+      const metadata = {
+        customerName: customerName,
+        salonName: appointment.salonDetail?.salonName || 'Unknown Salon',
+        salonDetailId: appointment.salonDetailId.toString(),
+        bookingId: bookingId.toString(),
+        case: 'no-show',
+        refundAmount: refundAmount.toString(),
+        description: `No-Show: Refund of $${(refundAmount / 100).toFixed(2)} for booking #${bookingId}`
+      };
+      
       const refund = await Stripe.refundPartialPayment(
         appointment.initialPaymentIntend,
         refundAmount,
         appointment.salonDetail?.connectAccountId,
-        appointment // 👈 pass appointment for metadata
+        metadata // 👈 pass metadata instead of appointment
       );
 
       if (refund?.id) {
@@ -2878,13 +2945,30 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     } else if (paid < noshowCharges) {
       // -----> CASE: Charges greater, capture penalty
       const fineAmount = noshowCharges - paid;
+      
+      // Prepare customer name
+      const customerName = appointment.user 
+        ? `${appointment.user.firstName} ${appointment.user.lastName}`
+        : `${appointment.clientFirstName || ''} ${appointment.clientLastName || ''}`.trim();
+      
+      // Prepare metadata for Stripe penalty capture
+      const metadata = {
+        customerName: customerName,
+        salonName: appointment.salonDetail?.salonName || 'Unknown Salon',
+        salonDetailId: appointment.salonDetailId.toString(),
+        bookingId: bookingId.toString(),
+        case: 'no-show',
+        penaltyAmount: fineAmount.toString(),
+        description: `No-Show: Penalty of $${(fineAmount / 100).toFixed(2)} for booking #${bookingId}`
+      };
+      
       const fine = await Stripe.capturePayment(
         fineAmount,
         appointment.user?.stripeCustomerId,
         appointment.stripeCardId,
         appointment.salonDetail?.connectAccountId,
         appointment.total,
-        appointment // 👈 pass appointment for metadata
+        metadata // 👈 pass metadata instead of appointment
       );
 
       if (fine?.id) {
