@@ -977,7 +977,7 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
   }
 }
 // refund Payment
-async function refundPartialPayment(paymentIntentId, amountToRefund, connectAccountId, booking) {
+async function refundPartialPayment(paymentIntentId, amountToRefund, connectAccountId, metadata = null) {
   console.log("🚀 ~ refundPartialPayment ~ amountToRefund:", amountToRefund);
   try {
     const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
@@ -994,21 +994,19 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
 
     console.log("⚡️ ~ chargeId:", chargeId);
 
+    const refundData = {
+      charge: chargeId,
+      amount: convertToCents(amountToRefund),
+    };
+
+    // Add metadata and description if provided
+    if (metadata) {
+      refundData.description = metadata.description;
+      refundData.metadata = metadata;
+    }
+
     // ✅ Create refund in the context of the connected account
-    const refund = await stripe.refunds.create(
-      {
-        charge: chargeId,
-        amount: convertToCents(amountToRefund),
-        description: `Refund for No-Show Booking BK-${booking.id}`,
-        metadata: {
-          bookingId: booking.id,
-          shopId: booking.salonDetailId,
-          customerId: booking.customerId,
-          payment_Type: "no-show",
-        },
-      },
-      stripeOptions
-    );
+    const refund = await stripe.refunds.create(refundData, stripeOptions);
 
     console.log(`✅ Partial refund successful: ${amountToRefund}`, refund.id);
     return refund;
@@ -1020,7 +1018,7 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
 
 
 
-async function refundFullPayment(paymentIntentId, connectAccountId = null) {
+async function refundFullPayment(paymentIntentId, connectAccountId = null, metadata = null) {
   try {
     const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
 
@@ -1030,10 +1028,17 @@ async function refundFullPayment(paymentIntentId, connectAccountId = null) {
     const chargeId = paymentIntent.latest_charge;
     console.log("⚡ refundFullPayment ~ chargeId:", chargeId);
 
-    const refund = await stripe.refunds.create({
+    const refundData = {
       charge: chargeId,
       amount: paymentIntent.amount,
-    }, stripeOptions); // ✅ refund within connected account context
+    };
+
+    // Add metadata if provided
+    if (metadata) {
+      refundData.metadata = metadata;
+    }
+
+    const refund = await stripe.refunds.create(refundData, stripeOptions); // ✅ refund within connected account context
 
     console.log(`✅ Full refund successful: ${paymentIntent.amount / 100}`, refund.id);
     return refund;
