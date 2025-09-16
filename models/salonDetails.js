@@ -1,3 +1,5 @@
+const { type } = require("os")
+
 // salonDetail.js
 module.exports = (sequelize, DataTypes) => {
   const salonDetail = sequelize.define('salonDetail', {
@@ -123,6 +125,18 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: false,
     },
+    isVatRegistered: {
+      type:DataTypes.BOOLEAN,
+      defaultValue:false,
+    },
+    vatType:{
+      type:DataTypes.STRING(100),
+      allowNull:true,
+    },
+    vatNumber:{
+      type:DataTypes.STRING(100),
+      allowNull:true,
+    }
   })
 
   salonDetail.associate = (models) => {
