@@ -2861,6 +2861,7 @@ if (salonDetails?.hasObtainedFreeTrial) {
     members: req.body?.members,
     subscriptionName: req.body.subscriptionName,
     sloanId: salon.id,
+    salonDetailId: salonDetails.id,
     membersCount: req.body.membersCount,
     freeTrialDays: trialDays,
     paymentMethodId: req.body?.paymentMethodId,
