@@ -583,6 +583,8 @@ exports.updateSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
+    isVATRegistered,
+    vatType,
   } = req.body
   const salonData = await salonDetail.findOne({
     where: {
@@ -625,6 +627,8 @@ exports.updateSalonDetail = async (req, res, next) => {
       businessEmail,
       businessCountryCode,
       businessPhoneNum,
+      isVATRegistered,
+      vatType,
     },
     {
       where: {
@@ -784,7 +788,7 @@ exports.updateSalonVATDetails = async (req, res, next) => {
     return next(new appError('Salon not found!', 200))
   }
   await salonDetail.update(
-    { isVATRegistered, vatType, vatNumber }, { where: { id: salonDetailId } })
+    { isVATRegistered, vatType }, { where: { id: salonDetailId } })
   return res.json(returnFunction('1', 'Salon VAT details updated successfully!', {}, ''))
 }
 
