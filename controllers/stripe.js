@@ -1381,44 +1381,59 @@ async function listSubscriptionsForCustomer(customerId, limit = 30) {
     customer: customerId,
     status: 'all',
     limit,
-    expand: ['data.items.data.price'], // expand price only
+    expand: ['data.items.data.price', 'data.latest_invoice'], // add latest_invoice too
   });
 
-  function formatDate(unix) {
-    if (!unix) return null;
-    const ts = typeof unix === 'string' ? parseInt(unix, 10) : unix;
-    return new Date(ts * 1000).toISOString().split('T')[0];
-  }
+  const formatDate = (unix) => !unix ? null :
+    new Date((typeof unix === 'string' ? parseInt(unix, 10) : unix) * 1000)
+      .toISOString().split('T')[0];
 
   const results = [];
-  for (const sub of subs.data) {
-    const item = sub.items.data[0];
-    const price = item?.price;
 
-    let product = null;
-    if (price?.product) {
+  for (const sub of subs.data) {
+    const items = sub.items?.data ?? [];
+
+    // Sum all item prices (unit_amount * quantity). Missing unit_amount => 0
+    const totalUnitAmount = items.reduce((sum, it) => {
+      const ua = it.price?.unit_amount ?? 0;   // in smallest currency unit
+      const qty = it.quantity ?? 1;
+      return sum + ua * qty;
+    }, 0);
+
+    // Optionally add latest invoice total as a fallback (covers tiered/metered)
+    const latestInvoiceTotal = sub.latest_invoice?.total ?? null;
+
+    // choose currency from first item (assuming same currency)
+    const currency = items[0]?.price?.currency ?? sub.currency ?? 'gbp';
+
+    // Decide what to expose as “priceUnitAmount”
+    const priceUnitAmount = (totalUnitAmount > 0)
+      ? totalUnitAmount
+      : (latestInvoiceTotal ?? null); // fallback if unit_amounts are null
+
+    // pick a display name
+    const firstPrice = items[0]?.price;
+    let productName = firstPrice?.nickname;
+    if (!productName && firstPrice?.product) {
       try {
-        product = await stripe.products.retrieve(price.product);
-      } catch (err) {
-        console.error("❌ Failed to fetch product", price.product, err.message);
+        const product = await stripe.products.retrieve(firstPrice.product);
+        productName = product?.name || product?.metadata?.subscriptionName || 'Subscription';
+      } catch (e) {
+        productName = 'Subscription';
       }
     }
 
     results.push({
       id: sub.id,
       status: sub.status,
-      planName:
-        price?.nickname ||
-        product?.name ||
-        product?.metadata?.subscriptionName ||
-        'Subscription',
-      priceUnitAmount: price?.unit_amount, // might be null for tiered
-      priceCurrency: price?.currency,
-      interval: price?.recurring?.interval,
+      planName: productName || 'Subscription',
+      priceUnitAmount,               // still in cents; your controller divides by 100
+      priceCurrency: currency,
+      interval: firstPrice?.recurring?.interval,
       currentPeriodStart: formatDate(sub.current_period_start),
       currentPeriodEnd: formatDate(sub.current_period_end),
-      teamSize: product?.metadata?.teamSize || null,
-      VAT: product?.metadata?.VAT || null,
+      teamSize: sub.metadata?.teamSize ?? null,
+      VAT: sub.metadata?.VAT ?? null,
     });
   }
 

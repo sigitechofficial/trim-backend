@@ -96,6 +96,8 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
+    isVatRegistered,
+    vatType,
   } = req.body;
 
   const salon = await salonDetail.findOne({ where: { userId } });
@@ -130,6 +132,8 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
+    isVatRegistered,
+    vatType,
   });
 
   await employee.create({
