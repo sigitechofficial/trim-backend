@@ -125,7 +125,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: false,
     },
-    isVatRegistered: {
+    isVATRegistered: {
       type:DataTypes.BOOLEAN,
       defaultValue:false,
     },

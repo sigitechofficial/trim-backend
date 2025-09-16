@@ -96,7 +96,7 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
-    isVatRegistered,
+    isVATRegistered,
     vatType,
   } = req.body;
 
@@ -132,7 +132,7 @@ exports.addSalonDetail = async (req, res, next) => {
     businessEmail,
     businessCountryCode,
     businessPhoneNum,
-    isVatRegistered,
+    isVATRegistered,
     vatType,
   });
 
@@ -652,7 +652,7 @@ exports.salonProfile = async (req, res, next) => {
     include: [
       {
         model: user,
-        attributes: ['id', 'firstName', 'lastName', 'email','phoneNum','countryCode'],
+        attributes: ['id', 'firstName', 'lastName', 'email', 'phoneNum', 'countryCode'],
       },
       {
         model: socialLink,
@@ -748,7 +748,7 @@ exports.salonProfile = async (req, res, next) => {
   //         ? ''
   //         : Convert.convertTo12HourFormat(timeSlot.closingTime)
   // })
-  
+
   console.log('Trying to create Stripe login link for accountId:', salonData?.connectAccountId)
 
   if (salonData?.connectAccountId) {
@@ -761,7 +761,7 @@ exports.salonProfile = async (req, res, next) => {
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
     const output = JSON.parse(JSON.stringify(salonData))
     let stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Salon profile', { salonData,stripeDashboardlink }, ''))
+    return res.json(returnFunction('1', 'Salon profile', { salonData, stripeDashboardlink }, ''))
 
   } else {
     const output = JSON.parse(JSON.stringify(salonData))
@@ -770,6 +770,25 @@ exports.salonProfile = async (req, res, next) => {
   }
 
 }
+
+
+
+/*
+            4.Update Salon VAT Details 
+    ________________________________________
+*/
+exports.updateSalonVATDetails = async (req, res, next) => {
+  const { salonDetailId, isVATRegistered, vatType } = req.body
+  const salon = await salonDetail.findOne({ where: { id: salonDetailId } })
+  if (!salon) {
+    return next(new appError('Salon not found!', 200))
+  }
+  await salonDetail.update(
+    { isVATRegistered, vatType, vatNumber }, { where: { id: salonDetailId } })
+  return res.json(returnFunction('1', 'Salon VAT details updated successfully!', {}, ''))
+}
+
+
 /*
             4.Salon Gallery Images 
     ________________________________________
@@ -1052,19 +1071,19 @@ exports.updateCategory = async (req, res, next) => {
 }
 
 exports.changeCategoryStatus = async (req, res, next) => {
-  const { status,salonDetailId } = req.body
+  const { status, salonDetailId } = req.body
   console.log(" req.body------------------->>>", req.body)
   const { id } = req.params
-    const activeCategoryCount = await category.count({
+  const activeCategoryCount = await category.count({
     where: {
       salonDetailId,
       status: true,
     },
   })
   console.log("🚀 ~ exports.changeCategoryStatus= ~ salonIdFound:", activeCategoryCount)
-  
+
   if (!status && activeCategoryCount <= 1) {
-    throw new appError("Salon must have one Category Associated with it",200)
+    throw new appError("Salon must have one Category Associated with it", 200)
   }
 
   await category.update(
@@ -1145,7 +1164,7 @@ exports.fetchCoupons = async (req, res, next) => {
     ],
     order: [['id', 'DESC']],
   });
-  
+
   //return res.json(results)
 
   // Transform the response so slots are grouped by day
@@ -1448,9 +1467,9 @@ exports.customerSubscription = async (req, res, next) => {
   const expiryDate = new Date(salonData.registrationExpiryDate)
 
   if (customerSubscription.status == 'canceled' && expiryDate < currentDate) {
-      return res.json(
-    returnFunction('2', 'Subscription expired', { customerSubscription }, ''),
-  )
+    return res.json(
+      returnFunction('2', 'Subscription expired', { customerSubscription }, ''),
+    )
   }
 
   return res.json(
@@ -1556,7 +1575,7 @@ exports.updateSubscription = async (req, res, next) => {
     membersCount: newMemberCount,
     paymentMethodId: paymentMethodId,
     priceId: newPriceId,
-    teamSize:newMemberCount
+    teamSize: newMemberCount
   }
   //   {
   // subscriptionId:'subs_823940182euwjd0qsx'
@@ -2226,8 +2245,8 @@ exports.saleDetails = async (req, res, next) => {
   const remainingAmount =
     bookingData.status === 'save-unpaid'
       ? parseFloat(
-          (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2)
-        )
+        (bookingData.subTotal - bookingData.actualCapturedAmount).toFixed(2)
+      )
       : 0.0;
 
   const employees = await Promise.all(promises);
@@ -2717,7 +2736,7 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
     memberAmount: limited.unit_amount / 100,
     upTo: limited.up_to,
     freeTrialDays: 30,
-    hasObtainedFreeTrial: salonDetails?.hasObtainedFreeTrial || false,  
+    hasObtainedFreeTrial: salonDetails?.hasObtainedFreeTrial || false,
     stripeCustomer,
     clientSecret: setupIntent.client_secret,
     teamSize: salon?.dataValues?.teamSize || 0,
@@ -3203,55 +3222,55 @@ exports.accountDelete = async (req, res, next) => {
 }
 
 exports.updateSubscriptionsPriceId = async (req, res, next) => {
-    // Dynamically import p-limit
-    const { default: pLimit } = await import('p-limit');
+  // Dynamically import p-limit
+  const { default: pLimit } = await import('p-limit');
 
-    const latestPriceId = process.env.stage_PriceId;
+  const latestPriceId = process.env.stage_PriceId;
 
-    const subsToUpdate = await subscriptions.findAll({
-      where: {
-        [Op.or]: [
-          { priceId: { [Op.ne]: latestPriceId } },
-          { priceId: null }
-        ]
-      }
-    });
+  const subsToUpdate = await subscriptions.findAll({
+    where: {
+      [Op.or]: [
+        { priceId: { [Op.ne]: latestPriceId } },
+        { priceId: null }
+      ]
+    }
+  });
 
-    console.log(`🔍 Found ${subsToUpdate.length} subscriptions to update.`);
+  console.log(`🔍 Found ${subsToUpdate.length} subscriptions to update.`);
 
-    const limit = pLimit(15);
+  const limit = pLimit(15);
 
-    const updateJobs = subsToUpdate.map(sub =>
-      limit(async () => {
-        try {
-          const stripeSub = await Stripe.subscriptionsRetrieve(sub.subscriptionId);
-          const itemId = stripeSub?.items?.data?.[0]?.id;
+  const updateJobs = subsToUpdate.map(sub =>
+    limit(async () => {
+      try {
+        const stripeSub = await Stripe.subscriptionsRetrieve(sub.subscriptionId);
+        const itemId = stripeSub?.items?.data?.[0]?.id;
 
-          if (!itemId) {
-            console.warn(`⚠️ No subscription item found for ${sub.subscriptionId}`);
-            return { success: false, id: sub.subscriptionId, reason: 'No item ID' };
-          }
-
-          await Stripe.updateSubscription(sub.subscriptionId, latestPriceId, stripeSub.customer, null);
-
-          sub.priceId = latestPriceId;
-          await sub.save();
-
-          console.log(`✅ Updated subscription ${sub.subscriptionId}`);
-          return { success: true, id: sub.subscriptionId };
-        } catch (err) {
-          console.error(`❌ Failed to update subscription ${sub.subscriptionId}:`, err.message);
-          return { success: false, id: sub.subscriptionId, reason: err.message };
+        if (!itemId) {
+          console.warn(`⚠️ No subscription item found for ${sub.subscriptionId}`);
+          return { success: false, id: sub.subscriptionId, reason: 'No item ID' };
         }
-      })
-    );
 
-    const results = await Promise.allSettled(updateJobs);
+        await Stripe.updateSubscription(sub.subscriptionId, latestPriceId, stripeSub.customer, null);
 
-    const summary = results.map(r => (r.status === 'fulfilled' ? r.value : { success: false, reason: r.reason }));
+        sub.priceId = latestPriceId;
+        await sub.save();
 
-    return res.json(response({ message: 'Subscriptions updated', data: summary }));
-  
+        console.log(`✅ Updated subscription ${sub.subscriptionId}`);
+        return { success: true, id: sub.subscriptionId };
+      } catch (err) {
+        console.error(`❌ Failed to update subscription ${sub.subscriptionId}:`, err.message);
+        return { success: false, id: sub.subscriptionId, reason: err.message };
+      }
+    })
+  );
+
+  const results = await Promise.allSettled(updateJobs);
+
+  const summary = results.map(r => (r.status === 'fulfilled' ? r.value : { success: false, reason: r.reason }));
+
+  return res.json(response({ message: 'Subscriptions updated', data: summary }));
+
 };
 
 
@@ -3266,10 +3285,10 @@ exports.fetchInvoice = async (req, res, next) => {
   }
 
   try {
-    
+
     const invoiceData = await Stripe.getInvoiceDetails(invoiceId);
 
-    
+
     return res.status(200).json({
       status: 'success',
       data: {

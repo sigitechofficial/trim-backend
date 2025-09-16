@@ -86,6 +86,8 @@ router.post('/getAllServices', catchAsync(salonController.getAllServices))
 //! Salon profile Edit /Location, Services and social links
 // Add Social Links of Salon
 router.get('/salonProfile', catchAsync(salonController.salonProfile))
+//Update VAT Details
+router.patch('/salonVatUpdate',catchAsync(salonController.updateSalonVATDetails))
 //  Add Salon Gallery Images
 const uploadGalleryImgs = multer.diskStorage({
   destination: (req, file, cb) => {

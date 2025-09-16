@@ -868,6 +868,7 @@ async function createSubscriptionWithPriceId(
 
     await stripe.customers.update(customerId, {
       invoice_settings: { default_payment_method: paymentMethodId },
+      description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
     });
 
     const input = {
