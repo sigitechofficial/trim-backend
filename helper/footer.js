@@ -1,8 +1,8 @@
-const origin = '655 South Hope Street 901 Los Angeles California 90017'
-const address = '128 City Road, London, United Kingdom, EC1V 2NX'
-const copyRight = 'Copyright @ 2025 trim'
-const supportEmail = 'support@trimworldwide.com'
-const supportNumber = '017874854624'
+const origin = "655 South Hope Street 901 Los Angeles California 90017";
+const address = "128 City Road, London, United Kingdom, EC1V 2NX";
+const copyRight = "Copyright @ 2025 trim";
+const supportEmail = "support@trimworldwide.com";
+const supportNumber = "017874854624";
 
 exports.footer = ` <table
 align="center"
@@ -425,17 +425,12 @@ width="100%"
                         <tr>
                           <td style="padding: 0 2px 0 2px">
                             <img
-                              alt="Trim"
-                              height="80px"
-                              src="cid:logo"
-                              style="
-                                display: block;
-                                height: auto;
-                                border: 0;
-                              "
-                              title="Facebook"
-                              width="125px"
-                            />
+  src="cid:logo"
+  alt="Trim"
+  width="125"
+  style="display:block; width:125px; max-width:125px; height:auto; border:0; -ms-interpolation-mode:bicubic;"
+  title="Trim"
+/>
                           </td>
                         </tr>
                       </table>
@@ -457,7 +452,7 @@ width="100%"
 </table>
 <!-- End -->
 </body>
-</html>`
+</html>`;
 
 // <span
 //   style="color: #202053; margin-left: 5px"

@@ -39,15 +39,18 @@ exports.newFooter = `<tr>
                     <a href="#" style="color: black; text-decoration: underline;"></a>
                 </div>
             </td>
-        </tr>
         <tr>
-            <td align="center" style="padding: 20px;">
-                <div style="font-size: 16px; font-family: 'Work Sans', sans-serif; color: rgba(0, 0, 0, 0.6);">
-                    Powered by
-                </div>
-                <img src="cid:logo" alt="Trim" style="width: 119px; height: 40px; margin-top: 10px;">
-            </td>
-        </tr>
+  <td align="center" style="padding: 20px;">
+    <div style="font-size: 16px; font-family: 'Work Sans', sans-serif; color: rgba(0, 0, 0, 0.6);">
+      Powered by
+    </div>
+    <img 
+      src="cid:logo" 
+      alt="Trim" 
+      style="width:119px; max-width:119px; height:auto; margin-top:10px; display:block; border:0; -ms-interpolation-mode:bicubic;"
+    >
+  </td>
+</tr>
         
     </table>
 </body>
