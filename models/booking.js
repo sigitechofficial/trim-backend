@@ -199,6 +199,10 @@ module.exports = (sequelize, DataTypes) => {
     reminderSent: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
+    },
+    vatAmount:{
+      type:DataTypes.STRING(),
+      allowNull:true,
     }
   })
 
