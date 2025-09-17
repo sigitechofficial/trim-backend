@@ -760,6 +760,7 @@ exports.salonDetails = async (req, res, next) => {
           'id',
           'feedback',
           'createdAt',
+          'vatAmount',
           [
             literal(
               '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.bookingId = booking.id)',
@@ -2044,6 +2045,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'paymentMethod',
       'feedback',
       'salonReply',
+      'vatAmount',
       [
         literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.bookingId = booking.id)',
