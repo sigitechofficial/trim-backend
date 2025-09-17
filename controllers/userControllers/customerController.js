@@ -728,6 +728,8 @@ exports.salonDetails = async (req, res, next) => {
       'isOnline',
       "userId",
       'isExternalEmployee',
+      'isVATRegistered',
+      'vatType',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
