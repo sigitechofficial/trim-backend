@@ -357,6 +357,7 @@ exports.salonBookings = async (req, res, next) => {
       'clientLastName',
       'countryCode',
       'phoneNum',
+      'vatAmount',
       [
         literal(`(SELECT CONCAT(users.firstName, ' ', users.lastName)
                 FROM users
@@ -445,6 +446,7 @@ exports.salonBookings = async (req, res, next) => {
       }
       services.push(ele?.serviceName || '')
     })
+    let total=booking.total+booking.vatAmount
     const remaining =
       parseFloat(booking.total) +
       parseFloat(booking.discount) -
@@ -464,7 +466,7 @@ exports.salonBookings = async (req, res, next) => {
       client: `${booking.fullName || booking.clientFirstName}`,
       clientEmail: `${booking.email || booking.clientLastName}`,
       clientImage: `${booking.image || ''}`,
-      total: booking.total,
+      total: total ? total : booking.total,
       services,
       specialists: specialists.length > 0 ? [...new Set(specialists)] : [''],
     }
@@ -718,6 +720,8 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
+    let total=bookingData.total+bookingData.vatAmount
+
   let bookingDetail = {
     id: bookingData.id,
     scheduleDate: bookingData.on,
@@ -734,7 +738,7 @@ exports.bookingDetails = async (req, res, next) => {
     Upfront: bookingData.initialPayment,
     duration: bookingData.duration,
     initialPayment: bookingData.initialPayment,
-    total: bookingData.total,
+    total: total ? total : bookingData.total,
     customerId: bookingData?.customerId ?? '',
     last4: cardDetails?.last4 ?? '',
     paymentMethodId: bookingData?.stripeCardId ?? '',
