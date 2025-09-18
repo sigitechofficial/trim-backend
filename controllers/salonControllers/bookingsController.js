@@ -446,7 +446,8 @@ exports.salonBookings = async (req, res, next) => {
       }
       services.push(ele?.serviceName || '')
     })
-    let total=booking.total+parseFloat(booking.vatAmount)
+    let total=parseFloat(booking.total)+parseFloat(booking.vatAmount)
+    total=String(total)
     const remaining =
       parseFloat(booking.total) +
       parseFloat(booking.discount) -
@@ -720,7 +721,8 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
-    let total=bookingData.total+parseFloat(bookingData.vatAmount)
+    let total=parseFloat(bookingData.total)+parseFloat(bookingData.vatAmount)
+    total=String(total)
 
   let bookingDetail = {
     id: bookingData.id,
