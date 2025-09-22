@@ -2336,7 +2336,7 @@ exports.applyCoupon = async (req, res, next) => {
   );
 
   const { salonId, promoCode, bookingDate, bookingStartTime, bookingEndTime } = req.body;
-  console.log("req.body================>>>",req.body)
+  console.log("req.body================>>>", req.body);
 
   if (!salonId || !promoCode || !bookingStartTime || !bookingEndTime) {
     throw new AppError(
@@ -2347,6 +2347,7 @@ exports.applyCoupon = async (req, res, next) => {
 
   // 2️⃣ Determine date and day to check
   const dateToCheck = bookingDate || currentDay.currentDateOnly;
+  console.log("dateToCheck===========>>",dateToCheck)
   const dayName = CustomDateNew.getDayName(dateToCheck); // returns "Monday", "Tuesday", etc.
 
   // 3️⃣ Find coupon
@@ -2372,7 +2373,7 @@ exports.applyCoupon = async (req, res, next) => {
 
   data = JSON.parse(JSON.stringify(data));
   
-  console.log("Data====>",data)
+  console.log("Data====>", data);
 
   // 4️⃣ Check if coupon is valid for this day
   const slotsForToday = data.couponTimeSlots.filter(slot => slot.day === dayName);
@@ -2405,6 +2406,7 @@ exports.applyCoupon = async (req, res, next) => {
 
   // 6️⃣ Handle limit usage
   if (data.limit == null || data.limit < 1) {
+    // One-time per customer (kept exactly as you had it)
     const exist = await booking.findOne({
       where: {
         customerId: req.user?.id,
@@ -2419,10 +2421,30 @@ exports.applyCoupon = async (req, res, next) => {
         200
       );
     }
+
+    // Keeping your original in-memory assignments (no DB writes here)
     data.limit = 1;
     data.applied = 0;
+
   } else {
-    if (data.applied >= data.limit) {
+    // ✅ Limited overall usage: increment `applied` atomically (NO TRANSACTION)
+    const [updated] = await coupon.update(
+      { applied: literal('applied + 1') },
+      {
+        where: {
+          id: data.id,
+          status: 'active',
+          applied: { [Op.lt]: col('limit') },       // guard against overrun
+          from: { [Op.lte]: dateToCheck },          // still within window
+          till: { [Op.gte]: dateToCheck },
+        },
+      }
+    );
+    
+    console.log("updated============================>>",updated)
+
+    if (updated === 0) {
+      // Either limit reached or state changed between validation and increment
       throw new AppError(`This coupon has reached its usage limit.`, 200);
     }
   }
@@ -2434,7 +2456,6 @@ exports.applyCoupon = async (req, res, next) => {
   });
   return res.status(200).json(output);
 };
-
 //~ Reschedule & cancel
 
 //!Drawer
