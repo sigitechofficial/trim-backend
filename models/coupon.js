@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       limit: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        defaultValue: 0,
       },
       value: {
         type: DataTypes.INTEGER,
@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       applied: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        defaultValue: 0,
       },
       from: {
         type: DataTypes.DATEONLY,
