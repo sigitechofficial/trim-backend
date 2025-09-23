@@ -2317,7 +2317,7 @@ exports.salonWallet = async (req, res, next) => {
     where: {
       userId,
     },
-    attributes: ['id'],
+    attributes: ['id', 'vatType'],
   })
 
   const result = await wallet.findOne({
@@ -2331,12 +2331,32 @@ exports.salonWallet = async (req, res, next) => {
 
   let salonWallet = result ? JSON.parse(JSON.stringify(result)) : null
 
+  // Calculate total VAT amount if salon's vatType is 'exclusive'
+  let totalVatAmount = 0
+  if (salonData?.vatType === 'Exclusive') {
+    const bookings = await booking.findAll({
+      where: {
+        salonDetailId: salonData.id,
+      },
+      attributes: ['vatAmount'],
+    })
+
+    totalVatAmount = bookings.reduce((sum, booking) => {
+      const vatAmount = parseFloat(booking.vatAmount || 0)
+      return sum + vatAmount
+    }, 0)
+    
+    // Round to 2 decimal places
+    totalVatAmount = Math.round(totalVatAmount * 100) / 100
+  }
+
   if (salonWallet) {
     salonWallet.totalAmount =
       parseFloat(salonWallet.onlineAmount || 0) +
       parseFloat(salonWallet.cashAmount || 0) +
       parseFloat(salonWallet.tipAmount || 0) +
-      parseFloat(salonWallet.accruedRent || 0)
+      parseFloat(salonWallet.accruedRent || 0) +
+      parseFloat(totalVatAmount || 0)
 
     salonWallet.totalAmount =
       parseFloat(salonWallet.totalAmount) -
@@ -2345,6 +2365,9 @@ exports.salonWallet = async (req, res, next) => {
     salonWallet.totalAmount =
       parseFloat(salonWallet.totalAmount) -
       parseFloat(salonWallet.tipPayout || 0)
+
+    // Add total VAT amount to salon wallet
+    salonWallet.totalVatAmount = totalVatAmount
   }
 
   return res.json(
