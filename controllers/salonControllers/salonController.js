@@ -2355,8 +2355,7 @@ exports.salonWallet = async (req, res, next) => {
       parseFloat(salonWallet.onlineAmount || 0) +
       parseFloat(salonWallet.cashAmount || 0) +
       parseFloat(salonWallet.tipAmount || 0) +
-      parseFloat(salonWallet.accruedRent || 0) +
-      parseFloat(totalVatAmount || 0)
+      parseFloat(salonWallet.accruedRent || 0)
 
     salonWallet.totalAmount =
       parseFloat(salonWallet.totalAmount) -
