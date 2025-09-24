@@ -148,12 +148,12 @@ exports.addSalonDetail = async (req, res, next) => {
   await cancellationPolicy.bulkCreate([
     {
       hoursBeforeBooking: "0-6",
-      refundPercentage: 50,
+      refundPercentage: 25,
       salonDetailId: newEntry.id,
     },
     {
       hoursBeforeBooking: "6-24",
-      refundPercentage: 25,
+      refundPercentage: 0,
       salonDetailId: newEntry.id,
     },
     {
