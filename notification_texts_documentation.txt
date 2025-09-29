@@ -1,0 +1,265 @@
+# TRIM BACKEND - NOTIFICATION TEXTS DOCUMENTATION
+# ================================================
+
+This document contains all notification messages sent by the Trim backend application, organized by recipient type and event.
+
+## TABLE OF CONTENTS
+==================
+1. CUSTOMER NOTIFICATIONS
+2. SALON NOTIFICATIONS  
+3. EMPLOYEE NOTIFICATIONS
+4. ADMIN NOTIFICATIONS
+5. EMAIL NOTIFICATIONS
+6. SOCKET EVENTS
+
+## 1. CUSTOMER NOTIFICATIONS
+===========================
+
+### BOOKING CONFIRMATION
+- **Title:** "Booking confirmed"
+- **Body:** "Your booking with [SALON_NAME] on [DATE_TIME] has been confirmed."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentConfirm.js
+
+### BOOKING CANCELLATION (by Salon)
+- **Title:** "Booking cancelled"
+- **Body:** "Your booking on [DATE_TIME] has been cancelled."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentCancel.js
+
+### BOOKING CANCELLATION (by Customer)
+- **Title:** "Booking cancelled"
+- **Body:** "We regret to inform you that your booking on [DATE_TIME] has been cancelled."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentCancel.js
+
+### BOOKING RESCHEDULE (from Customer)
+- **Title:** "Rescheduled booking"
+- **Body:** "Your booking with [SALON_NAME] has been rescheduled to [DATE_TIME]."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentReschedule.js
+
+### BOOKING RESCHEDULE (from Salon)
+- **Title:** "Rescheduled appointment"
+- **Body:** "Your appointment with [SALON_NAME] has been rescheduled to [DATE_TIME]. Please let us know if this works for you."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentReschedule.js
+
+### NO-SHOW NOTIFICATION
+- **Title:** "No-show notification"
+- **Body:** "You seem to have missed your booking today, if this is wrong speak to the shop directly and they should be able to help."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentNoshow.js
+
+### REVIEW REQUEST
+- **Title:** "Review"
+- **Body:** "You can leave a review for your booking to let others know about your experience."
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentCheckout.js
+
+### TIP THANK YOU
+- **Title:** "Thank you for tipping"
+- **Body:** "Thank you for your generous tip. We greatly appreciate your support!"
+- **Sent to:** Customer
+- **File:** controllers/eventDrivenCommunication/appointmentCheckout.js
+
+## 2. SALON NOTIFICATIONS
+========================
+
+### NEW BOOKING
+- **Title:** "New booking"
+- **Body:** "[CUSTOMER_NAME] has booked on [DATE_TIME]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/appointmentConfirm.js
+
+### BOOKING CANCELLATION
+- **Title:** "Booking cancellation"
+- **Body:** "[CUSTOMER_NAME] has cancelled their booking on [DATE_TIME]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/appointmentCancel.js
+
+### BOOKING RESCHEDULE
+- **Title:** "Booking rescheduled"
+- **Body:** "[CUSTOMER_NAME] has rescheduled their booking to [DATE_TIME]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/appointmentReschedule.js
+
+### NO-SHOW
+- **Title:** "No-show"
+- **Body:** "[CUSTOMER_NAME] did not show up for their booking on [DATE_TIME]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/appointmentNoshow.js
+
+### PAYMENT RECEIVED
+- **Title:** "Payment received"
+- **Body:** "Payment of [CURRENCY][AMOUNT] received from [CUSTOMER_NAME]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/appointmentCheckout.js
+
+### NEW REVIEW
+- **Title:** "New review"
+- **Body:** "[CUSTOMER_NAME] has left a new review: [COMMENT]."
+- **Sent to:** Salon
+- **File:** controllers/eventDrivenCommunication/customerFeedback.js
+
+## 3. EMPLOYEE NOTIFICATIONS
+===========================
+
+### BOOKING ASSIGNED
+- **Title:** "Booking assigned"
+- **Body:** "A new appointment has been booked with [CUSTOMER_NAME] on [DATE_TIME] for [SERVICE_NAME]"
+- **Sent to:** Employee
+- **File:** controllers/eventDrivenCommunication/appointmentConfirm.js
+
+### BOOKING CANCELLATION
+- **Title:** "Booking cancellation"
+- **Body:** "[CUSTOMER_NAME] has cancelled their booking on [DATE_TIME] for [SERVICE_NAME]"
+- **Sent to:** Employee
+- **File:** controllers/eventDrivenCommunication/appointmentCancel.js
+
+### BOOKING RESCHEDULE
+- **Title:** "Booking rescheduled"
+- **Body:** "[CUSTOMER_NAME] has rescheduled their booking to [DATE_TIME] for [SERVICE_NAME]"
+- **Sent to:** Employee
+- **File:** controllers/eventDrivenCommunication/appointmentReschedule.js
+
+### NEW REVIEW NOTIFICATION
+- **Title:** "New review notification"
+- **Body:** "[CUSTOMER_NAME] has left a new review: [COMMENT]."
+- **Sent to:** Employee
+- **File:** controllers/eventDrivenCommunication/customerFeedback.js
+
+## 4. ADMIN NOTIFICATIONS
+========================
+
+### PUSH NOTIFICATION SYSTEM
+- **Title:** [ADMIN_DEFINED]
+- **Body:** [ADMIN_DEFINED]
+- **Sent to:** Customer/Salon/Employee/All
+- **File:** controllers/adminController/adminController.js
+- **Note:** Admin can send custom notifications to any user type
+
+## 5. EMAIL NOTIFICATIONS
+========================
+
+### CUSTOMER EMAIL SUBJECTS
+- **Booking Confirmed:** "Booking ref #[BOOKING_ID] is confirmed"
+- **Booking Cancelled:** "Booking ref #[BOOKING_ID] has been cancelled"
+- **Booking Rescheduled:** "Booking ref #[BOOKING_ID] has been rescheduled"
+- **No-Show:** "You missed your booking ref #[BOOKING_ID]"
+
+### CUSTOMER EMAIL TITLES
+- **Booking Confirmed:** "Hi [CUSTOMER_NAME], your booking is confirmed!"
+- **Booking Cancelled:** "Hi [CUSTOMER_NAME], your booking has been cancelled"
+- **Booking Rescheduled:** "Hi [CUSTOMER_NAME], your booking has been rescheduled!"
+- **No-Show:** "Hi [CUSTOMER_NAME], seems you missed an appointment!"
+
+### CUSTOMER EMAIL DESCRIPTIONS
+- **Booking Confirmed:** "On [DATE] with [SALON_NAME]"
+- **Booking Cancelled:** "Booking was scheduled for [DATE] with [SALON_NAME]"
+- **Booking Rescheduled:** "Your booking with [SALON_NAME] is now on [DATE]."
+- **No-Show:** "The shop's policy on missed bookings means they will deduct [PERCENTAGE]% of the booking value. For next time, double check the shop's policy and cancel with them early if needed."
+
+## 6. SOCKET EVENTS
+==================
+
+### BOOKING EVENTS
+- **Event:** "book-appointment"
+- **Event:** "complete-appointment"
+- **Event:** "update-appointment"
+- **Event:** "update-service"
+
+### ACCOUNT EVENTS
+- **Event:** "account-block"
+- **Data:** { type: 'logout' }
+
+## 7. EMAIL TEMPLATE ELEMENTS
+============================
+
+### FOOTER CONTENT
+- **Support Text:** "Unsure about how to use Trim, look up our FAQs."
+- **Copyright:** "Copyright © 2025 trim"
+- **Support Email:** "support@trimworldwide.com"
+- **Support Number:** "017874854624"
+
+### BUTTON TEXT
+- **Manage Booking:** "Manage Booking"
+- **Rebook:** "Rebook"
+- **Get Directions:** "Get directions"
+- **Rebook Appointment:** "Rebook your appointment"
+
+### BADGE TEXT
+- **Confirmed:** "Confirmed"
+- **Cancelled:** "Cancelled"
+- **No-Show:** "No-Show"
+
+## 8. NOTIFICATION RECIPIENTS SUMMARY
+====================================
+
+### CUSTOMER NOTIFICATIONS (User Type: 1)
+- Booking confirmations
+- Booking cancellations
+- Booking reschedules
+- No-show notifications
+- Review requests
+- Tip thank you messages
+
+### SALON NOTIFICATIONS (User Type: 2)
+- New booking alerts
+- Booking cancellations
+- Booking reschedules
+- No-show alerts
+- Payment confirmations
+- New review notifications
+
+### EMPLOYEE NOTIFICATIONS (User Type: 3)
+- Booking assignments
+- Booking cancellations
+- Booking reschedules
+- Review notifications
+
+### ADMIN NOTIFICATIONS
+- Custom push notifications to any user type
+- System-wide announcements
+
+## 9. TECHNICAL IMPLEMENTATION
+=============================
+
+### NOTIFICATION SENDING
+- **File:** utils/throwNotification.js
+- **File:** utils/throwNotificationByAdmin.js
+- **File:** utils/throwNotificationBySalon.js
+
+### EMAIL SENDING
+- **File:** helper/AppointmentEmailsToCustomer.js
+- **File:** helper/AppointmentEmailsToSalon.js
+- **File:** helper/ThankYouForVisiting.js
+
+### SOCKET COMMUNICATION
+- **File:** socket_io.js
+- **File:** utils/socketUtilities.js
+
+## 10. NOTIFICATION TRIGGERS
+===========================
+
+### BOOKING LIFECYCLE
+1. **Booking Created** → Customer & Salon notifications
+2. **Booking Confirmed** → Customer & Salon notifications
+3. **Booking Cancelled** → Customer & Salon & Employee notifications
+4. **Booking Rescheduled** → Customer & Salon & Employee notifications
+5. **Booking Completed** → Customer & Salon notifications
+6. **No-Show** → Customer & Salon notifications
+
+### PAYMENT LIFECYCLE
+1. **Payment Received** → Salon notification
+2. **Tip Given** → Customer notification
+3. **Review Requested** → Customer notification
+
+### FEEDBACK LIFECYCLE
+1. **Review Submitted** → Salon & Employee notifications
+
+---
+
+**Last Updated:** [CURRENT_DATE]
+**Version:** 1.0
+**Maintained by:** Development Team

@@ -3067,7 +3067,7 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
       connectedAccountId,
     );
 
-    return res.json(response({ status: "1", message: "Amount Transferred",transferId:result.transferId }));
+    return res.json(response({ status: "1", message: "Amount Transferred",data:{transferId:result.transferId} }));
 };
 
 
