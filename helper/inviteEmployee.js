@@ -65,7 +65,7 @@ module.exports = function (to = [], data) {
               </tr>
               <tr>
                   <td align="center" style="padding: 20px;">
-                      <img src="cid:invite" alt="Invite" style="display: block; width: 147px; height: 102px;">
+                      <img src="cid:invite" alt="Invite" style="display: block; height: 102px;">
                   </td>
               </tr>
               <tr>

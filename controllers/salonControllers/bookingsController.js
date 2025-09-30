@@ -90,6 +90,223 @@ let returnFunction = (status, message, data, error) => {
 }
 
 //* Home:1 Calendar view with filters
+// exports.calendarAppointments = async (req, res, next) => {
+//   const salon = await salonDetail.findOne({
+//     where: { userId: req?.user?.id },
+//     attributes: ['id', 'parentSalonId', 'onlinePayments'],
+//   })
+//   console.log(req.body)
+//   let parentSalonName = ''
+//   const JobAttributes = [
+//     'id',
+//     'on',
+//     'status',
+//     'startTime',
+//     'endTime',
+//     'total',
+//     'duration',
+//     'serviceDiscount',
+//     'extraDiscount',
+//     'serviceId',
+//     'employeeId',
+//     'bookingId',
+//     [
+//       literal(
+//         `(SELECT services.serviceName
+//        FROM services WHERE services.id = jobs.serviceId)`,
+//       ),
+//       'serviceName',
+//     ],
+//     [
+//       literal(
+//         `(SELECT categories.color
+//           FROM services
+//           INNER JOIN categories ON services.categoryId = categories.id
+//           WHERE services.id = jobs.serviceId
+//           LIMIT 1)`,
+//       ),
+//       'color',
+//     ],
+
+//     [
+//       literal(
+//         `(SELECT CONCAT(users.firstName, ' ', users.lastName)
+//           FROM users
+//           INNER JOIN bookings ON bookings.customerId = users.id
+//           WHERE bookings.id = jobs.bookingId
+//           LIMIT 1)`,
+//       ),
+//       'customerName',
+//     ],
+//     [
+//       literal(
+//         `(SELECT bookings.customerId
+//        FROM bookings WHERE bookings.id = jobs.bookingId)`,
+//       ),
+//       'customerId',
+//     ],
+//   ]
+
+//   if (salon?.parentSalonId) {
+//     const parentSalon = await salonDetail.findOne({
+//       where: { id: salon?.parentSalonId },
+//       attributes: ['id', 'salonName'],
+//     })
+
+//     parentSalonName = parentSalon?.salonName
+//   }
+//   if (!salon) {
+//     throw new AppError('Resource not found', 404)
+//   }
+//   const employeCondition = {
+//     salonDetailId: salon?.id,
+//     deleted: 0,
+//     status: true,
+//     isExternalEmployee: false,
+//   }
+//   const jobCondition = {
+//     status: {
+//       [Op.or]: ['assign', 'complete', 'no-show'],
+//     },
+//     on: req.params?.date,
+//   }
+//   const unAssignCondition = {
+//     status: {
+//       [Op.or]: ['pending', 'no-show'],
+//     },
+//     employeeId: null,
+//     on: req.params.date,
+//     [Op.and]: literal(`EXISTS (
+//       SELECT 1
+//       FROM bookings
+//       WHERE bookings.id = jobs.bookingId
+//       AND bookings.salonDetailId = ${salon?.id}
+//     )`),
+//   }
+
+//   if (req.body?.employeeList && req.body?.employeeList.length > 0)
+//     employeCondition.id = { [Op.or]: req.body?.employeeList }
+
+//   if (req.body?.serviceList && req.body?.serviceList.length > 0) {
+//     jobCondition.serviceId = { [Op.or]: req.body?.serviceList }
+//     unAssignCondition.serviceId = { [Op.or]: req.body?.serviceList }
+//   }
+
+//   const data = await employee.findAll({
+//     where: employeCondition,
+//     attributes: [
+//       'id',
+//       // 'salonDetailId',
+//       'position',
+//       [
+//         literal(
+//           `(SELECT users.firstName
+//            FROM users WHERE users.id = employee.userId)`,
+//         ),
+//         'firstName',
+//       ],
+//       [
+//         literal(
+//           `(SELECT users.lastName
+//            FROM users WHERE users.id = employee.userId)`,
+//         ),
+//         'lastName',
+//       ],
+//       [
+//         literal(
+//           `(SELECT users.image
+//            FROM users WHERE users.id = employee.userId)`,
+//         ),
+//         'image',
+//       ],
+//       [
+//         literal(
+//           `(SELECT times.openingTime
+//            FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+//         ),
+//         'openingTime',
+//       ],
+//       [
+//         literal(
+//           `(SELECT times.closingTime
+//            FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+//         ),
+//         'closingTime',
+//       ],
+//       [
+//         literal(
+//           `(SELECT times.status
+//            FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+//         ),
+//         'dayStatus',
+//       ],
+//     ],
+//     include: [
+//       {
+//         model: jobs,
+//         required: false,
+//         where: jobCondition,
+//         attributes: JobAttributes,
+//       },
+//     ],
+//   })
+
+//   const results = JSON.parse(JSON.stringify(data))
+//   const startOfDay = '00:00:00'
+//   const endOfDay = '23:59:59'
+
+//   // Process each employee to set default opening and closing times if needed
+//   results.forEach((employee) => {
+//     if (!employee.dayStatus || !employee.openingTime) {
+//       employee.openingTime = startOfDay
+//     }
+//     if (!employee.dayStatus || !employee.closingTime) {
+//       employee.closingTime = endOfDay
+//     }
+//   })
+
+//   const salonTimes = await time.findOne({
+//     where: { salonDetailId: salon?.id, day: req.params?.day },
+//     attributes: ['openingTime', 'closingTime', 'status'],
+//   })
+
+//   const unAssignedJobs = await jobs.findAll({
+//     where: unAssignCondition,
+//     attributes: JobAttributes,
+//   })
+
+//   if (req.body.status == 'Un-Assigned') {
+//     results.forEach((el) => {
+//       el.jobs = []
+//     })
+//   }
+
+//   if (unAssignedJobs.length > 0) {
+//     const unassign = {
+//       id: 0,
+//       position: '',
+//       firstName: 'UnAssigned',
+//       lastName: '',
+//       openingTime: salonTimes?.openingTime,
+//       closingTime: salonTimes?.closingTime,
+//       dayStatus: salonTimes?.status ? 1 : 0,
+//       jobs: req.body.status == 'Assign' ? [] : unAssignedJobs,
+//     }
+//     results.push(unassign)
+//   }
+//   const output = response({
+//     message: 'Success.',
+//     data: {
+//       salonTimes,
+//       employees: results || [],
+//       parentSalonName,
+//       onlinePayments: salon?.onlinePayments ?? true,
+//     },
+//   })
+
+//   return res.status(200).json(output)
+// }
+
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
@@ -113,7 +330,7 @@ exports.calendarAppointments = async (req, res, next) => {
     [
       literal(
         `(SELECT services.serviceName
-       FROM services WHERE services.id = jobs.serviceId)`,
+       FROM services WHERE services.id = jobs.serviceId LIMIT 1)`
       ),
       'serviceName',
     ],
@@ -123,25 +340,24 @@ exports.calendarAppointments = async (req, res, next) => {
           FROM services
           INNER JOIN categories ON services.categoryId = categories.id
           WHERE services.id = jobs.serviceId
-          LIMIT 1)`,
+          LIMIT 1)`
       ),
       'color',
     ],
-
     [
       literal(
         `(SELECT CONCAT(users.firstName, ' ', users.lastName)
           FROM users
           INNER JOIN bookings ON bookings.customerId = users.id
           WHERE bookings.id = jobs.bookingId
-          LIMIT 1)`,
+          LIMIT 1)`
       ),
       'customerName',
     ],
     [
       literal(
         `(SELECT bookings.customerId
-       FROM bookings WHERE bookings.id = jobs.bookingId)`,
+       FROM bookings WHERE bookings.id = jobs.bookingId)`
       ),
       'customerId',
     ],
@@ -196,47 +412,46 @@ exports.calendarAppointments = async (req, res, next) => {
     where: employeCondition,
     attributes: [
       'id',
-      // 'salonDetailId',
       'position',
       [
         literal(
           `(SELECT users.firstName
-           FROM users WHERE users.id = employee.userId)`,
+           FROM users WHERE users.id = employee.userId LIMIT 1)`
         ),
         'firstName',
       ],
       [
         literal(
           `(SELECT users.lastName
-           FROM users WHERE users.id = employee.userId)`,
+           FROM users WHERE users.id = employee.userId LIMIT 1)`
         ),
         'lastName',
       ],
       [
         literal(
           `(SELECT users.image
-           FROM users WHERE users.id = employee.userId)`,
+           FROM users WHERE users.id = employee.userId LIMIT 1)`
         ),
         'image',
       ],
       [
         literal(
           `(SELECT times.openingTime
-           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}' LIMIT 1)`
         ),
         'openingTime',
       ],
       [
         literal(
           `(SELECT times.closingTime
-           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}' LIMIT 1)`
         ),
         'closingTime',
       ],
       [
         literal(
           `(SELECT times.status
-           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}')`,
+           FROM times WHERE times.employeeId = employee.id AND times.day = '${req.params.day}' LIMIT 1)`
         ),
         'dayStatus',
       ],
@@ -306,7 +521,6 @@ exports.calendarAppointments = async (req, res, next) => {
 
   return res.status(200).json(output)
 }
-
 //! bookings
 /*
             4.Home
