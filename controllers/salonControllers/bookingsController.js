@@ -956,6 +956,7 @@ exports.bookingDetails = async (req, res, next) => {
     initialPayment: bookingData.initialPayment,
     total: bookingData.total,
     vatAmount: bookingData.vatAmount,
+    platformFee: bookingData.platformFee,
     customerId: bookingData?.customerId ?? '',
     last4: cardDetails?.last4 ?? '',
     paymentMethodId: bookingData?.stripeCardId ?? '',
