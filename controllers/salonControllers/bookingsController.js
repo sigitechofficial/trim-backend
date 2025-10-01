@@ -660,8 +660,8 @@ exports.salonBookings = async (req, res, next) => {
       }
       services.push(ele?.serviceName || '')
     })
-    let total=parseFloat(booking.total)+parseFloat(booking.vatAmount)
-    total=String(total)
+    //let total=parseFloat(booking.total)+parseFloat(booking.vatAmount)
+    //total=String(total)
     const remaining =
       parseFloat(booking.total) +
       parseFloat(booking.discount) -
@@ -681,7 +681,7 @@ exports.salonBookings = async (req, res, next) => {
       client: `${booking.fullName || booking.clientFirstName}`,
       clientEmail: `${booking.email || booking.clientLastName}`,
       clientImage: `${booking.image || ''}`,
-      total: total ? total : booking.total,
+      total: booking.total,
       services,
       specialists: specialists.length > 0 ? [...new Set(specialists)] : [''],
     }
@@ -935,8 +935,8 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
-    let total=parseFloat(bookingData.total)+parseFloat(bookingData.vatAmount)
-    total=String(total)
+    // let total=parseFloat(bookingData.total)+parseFloat(bookingData.vatAmount)
+    // total=String(total)
 
   let bookingDetail = {
     id: bookingData.id,
@@ -954,7 +954,8 @@ exports.bookingDetails = async (req, res, next) => {
     Upfront: bookingData.initialPayment,
     duration: bookingData.duration,
     initialPayment: bookingData.initialPayment,
-    total: total ? total : bookingData.total,
+    total: bookingData.total,
+    vatAmount: bookingData.vatAmount,
     customerId: bookingData?.customerId ?? '',
     last4: cardDetails?.last4 ?? '',
     paymentMethodId: bookingData?.stripeCardId ?? '',

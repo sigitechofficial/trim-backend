@@ -2022,6 +2022,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       `discount`,
       `total`,
       'actualCapturedAmount',
+      'platformFee',
       'tip',
       `initialPayment`,
       `startTime`,
