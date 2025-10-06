@@ -2298,6 +2298,7 @@ exports.saleDetails = async (req, res, next) => {
     vatAmount: bookingData?.vatAmount,
     tip:bookingData?.tip ?? 0.00,
     platformFee: bookingData?.platformFee ?? 0.00,
+    discount:bookingData?.discount ?? 0.00,
     initialPaymentIntend: bookingData.initialPaymentIntend,
     finalPaymentIntend: bookingData.finalPaymentIntend,
     customerId: bookingData.customerId,
