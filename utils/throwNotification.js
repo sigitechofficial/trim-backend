@@ -15,9 +15,12 @@ module.exports = async function Throw(
   userId = null,
   broadcastTo = null,
 ) {
-  console.log('🚀 ~ Throw ~ to:', to)
+  console.log('ðŸš€ ~ Throw ~ to:', to)
+  console.log("Tokens =============================>>>>>>>>>>>>>",to)
+  console.log("notification =============================>>>>>>>>>>>>>",notification)
+  console.log("data======================================>>>>>>>",data)
   // Ensure `data` is an object and has string values
-
+  
   const validData = data && typeof data === 'object' ? data : {}
 
   for (const key in validData) {
@@ -43,14 +46,19 @@ module.exports = async function Throw(
     notification,
     data: validData, // Ensure data is a valid object
   }
+  
+  console.log("message=========MSG MSG =====>>>",message)
 
   try {
-    if (to && to.length > 0) {
-      console.log('🚀 ~ Throw ~ to: Not-Empty')
-      const response = await admin.messaging().sendEachForMulticast(message)
-      console.log('Successfully sent message:', response)
-    }
-  } catch (error) {
-    console.error('Error sending message:', error)
+  const response = await admin.messaging().sendEachForMulticast(message);
+  if (response.failureCount > 0) {
+    response.responses.forEach((resp, index) => {
+      if (!resp.success) {
+        console.error(`Error sending message to token ${to[index]}:`, resp.error);
+      }
+    });
   }
+} catch (error) {
+  console.error('Error while sending the notification:', error);
+}
 }
