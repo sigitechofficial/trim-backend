@@ -552,35 +552,6 @@ also be sending you a window cling (free) to put on your shop's window to show p
                                   >
                                   <p style="margin: 0">
                                     Make sure you keep this email saved for when your cling arrives.
-                                  </p>
-                                    <p style="margin: 0">
-                                    Let's discuss when we catch up.
-                                  </p>
-                                  <p style="margin: 0">
-                                    Many thanks,
-                                  </p>
-                                  </div>
-                                </td>
-                              </tr>
-                                <tr>
-                                <td>
-                                  <div
-                                    style="
-                                      color: #000000cc;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 16px;
-                                      font-weight: 400;
-                                      letter-spacing: 0px;
-                                      text-align: left;
-                                    "
-                                  >
-                                  <p style="margin: 0">
-                                    Charles
-                                  </p>
-                                  <p style="margin: 0">
-                                    078 588 42014,
-                                  </p>
                                   </div>
                                 </td>
                               </tr>

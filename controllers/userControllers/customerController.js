@@ -86,6 +86,7 @@ const {
 //! Return Function
 //* DEMO. Eamil Testing ----------------------
 const axios = require('axios')
+const throwNotification = require('../../utils/throwNotification')
 
 function formatTime(totalMinutes) {
   let hours = Math.floor(totalMinutes / 60)
@@ -197,17 +198,51 @@ exports.emailtesting = async (req, res, next) => {
 //* DEMO. Notification Testing ----------------------
 
 exports.notificationTesting = async (req, res, next) => {
-  const customerNotification = {
-    title: `JUST TESTING `,
-    body: `Your appointment has been confirmed. Looking forward to seeing you!`,
+  try {
+    const { to, title, body, data } = req.body;
+    
+    // Default test notification if no data provided
+    const customerNotification = {
+      title: title || `TEST NOTIFICATION`,
+      body: body || `This is a test notification to verify your notification system is working properly!`,
+    }
+
+    // Default test data
+    const testData = data || {
+      type: 'test',
+      timestamp: new Date().toISOString(),
+      message: 'Notification test successful'
+    }
+
+    // Default test tokens if none provided
+    const testTokens = to || ['test-token-1', 'test-token-2'];
+
+    console.log('🧪 Testing notification with:', {
+      to: testTokens,
+      notification: customerNotification,
+      data: testData
+    });
+    
+    // Send the test notification
+    await throwNotification(testTokens, customerNotification, testData);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Test notification sent successfully',
+      data: {
+        sentTo: testTokens,
+        notification: customerNotification,
+        testData: testData
+      }
+    });
+  } catch (error) {
+    console.error('❌ Notification test failed:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Notification test failed',
+      error: error.message
+    });
   }
-
-  if (req.body?.subId) Stripe.expireManually(req?.body?.subId)
-
-  // ThrowNotification(req.body.to, customerNotification, {
-  //   appointment: 1,
-  // })
-  return res.status(200).json(response({ data: {} }))
 }
 
 //* 1.Get Home ----------------------
