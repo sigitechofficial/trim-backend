@@ -553,6 +553,9 @@ also be sending you a window cling (free) to put on your shop's window to show p
                                   <p style="margin: 0">
                                     Make sure you keep this email saved for when your cling arrives.
                                   </p>
+                                    <p style="margin: 0">
+                                    lets discuss when we catch up.
+                                  </p>
                                   <p style="margin: 0">
                                     Many thanks,
                                   </p>
