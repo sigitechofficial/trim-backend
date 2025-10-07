@@ -67,6 +67,11 @@ function attachments() {
       path: __dirname + '/images/star.png',
       cid: 'star',
     },
+    cling: {
+      filename: 'cling.png',
+      path: __dirname + '/images/cling_Img.png',
+      cid: 'cling',
+    },
   }
 
   return {
@@ -77,6 +82,7 @@ function attachments() {
     cancel: [attachment.cancel],
     confirm: [attachment.confirm],
     trim: [attachment.trim],
+    cling: [attachment.cling],
     footer: [
       attachment.logo,
       attachment.facebook,
