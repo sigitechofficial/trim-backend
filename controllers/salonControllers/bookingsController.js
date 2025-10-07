@@ -2086,7 +2086,7 @@ exports.checkOutBooking = async (req, res, next) => {
 
   const customerId = customerConnect.customerId;
 
-  const amount = parseFloat(req.body.amount) + tip;
+  let amount = parseFloat(req.body.amount) + tip;
   const targetAmount = req.body.targetAmount;
   amount=amount-bookingData.tip
   const salonEarning = amount + parseFloat(bookingData.actualCapturedAmount);
