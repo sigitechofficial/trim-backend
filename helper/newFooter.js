@@ -8,7 +8,7 @@ exports.newFooter = `<tr>
             <td style="padding: 20px 20px; text-align: left;">
                 <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px; display: flex; align-items: center; gap: 10px;">
                     Unsure about how to use Trim, look up our <a style="
-                    color: #292929;" href="https://www.trimworldwide.co.uk/faqs target="_blank">FAQs.</a>
+                    color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
                 </div>
             </td>
         </tr>
