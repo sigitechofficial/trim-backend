@@ -130,6 +130,7 @@ router.put('/detach-card/:pm', protect, catchAsync(appController.detachCard))
 
 // Coupons
 router.post('/apply-coupon', protect, catchAsync(appController.applyCoupon))
+router.post('/test-coupon-tracking', catchAsync(appController.testCouponTracking))
 
 // Drawer
 router.patch(

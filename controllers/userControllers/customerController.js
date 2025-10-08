@@ -38,6 +38,7 @@ const {
   pushNotification,
   customerOnConnectAccount,
   couponTimeSlot,
+  couponOnBooking,
   wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
@@ -1876,6 +1877,15 @@ exports.bookAppointment = async (req, res, next) => {
     data: { appointment: book?.id },
   })
 
+  if(req.body.couponId){
+    const bookingCouponId = await couponOnBooking.update(
+      { bookingId: book.id },
+      { where: { couponId: req.body.couponId, bookingId: null} }
+    )
+    if(!bookingCouponId){
+      throw new AppError('Something went wrong coupon not linked to booking', 200);
+    }
+  }
 
   const salon = await salonDetail.findByPk(book.salonDetailId, {
     attributes: ['connectAccountId']
@@ -2144,6 +2154,23 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
           { model: service, attributes: [`id`, `serviceName`] },
         ],
       },
+      {
+        model: couponOnBooking,
+        attributes: ['id', 'isCouponUsed', 'couponId', 'bookingId'],
+        required: false, // LEFT JOIN - include booking even if no coupon
+        include: [
+          {
+            model: coupon,
+            attributes: ['id', 'promoCode', 'type', 'value', 'status', 'from', 'till'],
+            include: [
+              {
+                model: couponTimeSlot,
+                attributes: ['id', 'day', 'timeFrom', 'timeTo']
+              }
+            ]
+          }
+        ]
+      },
     ],
   })
 
@@ -2162,6 +2189,10 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
   const output = data.toJSON()
   output.jobs = actualJobs
+
+  if (output.couponOnBooking && Array.isArray(output.couponOnBooking) && output.couponOnBooking.length === 0) {
+    output.couponOnBooking = null
+  }
 
   const policies = await salonDetail.findOne({
     where: { id: output.salonDetail.id },
@@ -2485,13 +2516,58 @@ exports.applyCoupon = async (req, res, next) => {
     }
   }
 
-  // 7️⃣ Return success
+  // 7️⃣ Create couponOnBooking record to track coupon usage
+    await couponOnBooking.create({
+      couponId: data.id,
+      isCouponUsed: true,
+    });
+    console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
+
+  // 8️⃣ Return success
   const output = response({
     message: 'Success',
     data: { promoCode: data },
   });
   return res.status(200).json(output);
 };
+
+//* Test Coupon Tracking -----------------
+exports.testCouponTracking = async (req, res, next) => {
+    const { couponId } = req.body;
+    
+    if (!couponId) {
+      throw new AppError('couponId is required', 200);
+    }
+
+    // Check if couponOnBooking record exists
+    const trackingRecord = await couponOnBooking.findOne({
+      where: {
+        couponId: couponId
+      },
+      include: [
+        {
+          model: coupon,
+          attributes: ['id', 'promoCode', 'type', 'value']
+        }
+      ]
+    });
+
+    if (!trackingRecord) {
+      throw new AppError('No tracking record found for this coupon', 200);
+    }
+
+    const output = response({
+      message: 'Coupon tracking record found',
+      data: {
+        couponId: trackingRecord.couponId,
+        isCouponUsed: trackingRecord.isCouponUsed,
+        coupon: trackingRecord.coupon,
+      },
+    });
+    return res.status(200).json(output);
+
+};
+
 //~ Reschedule & cancel
 
 //!Drawer
