@@ -29,6 +29,7 @@ const {
   employeeWagesMethod,
   salonProfiles,
   clientNotes,
+  couponOnBooking,
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')
@@ -874,6 +875,23 @@ exports.bookingDetails = async (req, res, next) => {
           },
         ],
       },
+      {
+        model: couponOnBooking,
+        attributes: ['id', 'isCouponUsed', 'couponId', 'bookingId'],
+        required: false, // LEFT JOIN - include booking even if no coupon
+        include: [
+          {
+            model: coupon,
+            attributes: ['id', 'promoCode', 'type', 'value', 'status', 'from', 'till'],
+            include: [
+              {
+                model: couponTimeSlot,
+                attributes: ['id', 'day', 'timeFrom', 'timeTo']
+              }
+            ]
+          }
+        ]
+      },
     ],
   });
 
@@ -938,6 +956,12 @@ exports.bookingDetails = async (req, res, next) => {
     // let total=parseFloat(bookingData.total)+parseFloat(bookingData.vatAmount)
     // total=String(total)
 
+  // Handle couponOnBooking - return null if empty array
+  let couponData = null;
+  if (bookingData.couponOnBooking && Array.isArray(bookingData.couponOnBooking) && bookingData.couponOnBooking.length > 0) {
+    couponData = bookingData.couponOnBooking[0];
+  }
+
   let bookingDetail = {
     id: bookingData.id,
     scheduleDate: bookingData.on,
@@ -964,6 +988,7 @@ exports.bookingDetails = async (req, res, next) => {
     services,
     customerStatus,
     connectAccountId: salon?.connectAccountId || '', // ✅ added here
+    couponOnBooking: couponData || {}, // Add coupon information
   };
 
   return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));

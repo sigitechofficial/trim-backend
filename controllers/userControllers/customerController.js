@@ -1885,17 +1885,6 @@ exports.bookAppointment = async (req, res, next) => {
     if(!bookingCouponId){
       throw new AppError('Something went wrong coupon not linked to booking', 200);
     }
-
-    const bookingCoupon = await couponOnBooking.findOne({
-      where: { id: bookingCouponId.id },
-    })
-    if(!bookingCoupon){
-      throw new AppError('Something went wrong coupon not found', 200);
-    }
-
-    await booking.update({
-      couponOnBookingId: bookingCoupon.id,
-    })
   }
 
   const salon = await salonDetail.findByPk(book.salonDetailId, {
@@ -2165,6 +2154,23 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
           { model: service, attributes: [`id`, `serviceName`] },
         ],
       },
+      {
+        model: couponOnBooking,
+        attributes: ['id', 'isCouponUsed', 'couponId', 'bookingId'],
+        required: false, // LEFT JOIN - include booking even if no coupon
+        include: [
+          {
+            model: coupon,
+            attributes: ['id', 'promoCode', 'type', 'value', 'status', 'from', 'till'],
+            include: [
+              {
+                model: couponTimeSlot,
+                attributes: ['id', 'day', 'timeFrom', 'timeTo']
+              }
+            ]
+          }
+        ]
+      },
     ],
   })
 
@@ -2183,6 +2189,10 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
   const output = data.toJSON()
   output.jobs = actualJobs
+
+  if (output.couponOnBooking && Array.isArray(output.couponOnBooking) && output.couponOnBooking.length === 0) {
+    output.couponOnBooking = null
+  }
 
   const policies = await salonDetail.findOne({
     where: { id: output.salonDetail.id },
