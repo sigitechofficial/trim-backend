@@ -1343,6 +1343,30 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
     },
     { where: { id: bookingId } },
   )
+
+  await booking.update(
+    {
+      total:req.body.total,
+    },
+    { where: { id: bookingId } },
+  )
+
+  if(req.body.isCouponApplied===false){
+    await couponOnBooking.update(
+      {
+        isCouponUsed: false,
+      },
+      { where: { id: bookingId } },
+    )
+
+    await booking.update(
+      {
+        total:req.body.total,
+        discount:0,
+      },
+      { where: { id: bookingId } },
+    )
+  }
   fromCustomerSoloEmployee(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   const output = response({
@@ -1461,6 +1485,30 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     },
     { where: { id: bookingId } },
   )
+
+  await booking.update(
+    {
+      total:req.body.total,
+    },
+    { where: { id: bookingId } },
+  )
+
+  if(req.body.isCouponApplied===false){
+    await couponOnBooking.update(
+      {
+        isCouponUsed: false,
+      },
+      { where: { id: bookingId } },
+    )
+
+    await booking.update(
+      {
+        total:req.body.total,
+        discount:0,
+      },
+      { where: { id: bookingId } },
+    )
+  }
   booking.increment(
     {
       reScheduleCount: 1,
@@ -2514,6 +2562,17 @@ exports.applyCoupon = async (req, res, next) => {
       // Either limit reached or state changed between validation and increment
       throw new AppError(`This coupon has reached its usage limit.`, 200);
     }
+  }
+
+  const findCouponOnBooking = await couponOnBooking.findOne({
+    where: {
+      couponId: data.id,
+      isCouponUsed: true,
+    },
+  });
+  
+  if(findCouponOnBooking){
+    throw new AppError(`This coupon has already been used.`, 200);
   }
 
   // 7️⃣ Create couponOnBooking record to track coupon usage
