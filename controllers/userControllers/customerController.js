@@ -1877,6 +1877,26 @@ exports.bookAppointment = async (req, res, next) => {
     data: { appointment: book?.id },
   })
 
+  if(req.body.couponId){
+    const bookingCouponId = await couponOnBooking.update(
+      { bookingId: book.id },
+      { where: { couponId: req.body.couponId, bookingId: null} }
+    )
+    if(!bookingCouponId){
+      throw new AppError('Something went wrong coupon not linked to booking', 200);
+    }
+
+    const bookingCoupon = await couponOnBooking.findOne({
+      where: { id: bookingCouponId.id },
+    })
+    if(!bookingCoupon){
+      throw new AppError('Something went wrong coupon not found', 200);
+    }
+
+    await booking.update({
+      couponOnBookingId: bookingCoupon.id,
+    })
+  }
 
   const salon = await salonDetail.findByPk(book.salonDetailId, {
     attributes: ['connectAccountId']
