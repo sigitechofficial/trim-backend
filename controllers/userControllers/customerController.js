@@ -38,6 +38,7 @@ const {
   pushNotification,
   customerOnConnectAccount,
   couponTimeSlot,
+  couponOnBooking,
   wallet,
 } = require('../../models')
 const AppError = require('../../utils/appError')
@@ -2485,13 +2486,58 @@ exports.applyCoupon = async (req, res, next) => {
     }
   }
 
-  // 7️⃣ Return success
+  // 7️⃣ Create couponOnBooking record to track coupon usage
+    await couponOnBooking.create({
+      couponId: data.id,
+      isCouponUsed: true,
+    });
+    console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
+
+  // 8️⃣ Return success
   const output = response({
     message: 'Success',
     data: { promoCode: data },
   });
   return res.status(200).json(output);
 };
+
+//* Test Coupon Tracking -----------------
+exports.testCouponTracking = async (req, res, next) => {
+    const { couponId } = req.body;
+    
+    if (!couponId) {
+      throw new AppError('couponId is required', 200);
+    }
+
+    // Check if couponOnBooking record exists
+    const trackingRecord = await couponOnBooking.findOne({
+      where: {
+        couponId: couponId
+      },
+      include: [
+        {
+          model: coupon,
+          attributes: ['id', 'promoCode', 'type', 'value']
+        }
+      ]
+    });
+
+    if (!trackingRecord) {
+      throw new AppError('No tracking record found for this coupon', 200);
+    }
+
+    const output = response({
+      message: 'Coupon tracking record found',
+      data: {
+        couponId: trackingRecord.couponId,
+        isCouponUsed: trackingRecord.isCouponUsed,
+        coupon: trackingRecord.coupon,
+      },
+    });
+    return res.status(200).json(output);
+
+};
+
 //~ Reschedule & cancel
 
 //!Drawer

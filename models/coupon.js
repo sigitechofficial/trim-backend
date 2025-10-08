@@ -49,6 +49,9 @@ module.exports = (sequelize, DataTypes) => {
 
     coupon.hasMany(models.couponTimeSlot);
     models.couponTimeSlot.belongsTo(coupon);
+
+    coupon.hasMany(models.couponOnBooking);
+    models.couponOnBooking.belongsTo(coupon);
   };
 
   return coupon;
