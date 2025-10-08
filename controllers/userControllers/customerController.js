@@ -2568,6 +2568,9 @@ exports.applyCoupon = async (req, res, next) => {
     where: {
       couponId: data.id,
       isCouponUsed: true,
+      bookingId: {
+      [Op.ne]: null,
+    },
     },
   });
   
