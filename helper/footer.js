@@ -68,10 +68,18 @@ width="100%"
                   letter-spacing: 0px;
                   padding-left: 0px;
                   text-align: left;
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  flex-direction: row;
                 "
               >
                 <p>
-                  Unsure about how to use Trim, look up our FAQs.
+                  Unsure about how to use Trim, look up our 
+                </p>
+                <p>
+                  <a style="
+                  color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
                 </p>
               </div>
               <table
