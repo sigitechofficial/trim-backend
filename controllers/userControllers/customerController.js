@@ -1237,6 +1237,7 @@ exports.salonAvailability = async (req, res, next) => {
 exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const { bookingId } = req.params
   const { appointment, services, employeeId } = req.body
+  const userId = req.user.id;
   console.log(
     'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ employeeId:',
     employeeId,
@@ -1356,7 +1357,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       {
         isCouponUsed: false,
       },
-      { where: { id: bookingId } },
+      { where: { bookingId: bookingId, userId: userId } },
     )
 
     await booking.update(
@@ -1381,6 +1382,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const { bookingId } = req.params
   const { appointment, services } = req.body
+  const userId = req.user.id;
 
   appointment.startTime = DateManupulation.convertTo24HourFormat(
     appointment.startTime,
@@ -1498,13 +1500,13 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
       {
         isCouponUsed: false,
       },
-      { where: { id: bookingId } },
+      { where: { bookingId: bookingId, userId: userId } },
     )
 
     await booking.update(
       {
         total:req.body.total,
-        discount:0,
+        discount:0.00,
       },
       { where: { id: bookingId } },
     )
@@ -1916,19 +1918,12 @@ exports.bookAppointment = async (req, res, next) => {
   }
 
   //& Send Email Notification and Socket Event
-  socketForCalendar({ appointmentId: book?.id, type: 'new' })
-
-  onlineAppointmentConfirm(book?.id)
-
-  const output = response({
-    message: 'Booked',
-    data: { appointment: book?.id },
-  })
+  
 
   if(req.body.couponId){
     const bookingCouponId = await couponOnBooking.update(
       { bookingId: book.id },
-      { where: { couponId: req.body.couponId, bookingId: null} }
+      { where: { couponId: req.body.couponId, bookingId: null, userId: customerId} }
     )
     if(!bookingCouponId){
       throw new AppError('Something went wrong coupon not linked to booking', 200);
@@ -1942,6 +1937,15 @@ exports.bookAppointment = async (req, res, next) => {
   if(book.initialPaymentIntend){
         Stripe.updatePaymentIntentDescription(book.initialPaymentIntend, book, salon.connectAccountId)
   }
+
+  socketForCalendar({ appointmentId: book?.id, type: 'new' })
+
+  onlineAppointmentConfirm(book?.id)
+
+  const output = response({
+    message: 'Booked',
+    data: { appointment: book?.id },
+  })
   return res.status(200).json(output)
 }
 
@@ -2434,6 +2438,8 @@ exports.detachCard = async (req, res, next) => {
 
 
 exports.applyCoupon = async (req, res, next) => {
+
+  const userId = req.user.id;
   const currentDay = CustomDate.currentDay(); 
   // e.g. { currentDateOnly: '2025-09-09', dayName: 'Tuesday', currentTime: '03:30 PM' }
 
@@ -2568,6 +2574,7 @@ exports.applyCoupon = async (req, res, next) => {
     where: {
       couponId: data.id,
       isCouponUsed: true,
+      userId: userId,
       bookingId: {
       [Op.ne]: null,
     },
@@ -2582,6 +2589,7 @@ exports.applyCoupon = async (req, res, next) => {
     await couponOnBooking.create({
       couponId: data.id,
       isCouponUsed: true,
+      userId: userId,
     });
     console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
 
