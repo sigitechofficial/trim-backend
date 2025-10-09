@@ -156,6 +156,9 @@ module.exports = (sequelize) => {
     user.hasMany(models.allergies)
     models.allergies.belongsTo(user)
 
+    user.hasOne(models.couponOnBooking)
+    models.couponOnBooking.belongsTo(user)
+
     // linking user to booking as customer
     // user.hasMany(models.booking, { as: "customer", foreignKey: "customerId" });
     // models.booking.belongsTo(user, {

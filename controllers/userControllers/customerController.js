@@ -2434,6 +2434,8 @@ exports.detachCard = async (req, res, next) => {
 
 
 exports.applyCoupon = async (req, res, next) => {
+
+  const userId = req.user.id;
   const currentDay = CustomDate.currentDay(); 
   // e.g. { currentDateOnly: '2025-09-09', dayName: 'Tuesday', currentTime: '03:30 PM' }
 
@@ -2566,8 +2568,8 @@ exports.applyCoupon = async (req, res, next) => {
 
   const findCouponOnBooking = await couponOnBooking.findOne({
     where: {
-      couponId: data.id,
       isCouponUsed: true,
+      userId: userId,
       bookingId: {
       [Op.ne]: null,
     },
@@ -2582,6 +2584,7 @@ exports.applyCoupon = async (req, res, next) => {
     await couponOnBooking.create({
       couponId: data.id,
       isCouponUsed: true,
+      userId: userId,
     });
     console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
 
