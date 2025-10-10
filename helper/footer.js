@@ -77,6 +77,7 @@ width="100%"
                 <p>
                   Unsure about how to use Trim, look up our 
                 </p>
+                <p style="display: inline; margin-left: 5px;">
                 <p>
                   <a style="
                   color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank"> FAQs.</a>
