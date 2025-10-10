@@ -79,7 +79,7 @@ width="100%"
                 </p>
                 <p>
                   <a style="
-                  color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
+                  color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank"> FAQs.</a>
                 </p>
               </div>
               <table
