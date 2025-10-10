@@ -5,13 +5,15 @@ const supportEmail = 'support@trimworldwide.com'
 const supportNumber = '017874854624'
 
 exports.newFooter = `<tr>
+<tr>
   <td style="padding: 20px 20px; text-align: left;">
-    <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px; display: flex; align-items: center; gap: 10px;">
+    <div style="font-size: 15px; font-family: 'Switzer', sans-serif; font-weight: 400; color: rgba(0, 0, 0, 0.8); line-height: 20px;">
       Unsure about how to use Trim, look up our 
       <a style="color: #292929; margin-left: 5px;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
     </div>
   </td>
 </tr>
+
         <tr>
             <td align="center" style="padding: 20px;">
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
