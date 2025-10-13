@@ -203,7 +203,11 @@ module.exports = (sequelize, DataTypes) => {
     vatAmount:{
       type:DataTypes.STRING(),
       allowNull:true,
-    }
+    },
+    vatOriginalAmount:{
+      type:DataTypes.STRING(),
+      allowNull:true,
+    },
   })
 
   booking.associate = (models) => {

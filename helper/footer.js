@@ -59,29 +59,24 @@ width="100%"
                  
               </div>
               <div
-                style="
-                  color: #292929;
-                  direction: ltr;
-                  font-family: Chivo, sans-serif;
-                  font-size: 16px;
-                  font-weight: 400;
-                  letter-spacing: 0px;
-                  padding-left: 0px;
-                  text-align: left;
-                  display: flex;
-                  align-items: center;
-                  gap: 10px;
-                  flex-direction: row;
-                "
-              >
-                <p>
-                  Unsure about how to use Trim, look up our 
-                </p>
-                <p>
-                  <a style="
-                  color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
-                </p>
-              </div>
+  style="
+    color: #292929;
+    direction: ltr;
+    font-family: Chivo, sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0px;
+    padding-left: 0px;
+    text-align: left;
+  "
+>
+  <span>
+    Unsure about how to use Trim, look up our
+  </span>
+  <span style="margin-left: 5px;">
+    <a style="color: #292929;" href="https://www.trimworldwide.co.uk/faqs" target="_blank">FAQs.</a>
+  </span>
+</div>
               <table
                 border="0"
                 cellpadding="10"
