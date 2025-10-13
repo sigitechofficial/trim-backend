@@ -234,6 +234,9 @@ module.exports = (sequelize, DataTypes) => {
 
     booking.hasMany(models.tip)
     models.tip.belongsTo(booking)
+
+    booking.hasMany(models.couponOnBooking)
+    models.couponOnBooking.belongsTo(booking)
   }
 
   return booking

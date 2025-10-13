@@ -2144,6 +2144,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'feedback',
       'salonReply',
       'vatAmount',
+      'vatOriginalAmount',
       [
         literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.bookingId = booking.id)',
