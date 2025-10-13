@@ -1364,6 +1364,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
       {
         total:req.body.total,
         discount:0,
+        vatAmount:req.body.vatOriginalAmount,
       },
       { where: { id: bookingId } },
     )
@@ -2209,6 +2210,9 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       },
       {
         model: couponOnBooking,
+        where:{
+          isCouponUsed:true,
+        },
         attributes: ['id', 'isCouponUsed', 'couponId', 'bookingId'],
         required: false, // LEFT JOIN - include booking even if no coupon
         include: [
@@ -2582,9 +2586,9 @@ exports.applyCoupon = async (req, res, next) => {
     },
   });
   
-  if(findCouponOnBooking){
-    throw new AppError(`This coupon has already been used.`, 200);
-  }
+  // if(findCouponOnBooking){
+  //   throw new AppError(`This coupon has already been used.`, 200);
+  // }
 
   // 7️⃣ Create couponOnBooking record to track coupon usage
     await couponOnBooking.create({
