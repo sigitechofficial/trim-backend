@@ -980,6 +980,7 @@ exports.bookingDetails = async (req, res, next) => {
     duration: bookingData.duration,
     initialPayment: bookingData.initialPayment,
     total: bookingData.total,
+    subTotal: bookingData.subTotal,
     vatAmount: bookingData?.vatAmount,
     vatOriginalAmount: bookingData?.vatOriginalAmount,
     tip: bookingData?.tip ?? 0.00,
@@ -2550,7 +2551,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     },
     { where: { id: bookingId } },
   )
-  if(req.body.appointment.isCouponApplied===false){
+  if(appointment.isCouponApplied===false){
     await couponOnBooking.update(
       {
         isCouponUsed: false,
@@ -2559,9 +2560,9 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     )
 
     await booking.update({
-      total:req.body.appointment.total,
+      total:appointment.total,
       discount:0,
-      vatAmount:req.body.appointment.vatOriginalAmount,
+      vatAmount:appointment.vatOriginalAmount,
     },
     { where: { id: bookingId } })
   }
