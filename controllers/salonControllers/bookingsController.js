@@ -30,6 +30,7 @@ const {
   salonProfiles,
   clientNotes,
   couponOnBooking,
+  couponTimeSlot
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')
