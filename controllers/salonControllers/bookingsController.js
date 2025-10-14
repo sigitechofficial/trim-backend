@@ -877,9 +877,13 @@ exports.bookingDetails = async (req, res, next) => {
         ],
       },
       {
-        model: couponOnBooking,
+        model: couponOnBooking, // Ensure this model is included
         attributes: ['id', 'isCouponUsed', 'couponId', 'bookingId'],
-        required: false, // LEFT JOIN - include booking even if no coupon
+        where:{
+            isCouponUsed:true
+            
+        },
+        required:false,
         include: [
           {
             model: coupon,
@@ -887,14 +891,20 @@ exports.bookingDetails = async (req, res, next) => {
             include: [
               {
                 model: couponTimeSlot,
-                attributes: ['id', 'day', 'timeFrom', 'timeTo']
-              }
-            ]
-          }
-        ]
+                attributes: ['id', 'day', 'timeFrom', 'timeTo'],
+              },
+            ],
+          },
+        ],
       },
     ],
   });
+
+  // Ensure couponOnBooking data is correctly accessed
+  let couponData = null;
+  if (bookingData?.couponOnBookings && Array.isArray(bookingData.couponOnBookings) && bookingData.couponOnBookings.length > 0) {
+    couponData = bookingData.couponOnBookings[0]; // Extract the first coupon data
+  }
 
   let cardDetails;
   if (bookingData?.paymentMethod === 'card') {
@@ -909,7 +919,6 @@ exports.bookingDetails = async (req, res, next) => {
   }
 
   let customerStatus = 'active';
-
   if (bookingData?.customerId && salon?.id) {
     const isblocked = await blockCustomer.findOne({
       where: { userId: bookingData.customerId, salonDetailId: salon.id },
@@ -920,7 +929,7 @@ exports.bookingDetails = async (req, res, next) => {
   }
 
   let notes;
-  if (bookingData.customerId && salon?.id) {
+  if (bookingData?.customerId && salon?.id) {
     notes = await clientNotes.findOne({
       where: { userId: bookingData.customerId, salonDetailId: salon.id },
       attributes: ['customerNote'],
@@ -928,7 +937,7 @@ exports.bookingDetails = async (req, res, next) => {
   }
 
   let services = [];
-  bookingData.jobs.map((ele) => {
+  bookingData?.jobs.map((ele) => {
     let obj = {
       id: ele.id,
       status: ele.status,
@@ -954,15 +963,6 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
-    // let total=parseFloat(bookingData.total)+parseFloat(bookingData.vatAmount)
-    // total=String(total)
-
-  // Handle couponOnBooking - return null if empty array
-  let couponData = null;
-  if (bookingData.couponOnBooking && Array.isArray(bookingData.couponOnBooking) && bookingData.couponOnBooking.length > 0) {
-    couponData = bookingData.couponOnBooking[0];
-  }
-
   let bookingDetail = {
     id: bookingData.id,
     scheduleDate: bookingData.on,
@@ -981,7 +981,7 @@ exports.bookingDetails = async (req, res, next) => {
     initialPayment: bookingData.initialPayment,
     total: bookingData.total,
     vatAmount: bookingData?.vatAmount,
-    tip:bookingData?.tip ?? 0.00,
+    tip: bookingData?.tip ?? 0.00,
     platformFee: bookingData.platformFee,
     customerId: bookingData?.customerId ?? '',
     last4: cardDetails?.last4 ?? '',
@@ -989,7 +989,7 @@ exports.bookingDetails = async (req, res, next) => {
     services,
     customerStatus,
     connectAccountId: salon?.connectAccountId || '', // ✅ added here
-    couponOnBooking: couponData || {}, // Add coupon information
+    couponOnBooking: couponData, // Add coupon information
   };
 
   return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));
@@ -2432,7 +2432,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 //* 5.Reschedule Multiple Employee Appointment -----------------
 
 exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
-  const { appointment, services, bookingId } = req.body
+  const { appointment, services, bookingId,userId } = req.body
   console.log(
     'ðŸš€ ~ exports.rescheduleMultipleEmployeeAppointment= ~ req.body:',
     req.body,
@@ -2549,6 +2549,21 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     },
     { where: { id: bookingId } },
   )
+  if(req.body.isCouponApplied===false){
+    await couponOnBooking.update(
+      {
+        isCouponUsed: false,
+      },
+      { where: { bookingId: bookingId, userId: userId } },
+    )
+
+    await booking.update({
+      total:req.body.total,
+      discount:0,
+      vatAmount:req.body.vatOriginalAmount,
+    },
+    { where: { id: bookingId } })
+  }
   fromSalonMultipleEmployees(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   return res.json(
