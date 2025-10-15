@@ -1649,7 +1649,6 @@ exports.cancelAppointment = async (req, res, next) => {
       console.log('-----> ~CASE~ intialPayment Greater (refund) ')
 
       let refundAmount = paid - cancellationCharges
-      refundAmount = refundAmount-parseFloat(appointment.tip)
       console.log('ðŸš€  refundAmount:', refundAmount)
       if (refundAmount > 0.31) {
         const refund = await Stripe.refundPartialPayment(
