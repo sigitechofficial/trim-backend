@@ -704,6 +704,7 @@ exports.home = async (req, res, next) => {
         },
         { model: jobs, attributes: [] },
       ],
+      order: [['id', 'DESC']],
     })
   }
 
@@ -1647,7 +1648,8 @@ exports.cancelAppointment = async (req, res, next) => {
     if (paid * 1 > cancellationCharges * 1) {
       console.log('-----> ~CASE~ intialPayment Greater (refund) ')
 
-      const refundAmount = paid - cancellationCharges
+      let refundAmount = paid - cancellationCharges
+      refundAmount = refundAmount-parseFloat(appointment.tip)
       console.log('ðŸš€  refundAmount:', refundAmount)
       if (refundAmount > 0.31) {
         const refund = await Stripe.refundPartialPayment(
