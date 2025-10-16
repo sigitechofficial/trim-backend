@@ -1687,6 +1687,7 @@ exports.cancelAppointment = async (req, res, next) => {
         customerOnConnect.customerId,
         appointment.stripeCardId,
         appointment.salonDetail?.connectAccountId,
+        bookingData,
       )
       if (fine?.id) {
         updatedBooking.status = 'cancel'

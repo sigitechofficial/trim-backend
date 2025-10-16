@@ -579,7 +579,7 @@ module.exports = function (OTP, data, type, to) {
       postOtpText = `If you didn’t request this, please ignore this email.`
     let subject = `Trim - OTP`
     const name = `${data.firstName} ${data.lastName}`
-    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'] //send mail data.email, 
     console.log(
       '🚀 ~ sigidevelopers:',
       attachment.footer.concat(attachment.security),

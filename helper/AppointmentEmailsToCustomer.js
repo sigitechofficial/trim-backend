@@ -686,7 +686,7 @@ module.exports = function (to, data, state = 'book') {
   transporter.sendMail(
     {
       from: `${salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`, // sender address
-      to: ['sigidevelopers@gmail.com','charlesblake520@hotmail.co.uk'],
+      to: ['sigidevelopers@gmail.com','charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       replyTo: businessEmail,
       subject: subject, // Subject line
       attachments: attachments,

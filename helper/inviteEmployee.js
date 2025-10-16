@@ -17,7 +17,7 @@ module.exports = function (to = [], data) {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       //to: to.concat(['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk']), // list of receivers
-      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'],
+      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       subject: subject, // Subject line
       attachments: [
         ...attachment.footer,
