@@ -1080,6 +1080,8 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       `discount`,
       `total`,
       `initialPayment`,
+      `vatAmount`,
+      `platformFee`,
       `startTime`,
       `endTime`,
       `duration`,
