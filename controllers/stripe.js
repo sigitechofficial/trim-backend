@@ -703,9 +703,9 @@ async function capturePayment(
   amount,
   customerId,
   paymentMethodId,
-  accountId,     // ✅ Stripe Connect Account ID
+  accountId,
+  booking,
   targetAmount,
-  booking
 ) {
   try {
     console.log("🔌 capturePayment accountId:", accountId);
@@ -1002,7 +1002,7 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
 
     // Add metadata and description if provided
     if (metadata) {
-      refundData.description = metadata.description;
+      //refundData.description = metadata.description;
       refundData.metadata = metadata;
     }
 

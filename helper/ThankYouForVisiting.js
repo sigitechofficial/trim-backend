@@ -118,10 +118,10 @@ module.exports = function (to, input) {
   transporter.sendMail(
     {
       from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
-      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'],
+      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       replyTo: businessEmail,
       subject: ` Rate ${input?.salon?.salonName}.`,
-      attachments: attachment.footer.concat(attachment.star),
+      //attachments: attachment.footer.concat(attachment.star),
       html: `<!DOCTYPE html>
 
 <html
@@ -477,65 +477,32 @@ module.exports = function (to, input) {
                   width="100%"
                 >
                   <tr>
-                    <td class="pad" style="text-align: center;">
-                      <div
-                        style="
-                          display: inline-flex;  /* Keeps elements in one row and centers */
-                          gap: 50px;  /* Increased gap for more horizontal space */
-                          align-items: center;
-                          justify-content: center;
-                          color:rgb(0, 0, 0);
-                          direction: ltr;
-                          font-family: Chivo, sans-serif;
-                          font-size: 14px;
-                          font-weight: 400;
-                          letter-spacing: 0px;
-                          text-align: center;
-                        "
-                      >
-                        <div style="text-align: center; padding: 0 10px;"> <!-- Added padding for extra horizontal space -->
-                          <img
-                            src="cid:star"
-                            alt="rating"
-                            style="width: 32px"
-                          />
-                          <div>Terrible</div>
-                        </div>
-                        <div style="text-align: center; padding: 0 10px;"> <!-- Added padding for extra horizontal space -->
-                          <img
-                            src="cid:star"
-                            alt="rating"
-                            style="width: 32px"
-                          />
-                          <div>Bad</div>
-                        </div>
-                        <div style="text-align: center; padding: 0 10px;"> <!-- Added padding for extra horizontal space -->
-                          <img
-                            src="cid:star"
-                            alt="rating"
-                            style="width: 32px"
-                          />
-                          <div>Okay</div>
-                        </div>
-                        <div style="text-align: center; padding: 0 10px;"> <!-- Added padding for extra horizontal space -->
-                          <img
-                            src="cid:star"
-                            alt="rating"
-                            style="width: 32px"
-                          />
-                          <div>Good</div>
-                        </div>
-                        <div style="text-align: center; padding: 0 10px;"> <!-- Added padding for extra horizontal space -->
-                          <img
-                            src="cid:star"
-                            alt="rating"
-                            style="width: 32px"
-                          />
-                          <div>Great</div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
+  <td class="pad" style="text-align: center; vertical-align: middle;">
+    <div style="text-align: center; display: inline-block;">
+      <!-- Button that redirects to the link -->
+      <a style="text-decoration: none;" href="https://trimworldwide.com/SplashScreen" target="_blank">
+        <button
+          style="
+            padding: 10px 20px;
+            font-family: Chivo, sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            color: white;
+            background-color:rgb(0, 0, 0); /* Green background */
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+          "
+        >
+          Rate Your Experience
+        </button>
+      </a>
+    </div>
+  </td>
+</tr>
+
                 </table>
               </td>
             </tr>
