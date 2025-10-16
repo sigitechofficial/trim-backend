@@ -78,7 +78,6 @@ function attachments() {
     welcome: [attachment.welcome],
     security: [attachment.forgotPassword],
     invite: [attachment.invite],
-    star: [attachment.star],
     cancel: [attachment.cancel],
     confirm: [attachment.confirm],
     trim: [attachment.trim],

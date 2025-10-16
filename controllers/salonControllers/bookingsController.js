@@ -3169,8 +3169,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     finePercentage = refundPercentage;
 
     const paid =
-      parseFloat(appointment.actualCapturedAmount) +
-      parseFloat(appointment.tip);
+      parseFloat(appointment.actualCapturedAmount)
 
     const noshowCharges = parseFloat(
       (appointment.total * (refundPercentage / 100)).toFixed(2)
@@ -3234,8 +3233,9 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
         appointment.user?.stripeCustomerId,
         appointment.stripeCardId,
         appointment.salonDetail?.connectAccountId,
+        metadata, // 👈 pass metadata instead of appointment
         appointment.total,
-        metadata // 👈 pass metadata instead of appointment
+        
       );
 
       if (fine?.id) {
