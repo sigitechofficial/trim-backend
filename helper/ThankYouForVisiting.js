@@ -121,7 +121,7 @@ module.exports = function (to, input) {
       to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       replyTo: businessEmail,
       subject: ` Rate ${input?.salon?.salonName}.`,
-      //attachments: attachment.footer.concat(attachment.star),
+      attachments: attachment.footer.concat(attachment.star),
       html: `<!DOCTYPE html>
 
 <html
