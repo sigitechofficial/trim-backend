@@ -1057,13 +1057,13 @@ exports.cancelBooking = async (req, res, next) => {
     appointment.status === 'cancel'
   ) {
     throw new AppError(
-      `The appointment has already been marked as : ${appointment.status}.`,
+      `The booking has already been marked as : ${appointment.status}.`,
       200
     );
   } else if (jobComplete) {
     return next(
       new appError(
-        `You've completed one service, so the appointment cannot be canceled at this stage.`,
+        `You've completed one service, so the booking cannot be canceled at this stage.`,
         200
       )
     );
@@ -1435,13 +1435,13 @@ exports.addExtraService = async (req, res, next) => {
     result.status == 'no-show'
   ) {
     let message =
-      'You cannot add service because the Appointment has already been Completed.'
+      'You cannot add service because the booking has already been completed.'
     if (result.status == 'cancel') {
       message =
-        'You cannot add service because the appointment is marked as Canceled'
+        'You cannot add service because the booking is marked as canceled'
     } else if (result.status == 'no-show') {
       message =
-        'You cannot add service because the appointment is marked as No-Show'
+        'You cannot add service because the booking is marked as no-show'
     }
     throw new appError(message, 200)
   }
@@ -2047,7 +2047,7 @@ exports.checkOutBooking = async (req, res, next) => {
 
   if (jobData) {
     return res.json(
-      returnFunction('2', 'The appointment has unfinished services.', {}, '')
+      returnFunction('2', 'The booking has unfinished services.', {}, '')
     );
   }
 
@@ -2087,9 +2087,9 @@ exports.checkOutBooking = async (req, res, next) => {
     bookingData.status === 'complete'
   ) {
     const statusMessages = {
-      cancel: 'You cannot check out because the appointment is marked as Canceled',
-      'no-show': 'You cannot check out because the appointment is marked as No-Show',
-      complete: 'You cannot check out because the Appointment has already been Completed.',
+      cancel: 'You cannot check out because the booking is marked as Canceled',
+      'no-show': 'You cannot check out because the booking is marked as No-Show',
+      complete: 'You cannot check out because the booking has already been Completed.',
     };
     return res.json(returnFunction('2', statusMessages[bookingData.status], {}, ''));
   }
@@ -2197,7 +2197,7 @@ exports.checkoutCash = async (req, res, next) => {
   })
   if (jobData) {
     return res.json(
-      returnFunction('2', 'The appointment has unfinished services.', {}, ''),
+      returnFunction('2', 'The booking has unfinished services.', {}, ''),
     )
   }
   const bookingData = await booking.findOne({
@@ -2224,13 +2224,13 @@ exports.checkoutCash = async (req, res, next) => {
     bookingData.status == 'complete'
   ) {
     let message =
-      'You cannot check out because the Appointment has already been Completed.'
+      'You cannot check out because the booking has already been Completed.'
     if (bookingData.status == 'cancel') {
       message =
-        'You cannot check out because the appointment is marked as Canceled.'
+        'You cannot check out because the booking is marked as Canceled.'
     } else if (bookingData.status == 'no-show') {
       message =
-        'You cannot check out because the appointment is marked as No-Show.'
+        'You cannot check out because the booking is marked as No-Show.'
     }
     return res.json(returnFunction('2', message, {}, ''))
   }
@@ -2284,7 +2284,7 @@ exports.saveUnpaid = async (req, res, next) => {
   })
   if (jobData) {
     return res.json(
-      returnFunction('2', 'The appointment has unfinished services.', {}, ''),
+      returnFunction('2', 'The booking has unfinished services.', {}, ''),
     )
   }
   let bookingData = await booking.findByPk(bookingId, {
@@ -2297,13 +2297,13 @@ exports.saveUnpaid = async (req, res, next) => {
     bookingData.status == 'complete'
   ) {
     let message =
-      'You cannot check out because the Appointment has already been Completed.'
+      'You cannot check out because the booking has already been Completed.'
     if (bookingData.status == 'cancel') {
       message =
-        'You cannot check out because the appointment is marked as Canceled.'
+        'You cannot check out because the booking is marked as Canceled.'
     } else if (bookingData.status == 'no-show') {
       message =
-        'You cannot check out because the appointment is marked as No-Show.'
+      'You cannot check out because the booking is marked as No-Show.'
     }
     return res.json(returnFunction('2', message, {}, ''))
   }
@@ -2427,7 +2427,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
 
   return res.json(
-    returnFunction('1', 'Appointment reschedule successfully!', {}, ''),
+    returnFunction('1', 'Booking reschedule successfully!', {}, ''),
   )
 }
 
@@ -2569,7 +2569,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   fromSalonMultipleEmployees(bookingId)
   socketForCalendar({ appointmentId: bookingId, type: 'reschedule' })
   return res.json(
-    returnFunction('1', 'Appointment reschedule successfully!', {}, ''),
+    returnFunction('1', 'Booking reschedule successfully!', {}, ''),
   )
 }
 
@@ -3146,7 +3146,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     appointment?.status === "cancel"
   ) {
     throw new AppError(
-      `The appointment has already been marked as : ${appointment.status}.`,
+      `The booking has already been marked as : ${appointment.status}.`,
       200
     );
   }
@@ -3402,15 +3402,15 @@ exports.markAppointmentAscancel = async (req, res, next) => {
   })
 
   const customerNotification = {
-    title: `Appointment Cancellation`,
-    body: `We regret to inform you that your appointment on ${dateTime} has been cancelled. Please contact us to reschedule.`,
+    title: `Booking Cancellation`,
+    body: `We regret to inform you that your booking on ${dateTime} has been cancelled. Please contact us to reschedule.`,
   }
 
   const fullName = `${inputData.user.firstName} ${inputData.user.lastName}`
 
   const salonNotification = {
     title: `Booking Cancellation Alert`,
-    body: `The appointment with ${fullName} on ${dateTime} has been cancelled.`,
+    body: `The booking with ${fullName} on ${dateTime} has been cancelled.`,
   }
 
   const output = response({
