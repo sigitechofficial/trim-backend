@@ -2620,7 +2620,6 @@ exports.updateAllSalonsVatAndPlatformFee = async (req, res, next) => {
     }
   }
 
-  try {
     // Prepare update object with only provided fields
     const updateFields = {};
     if (vatPercentage !== undefined) {
@@ -2633,25 +2632,19 @@ exports.updateAllSalonsVatAndPlatformFee = async (req, res, next) => {
     // Update all salon details
     const [affectedRowsCount] = await salonDetail.update(updateFields, {
       where: {
-        deleted: false, // Only update non-deleted salons
+        status: 1, // Only update non-deleted salons
       },
     });
-
-    return res.status(200).json(
-      returnFunction(
-        '1',
-        'VAT percentage and platform fee updated successfully for all salons',
-        {
+    
+    return res.status(200).json({
+    status: '1',
+    message: 'VAT percentage and platform fee updated successfully for all salons',
+    data: {
           affectedSalons: affectedRowsCount,
           updatedFields: updateFields,
         },
-        ''
-      )
-    );
-  } catch (error) {
-    console.error('Error updating salon VAT and platform fees:', error);
-    return next(new appError('Failed to update salon details', 500));
-  }
+  })
+
 };
 
 //! .Reason Fro subscriptions and appointments -------------------------------------------------------------------------------
