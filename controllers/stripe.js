@@ -1526,6 +1526,22 @@ async function getInvoiceDetails(invoiceId) {
     throw new AppError('Failed to fetch invoice details');
   }
 }
+
+//! Terminal
+/*
+ *  1:  Create Connection Token ________________________
+ */
+async function createConnectionToken() {
+  try {
+    const token = await stripe.terminal.connectionTokens.create();
+    console.log("✅ Connection token created successfully");
+    return token.secret;
+  } catch (error) {
+    console.error("❌ Stripe Terminal error:", error);
+    throw new AppError(`${error.message}`, 200);
+  }
+}
+
 module.exports = {
   createStripeLoginLink,
   retrieveConnectAccount,
@@ -1581,7 +1597,8 @@ module.exports = {
   checkStripeAccountStatus,
   updateTransferMetadata,
   updatePaymentIntentDescription,
-  getInvoiceDetails
+  getInvoiceDetails,
+  createConnectionToken
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
