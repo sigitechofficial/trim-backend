@@ -133,9 +133,14 @@ module.exports = (sequelize, DataTypes) => {
       type:DataTypes.STRING(100),
       allowNull:true,
     },
-    vatNumber:{
-      type:DataTypes.STRING(100),
+    vatPercentage:{
+      type:DataTypes.DECIMAL(10, 2),
       allowNull:true,
+    },
+    platformFee:{
+      type:DataTypes.DECIMAL(10, 2),
+      allowNull:true,
+      defaultValue:0,
     }
   })
 

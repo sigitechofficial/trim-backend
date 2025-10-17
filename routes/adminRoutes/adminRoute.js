@@ -518,4 +518,8 @@ router.get(
   catchAsync(adminReports.adminSubscriptionTableData)
 );
 
+// Update VAT percentage and platform fee for all salons
+router.patch('/update-all-salons-vat-platform-fee', catchAsync(adminController.updateAllSalonsVatAndPlatformFee))
+
+
 module.exports = router
