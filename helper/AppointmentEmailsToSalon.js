@@ -142,7 +142,7 @@ module.exports = function (to, data, state = 'book') {
     subject = `Booking ref #${data.id} has been rescheduled`
     heading = `Booking has been updated`
     deeplink=`https://trimworldwide.com/BookingDetailScreen?id=${data?.id}`
-    description = `An appointment ref ${data?.id} is scheduled for ${date} with ${client?.name} check.`
+    description = `An booking ref ${data?.id} is scheduled for ${date} with ${client?.name} check.`
   } else if (state === 'complete') {
     subject = `Booking ref #${data.id} marked as complete.`
     heading = `Booking has been completed`
@@ -150,8 +150,8 @@ module.exports = function (to, data, state = 'book') {
     description = `Booking reference ${data?.id} has been marked as complete.`
   } else if (state === 'noshow') {
     subject = `Booking ref #${data.id} marked as No-Show`
-    heading = `Appointment marked as No-Show`
-    description = `Booking reference ${data?.id} was marked as a no-show. The client missed the scheduled appointment.`
+    heading = `Booking marked as No-Show`
+    description = `Booking reference ${data?.id} was marked as a no-show. The client missed the scheduled booking.`
   }
 
   transporter.sendMail(
