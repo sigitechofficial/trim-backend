@@ -1089,6 +1089,7 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       `note`,
       `on`,
       `stripeCardId`,
+      `actualCapturedAmount`,
       `paymentMethod`,
     ],
     include: [
@@ -1099,6 +1100,8 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
           'salonName',
           'coverImage',
           'description',
+          'vatPercentage',
+          'platformFee',
           [
             literal(
               '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.salonDetailId = salonDetail.id)',
@@ -2589,6 +2592,60 @@ exports.adminEarningsFromSpecificSalon = async (req, res, next) => {
     }),
   )
 }
+
+
+/*
+ * Update VAT Percentage and Platform Fee for All Salons
+ * ____________________________________________________
+ */
+exports.updateAllSalonsVatAndPlatformFee = async (req, res, next) => {
+  const { vatPercentage, platformFee } = req.body;
+
+  // Validate input
+  if (vatPercentage === undefined && platformFee === undefined) {
+    return next(new appError('At least one field (vatPercentage or platformFee) is required', 400));
+  }
+
+  // Validate vatPercentage if provided
+  if (vatPercentage !== undefined) {
+    if (typeof vatPercentage !== 'number' || vatPercentage < 0 || vatPercentage > 100) {
+      return next(new appError('VAT percentage must be a number between 0 and 100', 400));
+    }
+  }
+
+  // Validate platformFee if provided
+  if (platformFee !== undefined) {
+    if (typeof platformFee !== 'number' || platformFee < 0) {
+      return next(new appError('Platform fee must be a non-negative number', 400));
+    }
+  }
+
+    // Prepare update object with only provided fields
+    const updateFields = {};
+    if (vatPercentage !== undefined) {
+      updateFields.vatPercentage = vatPercentage;
+    }
+    if (platformFee !== undefined) {
+      updateFields.platformFee = platformFee;
+    }
+
+    // Update all salon details
+    const [affectedRowsCount] = await salonDetail.update(updateFields, {
+      where: {
+        status: 1, // Only update non-deleted salons
+      },
+    });
+    
+    return res.status(200).json({
+    status: '1',
+    message: 'VAT percentage and platform fee updated successfully for all salons',
+    data: {
+          affectedSalons: affectedRowsCount,
+          updatedFields: updateFields,
+        },
+  })
+
+};
 
 //! .Reason Fro subscriptions and appointments -------------------------------------------------------------------------------
 
