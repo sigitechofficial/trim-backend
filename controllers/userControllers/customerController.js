@@ -1998,6 +1998,8 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     account.connectAccountId
   )
   
+  // Create connection token for Stripe Terminal
+  const connectionToken = await Stripe.createConnectionToken()
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
@@ -2011,6 +2013,7 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
 
   const data = {
     ephemeralKeySecret: ephemeralKey ? ephemeralKey.secret : '',
+    connectionToken: connectionToken,
     client_secret: indent ? indent.client_secret : '',
     paymentIntendId: indent ? indent.id : '',
     initialPayment: upFrontAmount,
