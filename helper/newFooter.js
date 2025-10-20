@@ -27,9 +27,6 @@ exports.newFooter = `<tr>
                         <td style="padding: 0 4px;">
                             <a href="https://www.facebook.com" target="_blank"><img src="cid:facebook" alt="Facebook" style="width: 32px; height: 32px; display: block;"></a>
                         </td>
-                        <td style="padding: 0 4px;">
-                            <a href="https://twitter.com" target="_blank"><img src="cid:twitter" alt="Twitter" style="width: 32px; height: 32px; display: block;"></a>
-                        </td>
                     </tr>
                 </table>
                 <div style="margin-top: 20px; font-size: 16px; font-family: 'Switzer', sans-serif; font-weight: 600;">

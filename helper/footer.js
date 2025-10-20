@@ -161,23 +161,6 @@ width="100%"
                                 width="32"
                             /></a>
                           </td>
-                          <td style="padding: 0 2px 0 2px">
-                            <a
-                              href="https://twitter.com/"
-                              target="_blank"
-                              ><img
-                                alt="Twitter"
-                                height="32"
-                                src="cid:twitter"
-                                style="
-                                  display: block;
-                                  height: auto;
-                                  border: 0;
-                                "
-                                title="Twitter"
-                                width="32"
-                            /></a>
-                          </td>
                         </tr>
                       </table>
                     </div>
