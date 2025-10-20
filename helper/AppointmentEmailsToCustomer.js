@@ -534,7 +534,8 @@ module.exports = function (to, data, state = 'book') {
     badgeText = 'No-Show'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
-    attachments = attachment.footer.concat(attachment.cancel)
+    attachments = (attachment.footer || []).concat(attachment.cancel || [])
+    attachments = attachments.filter(Boolean)
     emailTitle = `Hi ${client.name}, seems you missed an booking!`
     description = `The shop's policy on missed bookings means they will deduct ${data?.noShowPercentage}% of the booking value. For next time, double check the shop's policy and cancel with them early if needed.`
     buttonSection = `<table
