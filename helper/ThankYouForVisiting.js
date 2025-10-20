@@ -87,7 +87,7 @@ module.exports = function (to, input) {
                                           font-weight: 500;
                                         "
                                       >
-                                         ${ele.duration} mints ${employee} 
+                                         ${ele.duration} min ${employee} 
                                       </div>
                                     </div>
                                     <div style="float: right; width: auto;">${CURRENCY_UNIT} ${ele.total}</div>
@@ -496,7 +496,7 @@ module.exports = function (to, input) {
             text-decoration: none;
           "
         >
-          Rate Your Experience
+          Rate your visit
         </button>
       </a>
     </div>
