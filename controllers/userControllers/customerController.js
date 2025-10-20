@@ -3119,11 +3119,16 @@ if (salonDetails?.hasObtainedFreeTrial) {
     },
     { where: { userId: salon.id } },
   )
+
+    // Create connection token for Stripe Terminal
+   const connectionToken = await Stripe.createConnectionToken()
+  console.log("connectionToken=====================>>>>>>>",connectionToken)
   const data = {
     ephemeralKeySecret: 'ephemeralKey.secret',
     client_secret: 'indent?.latest_invoice?.payment_intent?.client_secret',
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
+    connectionToken: connectionToken,
   }
   const output = response({ status: '1', message: 'Subscription active', data })
 
