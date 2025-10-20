@@ -1097,9 +1097,9 @@ module.exports = function (to, input) {
     },
     function (error, info) {
       if (error) {
-        console.log(error)
+        console.log('Error sending Thank You for Visiting email:', error)
       } else {
-        console.log(info)
+        console.log('Thank You for Visiting email sent successfully:', info)
       }
     },
   )
