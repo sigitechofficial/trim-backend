@@ -86,7 +86,7 @@ module.exports = function (to, data, state = 'book') {
                                           font-weight: 500;
                                         "
                                       >
-                                         ${ele.duration} mints  ${employee} 
+                                         ${ele.duration} min  ${employee} 
                                       </div>
                                     </div>
                                     <div style="float: right; width: auto; font-weight: bold;">${CURRENCY_UNIT} ${ele.total}</div>
