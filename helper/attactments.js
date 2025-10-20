@@ -85,7 +85,6 @@ function attachments() {
     footer: [
       attachment.logo,
       attachment.facebook,
-      attachment.twitter,
       attachment.instagram,
       attachment.tiktok
     ],
