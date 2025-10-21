@@ -228,14 +228,17 @@ module.exports = function (to, data, state = 'book') {
 </table>`
 
   let description = `On ${date} with ${salonName}`
-  let attachments = attachment.footer.concat(attachment.confirm)
+  // Build attachments defensively to avoid undefined entries
+  let attachments = (attachment.footer || []).concat(attachment.confirm || [])
+  attachments = attachments.filter(Boolean)
 
   if (state === 'cancel') {
     subject = `Booking ref #${data.id} has been cancelled`
     badgeText = 'Cancelled'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
-    attachments = attachment.footer.concat(attachment.cancel)
+    attachments = (attachment.footer || []).concat(attachment.cancel || [])
+    attachments = attachments.filter(Boolean)
     emailTitle = `Hi ${client.name}, your booking has been cancelled`
     description = `Booking was scheduled for ${date} with ${salonName}`
     buttonSection = `<table
@@ -531,7 +534,8 @@ module.exports = function (to, data, state = 'book') {
     badgeText = 'No-Show'
     badgeColor = '#EE4A4A'
     badgeImageSrc = 'cid:cancel'
-    attachments = attachment.footer.concat(attachment.cancel)
+    attachments = (attachment.footer || []).concat(attachment.cancel || [])
+    attachments = attachments.filter(Boolean)
     emailTitle = `Hi ${client.name}, seems you missed an booking!`
     description = `The shop's policy on missed bookings means they will deduct ${data?.noShowPercentage}% of the booking value. For next time, double check the shop's policy and cancel with them early if needed.`
     buttonSection = `<table
@@ -689,7 +693,7 @@ module.exports = function (to, data, state = 'book') {
       to: ['sigidevelopers@gmail.com','charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       replyTo: businessEmail,
       subject: subject, // Subject line
-      attachments: attachments,
+      attachments: attachments || [],
       html: `<!DOCTYPE html>
 
       <html

@@ -266,7 +266,7 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
-        amount: convertToCents(amount + 0.50),
+        amount: convertToCents(amount),
         currency: 'gbp',
         customer: customerId,
         setup_future_usage: 'off_session',

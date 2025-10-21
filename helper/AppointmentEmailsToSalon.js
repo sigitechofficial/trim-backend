@@ -160,7 +160,8 @@ module.exports = function (to, data, state = 'book') {
       to: ['sigidevelopers@gmail.com','charlesblake520@hotmail.co.uk','sigitest393@outlook.com'], // list of receivers
 
       subject: subject,
-      attachments: attachment.footer,
+      // Ensure attachments array has no undefined entries
+      attachments: (attachment.footer || []).filter(Boolean),
       html: `<!DOCTYPE html>
       <html
         lang="en"

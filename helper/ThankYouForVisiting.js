@@ -9,6 +9,19 @@ const { emailDateFormate } = require('../utils/emailDateFormate')
 
 const { CURRENCY_UNIT } = process.env
 module.exports = function (to, input) {
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
   const data = input.appointment
   let jobs = []
   data.jobs.forEach((ele) => {
@@ -121,7 +134,7 @@ module.exports = function (to, input) {
       to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
       replyTo: businessEmail,
       subject: ` Rate ${input?.salon?.salonName}.`,
-      attachments: attachment.footer.concat(attachment.star),
+      attachments: attachment.footer,
       html: `<!DOCTYPE html>
 
 <html
@@ -1097,9 +1110,9 @@ module.exports = function (to, input) {
     },
     function (error, info) {
       if (error) {
-        console.log(error)
+        console.log('Error sending Thank You for Visiting email:', error)
       } else {
-        console.log(info)
+        console.log('Thank You for Visiting email sent successfully:', info)
       }
     },
   )

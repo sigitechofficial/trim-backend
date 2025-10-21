@@ -83,7 +83,7 @@ const {
 const {
   socketForCalendar,
 } = require('../eventDrivenCommunication/calendarView')
-
+const Communication = require('../eventDrivenCommunication/appointmentCheckout')
 //! Return Function
 //* DEMO. Eamil Testing ----------------------
 const axios = require('axios')
@@ -163,36 +163,7 @@ async function sendSequentialRequests(
 // Starting date for the "on" field.
 
 exports.emailtesting = async (req, res, next) => {
-  const { html } = req.body
-  testing(html)
-  // const endpoint = `https://backend.trimworldwide.com/customer/book-appointment`
-  // const baseDate = '2025-03-14'
-  // sendSequentialRequests(endpoint, accessToken, baseRequestBody, baseDate)
-  // // const data = DEMO(htmlContent)
-  // // const bookingData = await bookingDataForEmailAndNotifications('2112')
-
-  // // //EMAIL
-  // // if (!bookingData) return false
-  // // const emailInput = bookingData?.appointment
-
-  // // EmailAppointmentToSalon([`${bookingData?.salon?.salonEmail}`], emailInput)
-
-  // // AppointmentEmailsToCustomer(
-  // //   [`${bookingData?.client?.customerEmail}`],
-  // //   emailInput,
-  // // )
-
-  // // const salon = await salonDetail.findOne({
-  // //   where: { id: 301 },
-  // //   attributes: ['id', 'userId'],
-  // //   include: [
-  // //     {
-  // //       model: employee,
-  // //       attributes: ['id', 'userId'],
-  // //     },
-  // //   ],
-  // // })
-
+Communication.online(1167, 0, 5)
   return res.status(200).json(response({ data: {} }))
 }
 
@@ -3119,16 +3090,11 @@ if (salonDetails?.hasObtainedFreeTrial) {
     },
     { where: { userId: salon.id } },
   )
-
-    // Create connection token for Stripe Terminal
-   const connectionToken = await Stripe.createConnectionToken()
-  console.log("connectionToken=====================>>>>>>>",connectionToken)
   const data = {
     ephemeralKeySecret: 'ephemeralKey.secret',
     client_secret: 'indent?.latest_invoice?.payment_intent?.client_secret',
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
-    connectionToken: connectionToken,
   }
   const output = response({ status: '1', message: 'Subscription active', data })
 
