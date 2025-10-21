@@ -240,5 +240,10 @@ protect,
 catchAsync(appController.updateTransferMetadata),
 )
 
+//Post Route to send appointment reminders before 24 hours of the appointment
+router.post('/send-appointment-reminders',
+catchAsync(appController.sendReminder),
+)
+
 
 module.exports = router
