@@ -73,6 +73,7 @@ exports.cash = async (bookingId, tip, amount = 0) => {
     //TODO  $[Amount]
 
     if (bookingData?.customerId) {
+      console.log("🚀 ~ bookingData:", bookingData)
       ThankYouForVisiting([booking?.client?.customerEmail], booking)
       ThrowNotification(
         salonTokens,

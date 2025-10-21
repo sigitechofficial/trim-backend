@@ -9,6 +9,19 @@ const { emailDateFormate } = require('../utils/emailDateFormate')
 
 const { CURRENCY_UNIT } = process.env
 module.exports = function (to, input) {
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
+  console.log("🚀 ~ to:", to)
   const data = input.appointment
   let jobs = []
   data.jobs.forEach((ele) => {
