@@ -3391,7 +3391,119 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
 };
 
 
+// Controller to send appointment reminders before 24 hours of the appointment
+exports.sendReminder = async (req, res) => {
+  try {
+    // Calculate 24 hours from now ± 15 minutes
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const wiggle = 15 * 60 * 1000;
 
+    const windowStart = new Date(in24h.getTime() - wiggle);
+    const windowEnd = new Date(in24h.getTime() + wiggle);
+
+    const formatLocalDateTime = (date) =>
+      date.toLocaleString('sv', { timeZone: 'Asia/Karachi' }).replace('T', ' ');
+
+    const startStr = formatLocalDateTime(windowStart);
+    const endStr = formatLocalDateTime(windowEnd);
+
+    console.log("🚀 ~ startStr:", startStr);
+    console.log("🚀 ~ endStr:", endStr);
+
+    // Fetch bookings for the next 24 hours ± 15 minutes
+    const bookings = await booking.findAll({
+      where: {
+        reminderSent: false,
+        [Op.and]: literal(`
+          TIMESTAMP(\`on\`, startTime)
+          BETWEEN '${startStr}' AND '${endStr}'
+        `),
+      },
+      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId'],
+    });
+
+    console.log("🚀 ~ bookings:", bookings);
+    if (bookings.length === 0) {
+      throw new AppError('No bookings found', 404);
+    }
+
+    // Fetch customers and salons associated with the bookings
+    const customerIds = [...new Set(bookings.map((b) => b.customerId))];
+    const salonIds = [...new Set(bookings.map((b) => b.salonDetailId))];
+
+    const customers = await user.findAll({
+      where: { id: { [Op.in]: customerIds }, userTypeId: 1 },
+      include: [{ model: deviceToken, attributes: ['tokenId'] }],
+    });
+
+    const salons = await salonDetail.findAll({
+      where: { id: { [Op.in]: salonIds } },
+      include: [
+        {
+          model: user,
+          attributes: ['id', 'firstName'],
+          include: [
+            {
+              model: deviceToken,
+              attributes: ['tokenId'],
+            },
+          ],
+        },
+      ],
+    });
+
+    const custMap = new Map(customers.map((c) => [c.id, c]));
+    const salonMap = new Map(salons.map((salon) => [salon.id, salon]));
+
+    // Process bookings and send notifications
+    for (const b of bookings) {
+      const customer = custMap.get(b.customerId);
+      const salon = salonMap.get(b.salonDetailId);
+
+      if (!customer || !salon) {
+        console.warn(`Skipping booking ${b.id} due to missing user data.`);
+        continue;
+      }
+
+      const salonUser = salon.user;
+      const apptDateTime = new Date(`${b.on}T${b.startTime}`);
+
+      const notifCustomer = {
+        title: 'Upcoming Booking Customer',
+        body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptDateTime.toLocaleString('en-US', {
+          timeZone: 'Asia/Karachi',
+        })}. We look forward to seeing you!`,
+      };
+
+      const notifSalon = {
+        title: 'Upcoming Booking Salon',
+        body: `You have an appointment with ${customer.firstName} tomorrow at ${apptDateTime.toLocaleString('en-US', {
+          timeZone: 'Asia/Karachi',
+        })}.`,
+      };
+
+      const custTokens = customer.deviceTokens.map((t) => t.tokenId);
+      const salonTokens = salonUser.deviceTokens.map((t) => t.tokenId);
+
+      if (custTokens.length > 0) {
+        await throwNotification(custTokens, notifCustomer, { bookingId: b.id }, customer.id);
+      }
+
+      if (salonTokens.length > 0) {
+        await throwNotification(salonTokens, notifSalon, { bookingId: b.id }, salonUser.id, 'salon');
+      }
+
+      b.reminderSent = true;
+      await b.save();
+    }
+
+    return response({ status: '1', message: 'Reminders sent successfully', data: { processed: bookings.length } });
+  } catch (error) {
+    console.error('Error processing booking reminders:', error);
+    return response({ status: '0', message: 'Error processing reminders', error: error.message });
+  }
+};
 
 
 
