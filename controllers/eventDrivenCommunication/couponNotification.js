@@ -10,7 +10,7 @@ const AppError = require('../../utils/appError')
  */
 exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
     try {
-        console.log('🚀 ~ sendCouponNotificationToCustomers')
+        console.log('ðŸš€ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ sendCouponNotificationToCustomers')
 
         // Find salon details
         const salon = await salonDetail.findByPk(salonId, {
@@ -19,10 +19,9 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
 
         if (!salon) {
             console.log('Salon not found')
-            return false
+            throw new AppError('Salon Not Found');
         }
 
-        // Find customers who have booked with this salon
         const salonCustomers = await booking.findAll({
             where: {
                 salonDetailId: salonId,
@@ -49,12 +48,14 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
                 },
             ],
             attributes: ['customerId'],
-            group: ['customerId'], // Group by customerId to ensure uniqueness
+            group: ['customerId'],
         })
+        
+        //console.log("Salon Customer ============>>>>>>>>>>>>>>>",salonCustomers)
 
         if (!salonCustomers || salonCustomers.length === 0) {
             console.log('No customers found to send coupon notification')
-            return false
+            throw new AppError('No customers found to send coupon notification')
         }
 
         // Prepare notification data for each customer
@@ -74,7 +75,7 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
 
             // Create notification content
             const notification = {
-                title: `🎉 New Coupon Available!`,
+                title: `New Coupon Available!`,
                 body: `${salon.salonName} has a new coupon "${couponData.promoCode}" with ${couponData.value}% off! Valid until ${new Date(couponData.till).toLocaleDateString()}.`
             }
 
@@ -89,7 +90,7 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
             }
 
             // Send notification to customer
-            await ThrowNotification(
+            ThrowNotification(
                 customerTokens,
                 notification,
                 notificationData,
@@ -99,10 +100,10 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
             console.log(`Coupon notification sent to customer ${customer.user.id}`)
         }
 
-        console.log('🚀 ~~~~~ Coupon Notification Sent ~~~~~~~ 🚀')
+        console.log('ðŸš€ ~~~~~ Coupon Notification Sent ~~~~~~~ ðŸš€')
         return true
     } catch (error) {
-        console.log('🚀 ~ sendCouponNotificationToCustomers ~ error:', error)
+        console.log('ðŸš€ ~ sendCouponNotificationToCustomers ~ error:', error)
         return false
     }
 }
