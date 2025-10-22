@@ -48,6 +48,7 @@ const dateManipulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
 const { sendEvent } = require('../../socket_io')
 const { employeeForSocket } = require('../../utils/socketUtilities')
+const { sendCouponNotificationToCustomers } = require('../eventDrivenCommunication/couponNotification');
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
@@ -1235,14 +1236,24 @@ exports.addCoupons = async (req, res, next) => {
 
   const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
   if (!salon)
-    return res.status(200).json(returnFunction('0', 'Data not found', {}, ''));
+  {
+    return res.status(200).json({
+      statusCode:200,
+      message:"Data not found",
+      data:{}
+    })
+  }
+
 
   const exist = await coupon.findOne({ where: { promoCode } });
   if (exist)
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Promo code already taken', {}, ''));
-
+  {
+    return res.status(200).json({
+      statusCode:200,
+      message:"Promo code already taken",
+      data:{}
+    })
+  }
   // 1️⃣ Create coupon
   const newCoupon = await coupon.create({
     promoCode,
@@ -1285,7 +1296,6 @@ exports.addCoupons = async (req, res, next) => {
   // 4️⃣ Create time slots
   for (const day of selectedDays) {
     if (!validWeekDays.includes(day)) continue;
-
     for (const range of selectedTimeRanges) {
       await couponTimeSlot.create({
         couponId: newCoupon.id,
@@ -1295,6 +1305,9 @@ exports.addCoupons = async (req, res, next) => {
       });
     }
   }
+
+  // 5️⃣ Send notifications to customers
+  sendCouponNotificationToCustomers(newCoupon, salon.id);
 
   return res
     .status(200)
