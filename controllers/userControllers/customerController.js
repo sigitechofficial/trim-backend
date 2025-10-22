@@ -3394,6 +3394,8 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
 // Controller to send appointment reminders before 24 hours of the appointment
 exports.sendReminder = async (req, res) => {
   try {
+      
+      console.log("+++++++++++++++++++++++++++++++++++++++++++++CALLINGLAMDA 24")
     // Calculate 24 hours from now ± 15 minutes
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -3425,7 +3427,10 @@ exports.sendReminder = async (req, res) => {
 
     console.log("🚀 ~ bookings:", bookings);
     if (bookings.length === 0) {
-      throw new AppError('No bookings found', 404);
+    return res.status(401).json({
+        message:"Data Not Found",
+        data:{}
+    })
     }
 
     // Fetch customers and salons associated with the bookings
@@ -3463,6 +3468,10 @@ exports.sendReminder = async (req, res) => {
 
       if (!customer || !salon) {
         console.warn(`Skipping booking ${b.id} due to missing user data.`);
+        return res.status(401).json({
+            message:"Customer or Salon Not Found",
+            data:{}
+        })
         continue;
       }
 
@@ -3497,8 +3506,14 @@ exports.sendReminder = async (req, res) => {
       b.reminderSent = true;
       await b.save();
     }
-
-    return response({ status: '1', message: 'Reminders sent successfully', data: { processed: bookings.length } });
+    
+    return res.status(200).json({
+        statusCode:200,
+        message:"Notification Send Sucesfuuly",
+        data:{
+            processed: bookings.length
+        }
+    })
   } catch (error) {
     console.error('Error processing booking reminders:', error);
     return response({ status: '0', message: 'Error processing reminders', error: error.message });
