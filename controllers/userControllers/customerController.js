@@ -3625,7 +3625,7 @@ exports.sendReminder = async (req, res) => {
         continue;
       }
 
-      // Compose notifications
+      // Adjust date for the 2-hour reminder to be today's date
       const notifCustomer =
         which === '24h'
           ? {

@@ -102,4 +102,11 @@ router.get(
   catchAsync(payoutController.collectedRentTransactionHistory),
 )
 
+router.get(
+  '/rent-collection-employee-transaction-history/:salonDetailId',
+  protect,
+  catchAsync(payoutController.employeeRentCollectionTransactionHistory),
+)
+
+
 module.exports = router

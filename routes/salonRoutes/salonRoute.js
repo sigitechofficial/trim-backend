@@ -341,4 +341,7 @@ router.post('/update-subscriptions-price-id', catchAsync(salonController.updateS
 
 router.get('/fetch-invoice/:invoiceId', catchAsync(salonController.fetchInvoice))
 
+// Create connection token and client secret for Stripe Terminal
+router.post('/create-connection-token', catchAsync(salonController.createConnectionToken))
+
 module.exports = router

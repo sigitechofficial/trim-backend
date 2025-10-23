@@ -12,7 +12,7 @@ router.post('/verifyOTP', catchAsync(authController.verifyOTP))
 router.post('/login', catchAsync(authController.login))
 router.post('/forgotPassword', catchAsync(authController.forgotPassword))
 router.patch('/verifyPasswordOtp', catchAsync(authController.verifyPasswordOtp))
-
+router.get('/cling-reminder-email', catchAsync(authController.clingLambdaFunction))
 router.use(validateToken)
 router.patch('/resetPassword', catchAsync(authController.resetPassword))
 router.patch('/updatePassword', catchAsync(authController.updatePassword))
@@ -22,4 +22,5 @@ router.get(
   catchAsync(authController.employeeSession),
 )
 router.get('/logout', catchAsync(authController.logout)) // use patch instead of get
+
 module.exports = router

@@ -38,7 +38,8 @@ const {
   clientNotes,
   deletedCustomer,
   subscriptions,
-  couponTimeSlot
+  couponTimeSlot,
+  customerOnConnectAccount
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -3353,6 +3354,79 @@ exports.fetchInvoice = async (req, res, next) => {
     });
   } catch (error) {
     return next(new appError('Failed to fetch invoice details', 500));
+  }
+};
+
+/*
+ * Create Connection Token and Client Secret
+ * ________________________________________
+ */
+exports.createConnectionToken = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    
+    // Find the salon and get the connect account ID
+    const salonData = await salonDetail.findOne({
+      where: { userId },
+      include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
+    });
+
+    if (!salonData) {
+      return next(new appError('Salon not found', 404));
+    }
+
+    if (!salonData.connectAccountId) {
+      return next(new appError('Salon connect account not found. Please complete onboarding first.', 400));
+    }
+
+    // Check if customer exists in customerOnConnectAccount table
+    let customerOnConnect = await customerOnConnectAccount.findOne({
+      where: { 
+        salonDetailId: salonData.id,
+        connectAccountId: salonData.connectAccountId,
+        userId: salonData.user.id
+      }
+    });
+
+    let customerId;
+
+    if (!customerOnConnect) {
+      // Create customer in the connect account
+      customerId = await Stripe.addCustomer(
+        `${salonData.user.firstName} ${salonData.user.lastName}`,
+        salonData.user.email,
+        salonData.connectAccountId
+      );
+
+      // Save customer in customerOnConnectAccount table
+      await customerOnConnectAccount.create({
+        customerId: customerId,
+        connectAccountId: salonData.connectAccountId,
+        salonDetailId: salonData.id,
+        userId: salonData.user.id,
+        status: true
+      });
+    } else {
+      customerId = customerOnConnect.customerId;
+    }
+
+    // Create connection token for Stripe Terminal
+    const connectionToken = await Stripe.createConnectionToken();
+    
+    // Create setup intent for client secret using the connect account
+    const setupIntent = await Stripe.setupIntent(customerId, salonData.connectAccountId);
+
+    return res.json(
+      returnFunction('1', 'Connection token and client secret created successfully', {
+        connectionToken,
+        clientSecret: setupIntent.client_secret,
+        customerId,
+        connectAccountId: salonData.connectAccountId
+      }, '')
+    );
+  } catch (error) {
+    console.error('Error creating connection token:', error);
+    return next(new appError('Failed to create connection token and client secret', 500));
   }
 };
 
