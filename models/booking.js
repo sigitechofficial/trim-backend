@@ -208,6 +208,10 @@ module.exports = (sequelize, DataTypes) => {
       type:DataTypes.STRING(),
       allowNull:true,
     },
+    twoHoursReminder: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   })
 
   booking.associate = (models) => {

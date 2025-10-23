@@ -3392,48 +3392,186 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
 
 
 // Controller to send appointment reminders before 24 hours of the appointment
+// exports.sendReminder = async (req, res) => {
+//   try {
+      
+//       console.log("+++++++++++++++++++++++++++++++++++++++++++++CALLINGLAMDA 24")
+//     // Calculate 24 hours from now ± 15 minutes
+//     const now = new Date();
+//     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+//     const wiggle = 15 * 60 * 1000;
+
+//     const windowStart = new Date(in24h.getTime() - wiggle);
+//     const windowEnd = new Date(in24h.getTime() + wiggle);
+
+//     const formatLocalDateTime = (date) =>
+//       date.toLocaleString('sv', { timeZone: 'Asia/Karachi' }).replace('T', ' ');
+
+//     const startStr = formatLocalDateTime(windowStart);
+//     const endStr = formatLocalDateTime(windowEnd);
+
+//     console.log("🚀 ~ startStr:", startStr);
+//     console.log("🚀 ~ endStr:", endStr);
+
+//     // Fetch bookings for the next 24 hours ± 15 minutes
+//     const bookings = await booking.findAll({
+//       where: {
+//         reminderSent: false,
+//         [Op.and]: literal(`
+//           TIMESTAMP(\`on\`, startTime)
+//           BETWEEN '${startStr}' AND '${endStr}'
+//         `),
+//       },
+//       attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId'],
+//     });
+
+//     console.log("🚀 ~ bookings:", bookings);
+//     if (bookings.length === 0) {
+//     return res.status(401).json({
+//         message:"Data Not Found",
+//         data:{}
+//     })
+//     }
+
+//     // Fetch customers and salons associated with the bookings
+//     const customerIds = [...new Set(bookings.map((b) => b.customerId))];
+//     const salonIds = [...new Set(bookings.map((b) => b.salonDetailId))];
+
+//     const customers = await user.findAll({
+//       where: { id: { [Op.in]: customerIds }, userTypeId: 1 },
+//       include: [{ model: deviceToken, attributes: ['tokenId'] }],
+//     });
+
+//     const salons = await salonDetail.findAll({
+//       where: { id: { [Op.in]: salonIds } },
+//       include: [
+//         {
+//           model: user,
+//           attributes: ['id', 'firstName'],
+//           include: [
+//             {
+//               model: deviceToken,
+//               attributes: ['tokenId'],
+//             },
+//           ],
+//         },
+//       ],
+//     });
+
+//     const custMap = new Map(customers.map((c) => [c.id, c]));
+//     const salonMap = new Map(salons.map((salon) => [salon.id, salon]));
+
+//     // Process bookings and send notifications
+//     for (const b of bookings) {
+//       const customer = custMap.get(b.customerId);
+//       const salon = salonMap.get(b.salonDetailId);
+
+//       if (!customer || !salon) {
+//         console.warn(`Skipping booking ${b.id} due to missing user data.`);
+//         return res.status(401).json({
+//             message:"Customer or Salon Not Found",
+//             data:{}
+//         })
+//         continue;
+//       }
+
+//       const salonUser = salon.user;
+//       const apptDateTime = new Date(`${b.on}T${b.startTime}`);
+
+//       const notifCustomer = {
+//         title: 'Upcoming Booking Customer',
+//         body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptDateTime.toLocaleString('en-US', {
+//           timeZone: 'Asia/Karachi',
+//         })}. We look forward to seeing you!`,
+//       };
+
+//       const notifSalon = {
+//         title: 'Upcoming Booking Salon',
+//         body: `You have an appointment with ${customer.firstName} tomorrow at ${apptDateTime.toLocaleString('en-US', {
+//           timeZone: 'Asia/Karachi',
+//         })}.`,
+//       };
+
+//       const custTokens = customer.deviceTokens.map((t) => t.tokenId);
+//       const salonTokens = salonUser.deviceTokens.map((t) => t.tokenId);
+
+//       if (custTokens.length > 0) {
+//         await throwNotification(custTokens, notifCustomer, { bookingId: b.id }, customer.id);
+//       }
+
+//       if (salonTokens.length > 0) {
+//         await throwNotification(salonTokens, notifSalon, { bookingId: b.id }, salonUser.id, 'salon');
+//       }
+
+//       b.reminderSent = true;
+//       await b.save();
+//     }
+    
+//     return res.status(200).json({
+//         statusCode:200,
+//         message:"Notification Send Sucesfuuly",
+//         data:{
+//             processed: bookings.length
+//         }
+//     })
+//   } catch (error) {
+//     console.error('Error processing booking reminders:', error);
+//     return response({ status: '0', message: 'Error processing reminders', error: error.message });
+//   }
+// };
+
 exports.sendReminder = async (req, res) => {
   try {
-      
-      console.log("+++++++++++++++++++++++++++++++++++++++++++++CALLINGLAMDA 24")
-    // Calculate 24 hours from now ± 15 minutes
+    console.log("+++++++++++++++++++++++++++++++++++++++++++++CALLING LAMBDA 24/2H");
+
+    // ---- windows in Asia/Karachi ----
     const now = new Date();
-    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const wiggle = 15 * 60 * 1000;
+    const wiggle = 30 * 60 * 1000; // 30 minutes in milliseconds
 
-    const windowStart = new Date(in24h.getTime() - wiggle);
-    const windowEnd = new Date(in24h.getTime() + wiggle);
+    const makeWindow = (hoursAhead) => {
+      const target = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
+      const start = new Date(target.getTime() - wiggle); // 30 minutes before the target
+      const end = new Date(target.getTime() + wiggle); // 30 minutes after the target
+      const formatLocalDateTime = (date) =>
+        date.toLocaleString('sv', { timeZone: 'Asia/Karachi' }).replace('T', ' ');
+      return { startStr: formatLocalDateTime(start), endStr: formatLocalDateTime(end), start, end };
+    };
 
-    const formatLocalDateTime = (date) =>
-      date.toLocaleString('sv', { timeZone: 'Asia/Karachi' }).replace('T', ' ');
+    const w24 = makeWindow(24);
+    const w2  = makeWindow(2);
 
-    const startStr = formatLocalDateTime(windowStart);
-    const endStr = formatLocalDateTime(windowEnd);
+    console.log("🚀 ~ 24h window:", w24.startStr, "→", w24.endStr);
+    console.log("🚀 ~ 2h  window:", w2.startStr,  "→", w2.endStr);
 
-    console.log("🚀 ~ startStr:", startStr);
-    console.log("🚀 ~ endStr:", endStr);
-
-    // Fetch bookings for the next 24 hours ± 15 minutes
+    // ---- fetch bookings that need either reminder ----
     const bookings = await booking.findAll({
       where: {
-        reminderSent: false,
-        [Op.and]: literal(`
-          TIMESTAMP(\`on\`, startTime)
-          BETWEEN '${startStr}' AND '${endStr}'
-        `),
+        [Op.or]: [
+          {
+            reminderSent: false,
+            [Op.and]: literal(`
+              TIMESTAMP(\`on\`, startTime)
+              BETWEEN '${w24.startStr}' AND '${w24.endStr}'
+            `),
+          },
+          {
+            twoHoursReminder: false,
+            [Op.and]: literal(`
+              TIMESTAMP(\`on\`, startTime)
+              BETWEEN '${w2.startStr}' AND '${w2.endStr}'
+            `),
+          },
+        ],
       },
-      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId'],
+      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder'],
     });
 
-    console.log("🚀 ~ bookings:", bookings);
+    console.log("🚀 ~ matching bookings:", bookings.length);
     if (bookings.length === 0) {
-    return res.status(401).json({
-        message:"Data Not Found",
-        data:{}
-    })
+      return res.status(401).json({ message: "Data Not Found", data: {} });
     }
 
-    // Fetch customers and salons associated with the bookings
+    // ---- gather customers & salons ----
     const customerIds = [...new Set(bookings.map((b) => b.customerId))];
     const salonIds = [...new Set(bookings.map((b) => b.salonDetailId))];
 
@@ -3448,78 +3586,91 @@ exports.sendReminder = async (req, res) => {
         {
           model: user,
           attributes: ['id', 'firstName'],
-          include: [
-            {
-              model: deviceToken,
-              attributes: ['tokenId'],
-            },
-          ],
+          include: [{ model: deviceToken, attributes: ['tokenId'] }],
         },
       ],
     });
 
     const custMap = new Map(customers.map((c) => [c.id, c]));
-    const salonMap = new Map(salons.map((salon) => [salon.id, salon]));
+    const salonMap = new Map(salons.map((s) => [s.id, s]));
 
-    // Process bookings and send notifications
+    const inWindow = (dateObj, window) => dateObj >= window.start && dateObj <= window.end;
+
     for (const b of bookings) {
       const customer = custMap.get(b.customerId);
       const salon = salonMap.get(b.salonDetailId);
 
       if (!customer || !salon) {
         console.warn(`Skipping booking ${b.id} due to missing user data.`);
-        return res.status(401).json({
-            message:"Customer or Salon Not Found",
-            data:{}
-        })
         continue;
       }
 
       const salonUser = salon.user;
-      const apptDateTime = new Date(`${b.on}T${b.startTime}`);
 
-      const notifCustomer = {
-        title: 'Upcoming Booking Customer',
-        body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptDateTime.toLocaleString('en-US', {
-          timeZone: 'Asia/Karachi',
-        })}. We look forward to seeing you!`,
-      };
+      // Build appointment Date (treat 'on' + 'startTime' as Asia/Karachi local)
+      const apptDateTime = new Date(`${b.on}T${b.startTime}`); // raw
+      const apptLocalStr = apptDateTime.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }); // formatted
 
-      const notifSalon = {
-        title: 'Upcoming Booking Salon',
-        body: `You have an appointment with ${customer.firstName} tomorrow at ${apptDateTime.toLocaleString('en-US', {
-          timeZone: 'Asia/Karachi',
-        })}.`,
-      };
+      // Decide which reminder this booking is for
+      const apptForCompare = new Date(`${b.on}T${b.startTime}`); // JS date for comparison to windows created from 'now'
+      let which = null;
+      if (!b.reminderSent && inWindow(apptForCompare, w24)) which = '24h';
+      else if (!b.twoHoursReminder && inWindow(apptForCompare, w2)) which = '2h';
 
-      const custTokens = customer.deviceTokens.map((t) => t.tokenId);
-      const salonTokens = salonUser.deviceTokens.map((t) => t.tokenId);
+      if (!which) {
+        console.warn(`Booking ${b.id} did not fall into a known window.`);
+        continue;
+      }
+
+      // Compose notifications
+      const notifCustomer =
+        which === '24h'
+          ? {
+              title: 'Upcoming Booking (Customer)',
+              body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
+            }
+          : {
+              title: 'Upcoming Booking (Customer)',
+              body: `Your appointment with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
+            };
+
+      const notifSalon =
+        which === '24h'
+          ? {
+              title: 'Upcoming Booking (Salon)',
+              body: `You have an appointment with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
+            }
+          : {
+              title: 'Upcoming Booking (Salon)',
+              body: `You have an appointment with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
+            };
+
+      const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
+      const salonTokens = ((salonUser.deviceTokens) || []).map((t) => t.tokenId).filter(Boolean);
 
       if (custTokens.length > 0) {
-        await throwNotification(custTokens, notifCustomer, { bookingId: b.id }, customer.id);
+        await throwNotification(custTokens, notifCustomer, { bookingId: b.id, kind: which }, customer.id);
       }
-
       if (salonTokens.length > 0) {
-        await throwNotification(salonTokens, notifSalon, { bookingId: b.id }, salonUser.id, 'salon');
+        await throwNotification(salonTokens, notifSalon, { bookingId: b.id, kind: which }, salonUser.id, 'salon');
       }
 
-      b.reminderSent = true;
+      // Mark the correct flag
+      if (which === '24h') b.reminderSent = true;
+      if (which === '2h') b.twoHoursReminder = true;
       await b.save();
     }
-    
+
     return res.status(200).json({
-        statusCode:200,
-        message:"Notification Send Sucesfuuly",
-        data:{
-            processed: bookings.length
-        }
-    })
+      statusCode: 200,
+      message: "Notifications sent successfully",
+      data: { processed: bookings.length },
+    });
   } catch (error) {
     console.error('Error processing booking reminders:', error);
     return response({ status: '0', message: 'Error processing reminders', error: error.message });
   }
 };
-
 
 
 
