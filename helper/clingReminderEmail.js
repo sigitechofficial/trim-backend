@@ -14,8 +14,10 @@ module.exports = function (data) {
 let subject = `Reminder: How to Fix Your Window Cling`
 let heading = `Hi ${data.firstName} ${data.lastName}`
 let description = `Just a reminder of how to fix your window cling:`
-let image = `cid:cling`
+let image = 'cid:cling'
 let description2 = `If you want to take a picture of your new window cling and send it back to this email address, we would like to put it on our socials too.`
+  let attachments = (attachment.footer || []).concat(attachment.cling || [])
+  attachments = attachments.filter(Boolean)
 
 
     transporter.sendMail(
@@ -29,7 +31,7 @@ let description2 = `If you want to take a picture of your new window cling and s
     
             subject: subject,
             // Ensure attachments array has no undefined entries
-            attachments: (attachment.footer || []).filter(Boolean),
+            attachments:attachments || [],
             html: `
             <table
           style={{
@@ -69,12 +71,11 @@ let description2 = `If you want to take a picture of your new window cling and s
                     >
                       ${description}
                     </p>
-                    {/* :white_check_mark: Centered Image */}
                     <table width="100%" style={{ margin: "20px 0" }}>
                       <tr>
                         <td align="center">
                           <img
-                            src="${image}"
+                            src=${image}
                             alt="image-cling"
                             style={{
                               display: "block",

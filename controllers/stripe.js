@@ -1083,14 +1083,24 @@ const createTieredPrice = async (priceId) => {
   }
 };
 
-const setupIntent = async (customerId) => {
+const setupIntent = async (customerId, accountId = null) => {
   try {
-    const setupIntent = await stripe.setupIntents.create({
+    const setupIntentData = {
       customer: customerId,
-    });
+    };
+
+    let setupIntent;
+    if (accountId) {
+      setupIntent = await stripe.setupIntents.create(setupIntentData, {
+        stripeAccount: accountId
+      });
+    } else {
+      setupIntent = await stripe.setupIntents.create(setupIntentData);
+    }
+    
     return setupIntent;
   } catch (error) {
-    console.error("Error creating tiered price:", error);
+    console.error("Error creating setup intent:", error);
     throw error;
   }
 };
