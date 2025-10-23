@@ -3364,7 +3364,8 @@ exports.fetchInvoice = async (req, res, next) => {
 exports.createConnectionToken = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    
+
+    const { amount } = req.body;
     // Find the salon and get the connect account ID
     const salonData = await salonDetail.findOne({
       where: { userId },
@@ -3411,15 +3412,16 @@ exports.createConnectionToken = async (req, res, next) => {
     }
 
     // Create connection token for Stripe Terminal
-    const connectionToken = await Stripe.createConnectionToken();
+    const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId);
     
     // Create setup intent for client secret using the connect account
-    const setupIntent = await Stripe.setupIntent(customerId, salonData.connectAccountId);
-
+    const directCharge = await Stripe.createDirectCharge(amount,customerId, salonData.connectAccountId);
+    console.log('directCharge', directCharge)
     return res.json(
       returnFunction('1', 'Connection token and client secret created successfully', {
         connectionToken,
-        clientSecret: setupIntent.client_secret,
+        clientSecret: directCharge.client_secret,
+        paymentIntentId: directCharge.id,
         customerId,
         connectAccountId: salonData.connectAccountId
       }, '')

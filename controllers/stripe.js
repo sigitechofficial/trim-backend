@@ -1541,9 +1541,14 @@ async function getInvoiceDetails(invoiceId) {
 /*
  *  1:  Create Connection Token ________________________
  */
-async function createConnectionToken() {
+async function createConnectionToken(connectAccountId) {
   try {
-    const token = await stripe.terminal.connectionTokens.create();
+    const token = await stripe.terminal.connectionTokens.create(
+      {},
+      {
+        stripeAccount: connectAccountId, // Pass the connected account ID here
+      }
+    );
     console.log("✅ Connection token created successfully");
     return token.secret;
   } catch (error) {
@@ -1551,6 +1556,7 @@ async function createConnectionToken() {
     throw new AppError(`${error.message}`, 200);
   }
 }
+
 
 module.exports = {
   createStripeLoginLink,
