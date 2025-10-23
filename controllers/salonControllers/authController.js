@@ -26,7 +26,7 @@ const Stripe = require('../stripe')
 const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
-
+const clingReminderEmail = require('../../helper/clingReminderEmail')
 const redis_Client = require('../../routes/redis_connect')
 
 //! Function to create JWT Tocken
@@ -1185,4 +1185,46 @@ exports.logout = async (req, res) => {
     data: {},
     error: '',
   })
+}
+
+
+//Cling Lamda Function
+exports.clingLambdaFunction = async (req, res, next) => {
+    // Calculate date 7 days ago
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    
+    // Find users with userTypeId 2 created 7 days ago
+    const users = await user.findAll({
+      where: {
+        userTypeId: 2,
+        createdAt: {
+          [Op.gte]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()),
+          [Op.lt]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate() + 1)
+        }
+      },
+      attributes: ['id', 'firstName', 'lastName', 'email']
+    })
+    
+    if (users.length === 0) {
+      return res.status(401).json({ 
+        message: 'No users found with userTypeId 2 created 7 days ago',
+        data:{count: 0},
+        error: '',
+      })
+    }
+    
+    // Send ClingReminderEmail to all matching users
+    const emailPromises = users.map(user => clingReminderEmail({firstName: user.firstName, lastName: user.lastName, email: user.email}))
+    await Promise.all(emailPromises)
+    
+    return res.status(200).json({ 
+      status: '1',
+      message: 'Cling reminder emails sent successfully',
+      data: {
+        count: users.length,
+        users: users.map(u => ({ email: u.email }))
+      },
+      error: '',
+    })
 }

@@ -952,14 +952,41 @@ exports.collectedRentTransactionHistory = async (req, res, next) => {
 
 //Employee See all the transactions history
 exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
-  const employeeId=req.user.id
+  const userId = req.user.id
+  const salonDetailId = req.params.salonDetailId
+ 
+  
+  // If salonDetailId is provided, validate that the employee is associated with that salon
+    const employeeAtSalon = await employee.findOne({
+      where: { 
+        userId: userId,
+        salonDetailId: salonDetailId 
+      },
+      attributes: ['id']
+    })
+    
+    //   return res.json(employeeAtSalon)
+
+    
+    if (!employeeAtSalon) {
+      return res.status(400).json(response({ message: 'Employee is not associated with the specified salon' }))
+    }
+  
+  
+  // Build where condition
+  const whereCondition = { employeeId: employeeAtSalon.id }
+  if (salonDetailId) {
+    whereCondition.salonDetailId = salonDetailId
+  }
+  
+  console.log("Where Condition -------------------->>>",whereCondition)
+  
   const history = await rentCollection.findAll({
-    where: { employeeId: employeeId },
+    where: whereCondition,
     attributes: { exclude: ['updatedAt', 'employeeId', 'salonDetailId'] },
   })
   return res.json(response({ message: 'Success', data: { history } }))
 }
-
 // 419 employee
 // 1056 userId
 // salon is  = 292

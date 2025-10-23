@@ -22,4 +22,5 @@ router.get(
   catchAsync(authController.employeeSession),
 )
 router.get('/logout', catchAsync(authController.logout)) // use patch instead of get
+router.get('/cling-reminder-email', catchAsync(authController.clingLambdaFunction))
 module.exports = router
