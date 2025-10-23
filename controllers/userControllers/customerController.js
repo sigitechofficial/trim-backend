@@ -2509,11 +2509,14 @@ exports.applyCoupon = async (req, res, next) => {
   // 6️⃣ Handle limit usage
   if (data.limit == null || data.limit < 1) {
     // One-time per customer (kept exactly as you had it)
-    const exist = await booking.findOne({
+    const exist = await couponOnBooking.findOne({
       where: {
-        customerId: req.user?.id,
-        salonDetailId: salonId,
         couponId: data.id,
+        isCouponUsed: true,
+        userId: userId,
+        bookingId: {
+        [Op.ne]: null,
+      },
       },
     });
 
