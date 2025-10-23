@@ -949,6 +949,17 @@ exports.collectedRentTransactionHistory = async (req, res, next) => {
   )
 }
 
+
+//Employee See all the transactions history
+exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
+  const employeeId=req.user.id
+  const history = await rentCollection.findAll({
+    where: { employeeId: employeeId },
+    attributes: { exclude: ['updatedAt', 'employeeId', 'salonDetailId'] },
+  })
+  return res.json(response({ message: 'Success', data: { history } }))
+}
+
 // 419 employee
 // 1056 userId
 // salon is  = 292
