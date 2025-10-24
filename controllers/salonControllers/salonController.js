@@ -3364,12 +3364,17 @@ exports.fetchInvoice = async (req, res, next) => {
 exports.createConnectionToken = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    
+
+    const { amount } = req.body;
     // Find the salon and get the connect account ID
     const salonData = await salonDetail.findOne({
       where: { userId },
       include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
     });
+    
+    console.log("salonData=======================+++++",salonData.connectAccountId)
+    
+    let salonConnectId=salonData.connectAccountId
 
     if (!salonData) {
       return next(new appError('Salon not found', 404));
@@ -3389,9 +3394,13 @@ exports.createConnectionToken = async (req, res, next) => {
     });
 
     let customerId;
+    
+    console.log("customerId===++++=======++++++++++++======",customerId)
 
     if (!customerOnConnect) {
       // Create customer in the connect account
+      
+      console.log("Going into this =============================+++++")
       customerId = await Stripe.addCustomer(
         `${salonData.user.firstName} ${salonData.user.lastName}`,
         salonData.user.email,
@@ -3411,15 +3420,16 @@ exports.createConnectionToken = async (req, res, next) => {
     }
 
     // Create connection token for Stripe Terminal
-    const connectionToken = await Stripe.createConnectionToken();
+    const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId);
     
     // Create setup intent for client secret using the connect account
-    const setupIntent = await Stripe.setupIntent(customerId, salonData.connectAccountId);
-
+    const directCharge = await Stripe.createOneTapePayment(amount,salonConnectId);
+    console.log('directCharge', directCharge)
     return res.json(
       returnFunction('1', 'Connection token and client secret created successfully', {
         connectionToken,
-        clientSecret: setupIntent.client_secret,
+        clientSecret: directCharge.client_secret,
+        paymentIntentId: directCharge.id,
         customerId,
         connectAccountId: salonData.connectAccountId
       }, '')
@@ -3429,4 +3439,3 @@ exports.createConnectionToken = async (req, res, next) => {
     return next(new appError('Failed to create connection token and client secret', 500));
   }
 };
-

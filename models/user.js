@@ -95,6 +95,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         defaultValue: false,
       },
+      salonMailReminder:{
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      }
     },
     {
       primaryKey: true,

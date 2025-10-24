@@ -1190,41 +1190,50 @@ exports.logout = async (req, res) => {
 
 //Cling Lamda Function
 exports.clingLambdaFunction = async (req, res, next) => {
-    // Calculate date 7 days ago
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    
-    // Find users with userTypeId 2 created 7 days ago
-    const users = await user.findAll({
-      where: {
-        userTypeId: 2,
-        createdAt: {
-          [Op.gte]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()),
-          [Op.lt]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate() + 1)
-        }
-      },
-      attributes: ['id', 'firstName', 'lastName', 'email']
-    })
-    
-    if (users.length === 0) {
-      return res.status(401).json({ 
-        message: 'No users found with userTypeId 2 created 7 days ago',
-        data:{count: 0},
-        error: '',
-      })
-    }
-    
-    // Send ClingReminderEmail to all matching users
-    const emailPromises = users.map(user => clingReminderEmail({firstName: user.firstName, lastName: user.lastName, email: user.email}))
-    await Promise.all(emailPromises)
-    
-    return res.status(200).json({ 
-      status: '1',
-      message: 'Cling reminder emails sent successfully',
-      data: {
-        count: users.length,
-        users: users.map(u => ({ email: u.email }))
-      },
+  // Calculate date 7 days ago
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  console.log("sevenDaysAgo========================>>", sevenDaysAgo);
+  
+  // Find users with userTypeId 2 created 7 days ago
+  const users = await user.findAll({
+    where: {
+      userTypeId: 2,
+      createdAt: {
+        [Op.gte]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()),
+        [Op.lt]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate() + 1)
+      }
+    },
+    attributes: ['id', 'firstName', 'lastName', 'email']
+  });
+  
+  if (users.length === 0) {
+    return res.status(401).json({ 
+      message: 'No users found with userTypeId 2 created 7 days ago',
+      data: { count: 0 },
       error: '',
-    })
-}
+    });
+  }
+  
+  // Send ClingReminderEmail to all matching users and update salonMailReminder
+  const emailPromises = users.map(async (user) => {
+      await clingReminderEmail({ firstName: user.firstName, lastName: user.lastName, email: user.email });
+      // Update the salonMailReminder column to true
+      await user.update({
+        salonMailReminder: true
+      });
+  });
+
+  await Promise.all(emailPromises);
+  
+  return res.status(200).json({ 
+    status: '1',
+    message: 'Cling reminder emails sent successfully',
+    data: {
+      count: users.length,
+      users: users.map(u => ({ email: u.email }))
+    },
+    error: '',
+  });
+};

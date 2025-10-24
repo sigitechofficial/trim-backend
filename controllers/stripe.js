@@ -283,7 +283,25 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
   }
 }
 
-
+async function  createOneTapePayment(amount, connectedAccountId) {
+  console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", connectedAccountId)
+  try {
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: convertToCents(amount),
+        currency: 'gbp',
+        payment_method_types: ['card_present'],
+      },
+      {
+        stripeAccount: connectedAccountId,
+      }
+    );
+    return paymentIntent;
+  }
+  catch (error) {
+    throw new AppError(`${error.message} `, 200);
+  }
+}
 
 /*
  *  1:  Create PaymenIntend
@@ -1541,9 +1559,14 @@ async function getInvoiceDetails(invoiceId) {
 /*
  *  1:  Create Connection Token ________________________
  */
-async function createConnectionToken() {
+async function createConnectionToken(connectAccountId) {
   try {
-    const token = await stripe.terminal.connectionTokens.create();
+    const token = await stripe.terminal.connectionTokens.create(
+      {},
+      {
+        stripeAccount: connectAccountId, // Pass the connected account ID here
+      }
+    );
     console.log("✅ Connection token created successfully");
     return token.secret;
   } catch (error) {
@@ -1551,6 +1574,7 @@ async function createConnectionToken() {
     throw new AppError(`${error.message}`, 200);
   }
 }
+
 
 module.exports = {
   createStripeLoginLink,
@@ -1608,7 +1632,8 @@ module.exports = {
   updateTransferMetadata,
   updatePaymentIntentDescription,
   getInvoiceDetails,
-  createConnectionToken
+  createConnectionToken,
+  createOneTapePayment
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
