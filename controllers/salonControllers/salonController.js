@@ -3415,7 +3415,7 @@ exports.createConnectionToken = async (req, res, next) => {
     const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId);
     
     // Create setup intent for client secret using the connect account
-    const directCharge = await Stripe.createDirectCharge(amount,customerId, salonData.connectAccountId);
+    const directCharge = await Stripe.createOneTapePayment(amount,customerId, salonData.connectAccountId);
     console.log('directCharge', directCharge)
     return res.json(
       returnFunction('1', 'Connection token and client secret created successfully', {
