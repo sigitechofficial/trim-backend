@@ -283,14 +283,13 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
   }
 }
 
-async function  createOneTapePayment(amount, customerId, connectedAccountId) {
-  console.log("connectedAccountId========Stripe===>", connectedAccountId)
+async function  createOneTapePayment(amount, connectedAccountId) {
+  console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", connectedAccountId)
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: convertToCents(amount),
         currency: 'gbp',
-        customer: customerId,
         payment_method_types: ['card_present'],
       },
       {

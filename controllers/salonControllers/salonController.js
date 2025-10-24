@@ -3371,6 +3371,10 @@ exports.createConnectionToken = async (req, res, next) => {
       where: { userId },
       include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
     });
+    
+    console.log("salonData=======================+++++",salonData.connectAccountId)
+    
+    let salonConnectId=salonData.connectAccountId
 
     if (!salonData) {
       return next(new appError('Salon not found', 404));
@@ -3390,9 +3394,13 @@ exports.createConnectionToken = async (req, res, next) => {
     });
 
     let customerId;
+    
+    console.log("customerId===++++=======++++++++++++======",customerId)
 
     if (!customerOnConnect) {
       // Create customer in the connect account
+      
+      console.log("Going into this =============================+++++")
       customerId = await Stripe.addCustomer(
         `${salonData.user.firstName} ${salonData.user.lastName}`,
         salonData.user.email,
@@ -3415,7 +3423,7 @@ exports.createConnectionToken = async (req, res, next) => {
     const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId);
     
     // Create setup intent for client secret using the connect account
-    const directCharge = await Stripe.createOneTapePayment(amount,customerId, salonData.connectAccountId);
+    const directCharge = await Stripe.createOneTapePayment(amount,salonConnectId);
     console.log('directCharge', directCharge)
     return res.json(
       returnFunction('1', 'Connection token and client secret created successfully', {
@@ -3431,4 +3439,3 @@ exports.createConnectionToken = async (req, res, next) => {
     return next(new appError('Failed to create connection token and client secret', 500));
   }
 };
-
