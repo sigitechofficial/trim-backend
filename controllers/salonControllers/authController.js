@@ -1200,6 +1200,7 @@ exports.clingLambdaFunction = async (req, res, next) => {
   const users = await user.findAll({
     where: {
       userTypeId: 2,
+      salonMailReminder: false,
       createdAt: {
         [Op.gte]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()),
         [Op.lt]: new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate() + 1)
