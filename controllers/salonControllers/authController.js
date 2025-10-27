@@ -27,6 +27,7 @@ const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
+const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
 const redis_Client = require('../../routes/redis_connect')
 
 //! Function to create JWT Tocken
@@ -1237,4 +1238,164 @@ exports.clingLambdaFunction = async (req, res, next) => {
     },
     error: '',
   });
+};
+
+// Incomplete Registration Reminder API
+exports.incompleteRegistrationReminder = async (req, res, next) => {
+  try {
+    console.log("🚀 Starting incomplete registration reminder process...");
+    
+    // Find salon users (userTypeId = 2) who are verified but have incomplete profiles
+    const salonUsers = await user.findAll({
+      where: {
+        userTypeId: 2,
+        deleted: false,
+        status: true,
+        verifiedAt: { [Op.ne]: null }, // Must be verified
+        // Optional: Add condition to avoid sending too frequently
+        // salonMailReminder: false, // Uncomment if you want to track per-user
+      },
+      include: [
+        {
+          model: salonDetail,
+          required: false,
+          include: [
+            { model: category, required: false, attributes: ['id'] },
+            { model: service, attributes: ['id'] },
+            { model: time, attributes: ['id'] },
+            { model: addressDBS },
+            { model: employee, attributes: ['id'] },
+            { model: wallet, required: false },
+          ],
+        },
+      ],
+      attributes: ['id', 'firstName', 'lastName', 'email', 'salonMailReminder'],
+    });
+
+    if (salonUsers.length === 0) {
+      return res.status(200).json({
+        status: '1',
+        message: 'No salon users found with incomplete registrations',
+        data: { count: 0 },
+        error: '',
+      });
+    }
+
+    console.log(`📊 Found ${salonUsers.length} salon users to check`);
+
+    // Filter users with incomplete profiles
+    const incompleteUsers = [];
+    
+    for (const salonUser of salonUsers) {
+      const salon = salonUser.salonDetails?.[0];
+      
+      if (!salon) {
+        // No salon details at all
+        incompleteUsers.push({
+          ...salonUser.toJSON(),
+          profileCompletion: {
+            hasBusinessDetails: false,
+            hasBusinessAddress: false,
+            hasServiceList: false,
+            hasWorkingHours: false,
+            hasTeamMembers: false,
+            hasSubscription: false,
+            accountConnected: false,
+          }
+        });
+        continue;
+      }
+
+      // Check profile completion status (same logic as session API)
+      const profileCompletion = {
+        hasBusinessDetails: salon ? true : false,
+        hasBusinessAddress: salon.addressDB !== null,
+        hasServiceList: salon.services.length !== 0,
+        hasWorkingHours: salon.times.length !== 0,
+        hasTeamMembers: salon.employees.length !== 0,
+        hasSubscription: salonUser.isExternalEmployee ? true : salon.approvedByAdmin,
+        accountConnected: salon?.wallet?.accountConnected ? true : false,
+      };
+
+      // Check if profile is incomplete
+      const isComplete = 
+        profileCompletion.hasBusinessDetails &&
+        profileCompletion.hasBusinessAddress &&
+        profileCompletion.hasServiceList &&
+        profileCompletion.hasWorkingHours &&
+        profileCompletion.hasTeamMembers &&
+        profileCompletion.hasSubscription &&
+        profileCompletion.accountConnected;
+
+      if (!isComplete) {
+        incompleteUsers.push({
+          ...salonUser.toJSON(),
+          profileCompletion
+        });
+      }
+    }
+
+    console.log(`📋 Found ${incompleteUsers.length} users with incomplete profiles`);
+
+    if (incompleteUsers.length === 0) {
+      return res.status(200).json({
+        status: '1',
+        message: 'All salon users have complete profiles',
+        data: { count: 0 },
+        error: '',
+      });
+    }
+
+    // Send reminder emails
+    const emailPromises = incompleteUsers.map(async (user) => {
+      try {
+        await IncompleteRegistrationReminder({
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          profileCompletion: user.profileCompletion
+        });
+        
+        // Update the salonMailReminder flag to track that we sent an email
+        await user.update({
+          salonMailReminder: true
+        });
+        
+        console.log(`✅ Sent reminder email to ${user.email}`);
+        return { email: user.email, status: 'sent' };
+      } catch (error) {
+        console.error(`❌ Failed to send email to ${user.email}:`, error.message);
+        return { email: user.email, status: 'failed', error: error.message };
+      }
+    });
+
+    const results = await Promise.all(emailPromises);
+    const successful = results.filter(r => r.status === 'sent');
+    const failed = results.filter(r => r.status === 'failed');
+
+    console.log(`📧 Email sending completed: ${successful.length} successful, ${failed.length} failed`);
+
+    return res.status(200).json({
+      status: '1',
+      message: 'Incomplete registration reminder emails processed',
+      data: {
+        totalUsers: salonUsers.length,
+        incompleteUsers: incompleteUsers.length,
+        emailsSent: successful.length,
+        emailsFailed: failed.length,
+        successfulEmails: successful.map(s => s.email),
+        failedEmails: failed.map(f => ({ email: f.email, error: f.error })),
+      },
+      error: '',
+    });
+
+  } catch (error) {
+    console.error('❌ Incomplete registration reminder process failed:', error);
+    return next(
+      new appError(
+        'Failed to process incomplete registration reminders. Please try again.',
+        500,
+      ),
+    );
+  }
 };
