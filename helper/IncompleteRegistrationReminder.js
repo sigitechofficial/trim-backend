@@ -7,6 +7,7 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (data) {
+console.log("Sending the Iincopmplete Mail")
   console.log('🚀 ~ IncompleteRegistrationReminder ~ data:', data)
   
   let subject = `Complete Your Salon Setup - ${data.firstName}`

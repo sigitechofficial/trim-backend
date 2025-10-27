@@ -1253,7 +1253,7 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
         status: true,
         verifiedAt: { [Op.ne]: null }, // Must be verified
         // Optional: Add condition to avoid sending too frequently
-        // salonMailReminder: false, // Uncomment if you want to track per-user
+        salonIncompleteMailSent: false, 
       },
       include: [
         {
@@ -1269,7 +1269,7 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
           ],
         },
       ],
-      attributes: ['id', 'firstName', 'lastName', 'email', 'salonMailReminder'],
+      attributes: ['id', 'firstName', 'lastName', 'email', 'salonIncompleteMailSent'],
     });
 
     if (salonUsers.length === 0) {
@@ -1292,7 +1292,8 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
       if (!salon) {
         // No salon details at all
         incompleteUsers.push({
-          ...salonUser.toJSON(),
+          userInstance: salonUser, // Keep the Sequelize instance
+          userData: salonUser.toJSON(),
           profileCompletion: {
             hasBusinessDetails: false,
             hasBusinessAddress: false,
@@ -1329,7 +1330,8 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
 
       if (!isComplete) {
         incompleteUsers.push({
-          ...salonUser.toJSON(),
+          userInstance: salonUser, // Keep the Sequelize instance
+          userData: salonUser.toJSON(),
           profileCompletion
         });
       }
@@ -1347,25 +1349,25 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
     }
 
     // Send reminder emails
-    const emailPromises = incompleteUsers.map(async (user) => {
+    const emailPromises = incompleteUsers.map(async (incompleteUser) => {
       try {
         await IncompleteRegistrationReminder({
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          profileCompletion: user.profileCompletion
+          firstName: incompleteUser.userData.firstName,
+          lastName: incompleteUser.userData.lastName,
+          email: incompleteUser.userData.email,
+          profileCompletion: incompleteUser.profileCompletion
         });
         
         // Update the salonMailReminder flag to track that we sent an email
-        await user.update({
-          salonMailReminder: true
+        await incompleteUser.userInstance.update({
+          salonIncompleteMailSent: true
         });
         
-        console.log(`✅ Sent reminder email to ${user.email}`);
-        return { email: user.email, status: 'sent' };
+        console.log(`✅ Sent reminder email to ${incompleteUser.userData.email}`);
+        return { email: incompleteUser.userData.email, status: 'sent' };
       } catch (error) {
-        console.error(`❌ Failed to send email to ${user.email}:`, error.message);
-        return { email: user.email, status: 'failed', error: error.message };
+        console.error(`❌ Failed to send email to ${incompleteUser.userData.email}:`, error.message);
+        return { email: incompleteUser.userData.email, status: 'failed', error: error.message };
       }
     });
 
