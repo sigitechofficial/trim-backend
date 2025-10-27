@@ -3074,6 +3074,8 @@ if (salonDetails?.hasObtainedFreeTrial) {
     'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ ~ stripeCustomer.stripeCustomer= ~ stripeCustomer:',
     stripeCustomer,
   )
+
+  console.log("req.body.paymentMethodId,====================>>>>>>>",req.body.paymentMethodId,)
   // const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
   const indent = await Stripe.createSubscriptionWithPriceId(
     stripeCustomer,
