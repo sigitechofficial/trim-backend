@@ -99,6 +99,11 @@ module.exports = (sequelize) => {
         type: DataTypes.BOOLEAN,
         allowNull: true,
         defaultValue: false,
+      },
+      salonIncompleteMailSent:{
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
       }
     },
     {
