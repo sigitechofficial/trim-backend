@@ -963,7 +963,7 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
-    const connectionToken = await Stripe.createConnectionToken();
+    const connectionToken = await Stripe.createConnectionToken(null, null);
     console.log("🚀 ~ connectionToken:", connectionToken)
 
 

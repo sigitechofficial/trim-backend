@@ -1970,7 +1970,10 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   )
   
   // Create connection token for Stripe Terminal
-  const connectionToken = await Stripe.createConnectionToken()
+  // In live mode, you need to pass a location ID
+  // For now, we're passing null which works in test mode
+  // In production, you'll need to provide an actual location ID
+  const connectionToken = await Stripe.createConnectionToken(null, null)
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =

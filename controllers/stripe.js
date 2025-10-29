@@ -1559,10 +1559,17 @@ async function getInvoiceDetails(invoiceId) {
 /*
  *  1:  Create Connection Token ________________________
  */
-async function createConnectionToken(connectAccountId) {
+async function createConnectionToken(connectAccountId, locationId ='tml_GP5oQgqIvzs3VW') {
   try {
+    const tokenParams = {};
+    
+    // Only include location parameter in live mode
+    if (locationId) {
+      tokenParams.location = locationId;
+    }
+    
     const token = await stripe.terminal.connectionTokens.create(
-      {},
+      tokenParams,
       {
         stripeAccount: connectAccountId, // Pass the connected account ID here
       }
