@@ -953,14 +953,19 @@ exports.collectedRentTransactionHistory = async (req, res, next) => {
 //Employee See all the transactions history
 exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
   const userId = req.user.id
-  const salonDetailId = req.params.salonDetailId
+  
+
+  const salonDetialsData= await salonDetail.findOne({
+    where: { userId: userId },
+    attributes: ['id','parentSalonId']
+  })
  
   
   // If salonDetailId is provided, validate that the employee is associated with that salon
     const employeeAtSalon = await employee.findOne({
       where: { 
         userId: userId,
-        salonDetailId: salonDetailId 
+        salonDetailId: salonDetialsData.parentSalonId 
       },
       attributes: ['id']
     })
@@ -974,9 +979,9 @@ exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
   
   
   // Build where condition
-  const whereCondition = { employeeId: employeeAtSalon.id }
-  if (salonDetailId) {
-    whereCondition.salonDetailId = salonDetailId
+  const whereCondition = { 
+    employeeId: employeeAtSalon.id,
+    salonDetailId: salonDetialsData.parentSalonId
   }
   
   console.log("Where Condition -------------------->>>",whereCondition)

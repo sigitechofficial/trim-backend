@@ -1575,6 +1575,29 @@ async function createConnectionToken(connectAccountId) {
   }
 }
 
+async function getTerminalLocation(
+  locationId='tml_GP5oQgqIvzs3VW',
+  stripeAccount=null
+) {
+  console.log("getTerminalLocation--------------------locationId========Stripe===>", locationId)
+  console.log("getTerminalLocation--------------------stripeAccount========Stripe===>", stripeAccount)
+  try {
+    // If using Connect, pass { stripeAccount } as the 3rd arg
+    const location = await stripe.terminal.locations.retrieve(
+      locationId,
+      { stripeAccount }
+    );
+    return { ok: true, data: location };
+  } catch (err) {
+    return {
+      ok: false,
+      status: err.statusCode ?? 500,
+      code: err.code,
+      message: err.message,
+    };
+  }
+}
+
 
 module.exports = {
   createStripeLoginLink,
@@ -1633,7 +1656,8 @@ module.exports = {
   updatePaymentIntentDescription,
   getInvoiceDetails,
   createConnectionToken,
-  createOneTapePayment
+  createOneTapePayment,
+  getTerminalLocation
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
