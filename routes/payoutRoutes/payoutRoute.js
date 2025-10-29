@@ -103,7 +103,7 @@ router.get(
 )
 
 router.get(
-  '/rent-collection-employee-transaction-history/:salonDetailId',
+  '/rent-collection-employee-transaction-history',
   protect,
   catchAsync(payoutController.employeeRentCollectionTransactionHistory),
 )

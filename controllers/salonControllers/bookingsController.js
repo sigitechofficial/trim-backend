@@ -2279,6 +2279,123 @@ exports.checkoutCash = async (req, res, next) => {
 }
 
 /*
+              4.CheckOut Minimal Payment (No Stripe)
+      ________________________________________
+  */
+exports.checkOutMinimalPayment = async (req, res, next) => {
+  const { bookingId, tip } = req.body;
+
+  // Check for unfinished services
+  const jobData = await jobs.findOne({
+    where: { bookingId, status: { [Op.or]: ['pending', 'assign'] } },
+  });
+
+  if (jobData) {
+    return res.json(
+      returnFunction('2', 'The booking has unfinished services.', {}, '')
+    );
+  }
+
+  // Get booking data with all necessary relations
+  let bookingData = await booking.findByPk(bookingId, {
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'salonName'],
+      },
+      {
+        model: user,
+        attributes: ['id', 'firstName', 'lastName'],
+      },
+      { model: jobs },
+    ],
+    attributes: [
+      'id',
+      'status',
+      'on',
+      'startTime',
+      'initialPayment',
+      'discount',
+      'total',
+      'tip',
+      'actualCapturedAmount',
+      'salonDetailId',
+      'customerId',
+      'clientFirstName',
+      'clientLastName',
+    ],
+  });
+
+  // Check booking status
+  if (
+    bookingData.status === 'cancel' ||
+    bookingData.status === 'no-show' ||
+    bookingData.status === 'complete'
+  ) {
+    const statusMessages = {
+      cancel: 'You cannot check out because the booking is marked as Canceled',
+      'no-show': 'You cannot check out because the booking is marked as No-Show',
+      complete: 'You cannot check out because the booking has already been Completed.',
+    };
+    return res.json(returnFunction('2', statusMessages[bookingData.status], {}, ''));
+  }
+
+  // Calculate amounts
+  const amount = parseFloat(req.body.amount) || 0;
+  const tipAmount = parseFloat(tip) || 0;
+  const salonEarning = amount + parseFloat(bookingData.actualCapturedAmount);
+
+  try {
+    // Update salon wallet (even if amount is 0, we still track it)
+    await wallet.increment(
+      { onlineAmount: salonEarning },
+      { where: { salonDetailId: bookingData.salonDetailId } }
+    );
+
+    // Update booking status and payment info
+    bookingData.status = 'complete';
+    bookingData.finalPayment = 'paid';
+    bookingData.paymentMethod = 'minimal_payment'; // New payment method for tracking
+    bookingData.subTotal = bookingData.total;
+    await bookingData.save();
+
+    // Update actual captured amount and tip
+    await booking.increment(
+      { actualCapturedAmount: amount, tip: tipAmount },
+      { where: { id: bookingId } }
+    );
+
+    // Send communication (email and notifications)
+    Communication.online(bookingId, tipAmount, amount);
+
+    // Update employee commission records
+    await employeeCommission.update(
+      { appointmentClosed: true },
+      { where: { bookingId: bookingData.id } }
+    );
+
+    // Update rent chair earning records
+    await rentChairEarning.update(
+      { appointmentClosed: true },
+      { where: { bookingId: bookingData.id } }
+    );
+
+    // Distribute tips if any
+    await distributeTip(bookingData, tipAmount);
+
+    return res.json(
+      returnFunction('1', 'Booking completed successfully with minimal payment.', {}, '')
+    );
+
+  } catch (error) {
+    console.error('Error in checkOutMinimalPayment:', error);
+    return res.json(
+      returnFunction('0', 'Failed to complete booking. Please try again.', {}, '')
+    );
+  }
+};
+
+/*
               4.Save Unpaid
       ________________________________________
   */

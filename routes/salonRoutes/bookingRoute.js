@@ -54,6 +54,8 @@ router.post('/getclientHistory', catchAsync(bookingsController.clientHistory))
 router.post('/checkoutBooking', catchAsync(bookingsController.checkOutBooking))
 //Cash CheckOut  Bookings of a Customer
 router.post('/checkoutCash', catchAsync(bookingsController.checkoutCash))
+//Minimal Payment CheckOut (No Stripe) - for small amounts or zero payment
+router.post('/checkoutMinimalPayment', catchAsync(bookingsController.checkOutMinimalPayment))
 //Cash CheckOut  Bookings of a Customer
 router.post('/saveUnpaid', catchAsync(bookingsController.saveUnpaid))
 //Remove Client
