@@ -39,7 +39,10 @@ const {
   deletedCustomer,
   subscriptions,
   couponTimeSlot,
-  customerOnConnectAccount
+  customerOnConnectAccount,
+  cities,
+  countries,
+  zones
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -53,6 +56,8 @@ const { sendCouponNotificationToCustomers } = require('../eventDrivenCommunicati
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+const { findZones } = require('../utils/zoneFind');
+
 const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
 const {
   processAllAppointments,
@@ -123,6 +128,10 @@ exports.addSalonDetail = async (req, res, next) => {
     throw new appError(message, 200);
   }
 
+  const zone = await findZones(addressDetail.lat, addressDetail.lng);
+  console.log("Zone:", zone);
+  let zoneId = zone[0].id
+
   const addressData = await addressDBS.create(addressDetail);
   const newEntry = await salonDetail.create({
     salonName,
@@ -187,6 +196,8 @@ exports.addSalonDetail = async (req, res, next) => {
     },
     { where: { userId } },
   );
+
+  await addressDBS.update({ zoneId: zoneId }, { where: { id: addressData.id } })
 
   return res.json(
     returnFunction('1', 'Salon details added successfully!', newEntry, ''),
