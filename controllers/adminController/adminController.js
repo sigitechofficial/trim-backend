@@ -2754,7 +2754,7 @@ exports.getCities = async (req, res, next) => {
 
 // ^ Add Zones
 exports.addZones = async (req, res, next) => {
-  const zoneFind=await zones.findOne({ where: { name: req.body.name } })
+  const zoneFind=await zones.findOne({ where: { name: req.body.zoneName } })
   if (zoneFind) {
     return next(new appError('Zone already exists', 400))
   }
