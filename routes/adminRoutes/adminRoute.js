@@ -522,4 +522,14 @@ router.get(
 router.patch('/update-all-salons-vat-platform-fee', catchAsync(adminController.updateAllSalonsVatAndPlatformFee))
 
 
+//!-------------------------------Zone Management-------------------------------//
+// ^ Add Country
+router.post('/add-country', catchAsync(adminController.addCountries))
+// ^ Get Countries
+router.get('/get-countries', catchAsync(adminController.getCountries))
+// ^ Add City
+router.post('/add-city', catchAsync(adminController.addCities))
+// ^ Get Cities
+router.get('/get-cities', catchAsync(adminController.getCities))
+
 module.exports = router
