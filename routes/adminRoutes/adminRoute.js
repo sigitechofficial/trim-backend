@@ -524,12 +524,16 @@ router.patch('/update-all-salons-vat-platform-fee', catchAsync(adminController.u
 
 //!-------------------------------Zone Management-------------------------------//
 // ^ Add Country
-router.post('/add-country', catchAsync(adminController.addCountries))
+router.post('/add-country',protect, catchAsync(adminController.addCountries))
 // ^ Get Countries
-router.get('/get-countries', catchAsync(adminController.getCountries))
+router.get('/get-countries',protect, catchAsync(adminController.getCountries))
 // ^ Add City
-router.post('/add-city', catchAsync(adminController.addCities))
+router.post('/add-city',protect, catchAsync(adminController.addCities))
 // ^ Get Cities
-router.get('/get-cities', catchAsync(adminController.getCities))
+router.get('/get-cities',protect, catchAsync(adminController.getCities))
+// ^ Add Zone
+router.post('/add-zone',protect, catchAsync(adminController.addZones))
+// ^ Get Zones
+router.get('/get-zones',protect, catchAsync(adminController.getZones))
 
 module.exports = router
