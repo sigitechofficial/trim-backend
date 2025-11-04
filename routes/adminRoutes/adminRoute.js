@@ -535,5 +535,6 @@ router.get('/get-cities',protect, catchAsync(adminController.getCities))
 router.post('/add-zone',protect, catchAsync(adminController.addZones))
 // ^ Get Zones
 router.get('/get-zones',protect, catchAsync(adminController.getZones))
-
+// ^ Update Zone
+router.patch('/update-zone/:id',protect, catchAsync(adminController.updateZones))
 module.exports = router

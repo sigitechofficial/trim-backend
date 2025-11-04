@@ -1,7 +1,10 @@
-const { zone, cities, countries, sequelize } = require("../models");
-
+const { zones, cities, countries } = require("../models");
+const { Op, literal, col, fn, where } = require('sequelize')
+const sequelize = require("sequelize");
 const findZones = async (lat, lng) => {
-    const findZone = await zone.findAll({
+    console.log("LAT++++++++++",lat);
+    console.log("LAT++++++++++",lng);
+    const findZone = await zones.findAll({
         where: {
             status: true,
             coordinates: sequelize.where(
@@ -26,7 +29,10 @@ const findZones = async (lat, lng) => {
             },
         ],
     });
+    
+    console.log("findZone====================>>>",findZone)
     return findZone;
 }
+
 
 module.exports = { findZones };

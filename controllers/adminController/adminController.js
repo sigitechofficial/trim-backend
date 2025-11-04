@@ -2762,6 +2762,11 @@ exports.addZones = async (req, res, next) => {
   return res.status(200).json(response({ message: 'Zone added successfully', data: { zones: data } }))
 }
 
+// ^ Update Zones
+exports.updateZones = async (req, res, next) => {
+  const data = await zones.update(req.body, { where: { id: req.params?.id } })
+  return res.status(200).json(response({ message: 'Zone updated successfully', data: { zones: data } }))
+}
 // ^ Get Zones
 exports.getZones = async (req, res, next) => {
   const data = await zones.findAll()

@@ -283,17 +283,35 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
   }
 }
 
-async function  createOneTapePayment(amount, connectedAccountId) {
-  console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", connectedAccountId)
+// async function  createOneTapePayment(amount, connectedAccountId) {
+//   console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", connectedAccountId)
+//   try {
+//     const paymentIntent = await stripe.paymentIntents.create(
+//       {
+//         amount: convertToCents(amount),
+//         currency: 'gbp',
+//         payment_method_types: ['card_present'],
+//       },
+//       {
+//         stripeAccount: connectedAccountId,
+//       }
+//     );
+//     return paymentIntent;
+//   }
+//   catch (error) {
+//     throw new AppError(`${error.message} `, 200);
+//   }
+// }
+
+
+async function  createOneTapePayment(amount) {
+  console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", amount)
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: convertToCents(amount),
         currency: 'gbp',
         payment_method_types: ['card_present'],
-      },
-      {
-        stripeAccount: connectedAccountId,
       }
     );
     return paymentIntent;
@@ -1559,7 +1577,31 @@ async function getInvoiceDetails(invoiceId) {
 /*
  *  1:  Create Connection Token ________________________
  */
-async function createConnectionToken(connectAccountId, locationId ='tml_GP5oQgqIvzs3VW') {
+// async function createConnectionToken(connectAccountId=null, locationId ='tml_GP5oQgqIvzs3VW') {
+//   try {
+//     const tokenParams = {};
+    
+//     // Only include location parameter in live mode
+//     if (locationId) {
+//       tokenParams.location = locationId;
+//     }
+    
+//     const token = await stripe.terminal.connectionTokens.create(
+//       tokenParams,
+//     //   {
+//     //     stripeAccount: connectAccountId, // Pass the connected account ID here
+//     //   }
+//     );
+//     console.log("✅ Connection token created successfully");
+//     return token.secret;
+//   } catch (error) {
+//     console.error("❌ Stripe Terminal error:", error);
+//     throw new AppError(`${error.message}`, 200);
+//   }
+// }
+
+
+async function createConnectionToken(locationId ='tml_GP5oQgqIvzs3VW') {
   try {
     const tokenParams = {};
     
@@ -1570,9 +1612,9 @@ async function createConnectionToken(connectAccountId, locationId ='tml_GP5oQgqI
     
     const token = await stripe.terminal.connectionTokens.create(
       tokenParams,
-      {
-        stripeAccount: connectAccountId, // Pass the connected account ID here
-      }
+    //   {
+    //     stripeAccount: connectAccountId, // Pass the connected account ID here
+    //   }
     );
     console.log("✅ Connection token created successfully");
     return token.secret;
@@ -1581,6 +1623,7 @@ async function createConnectionToken(connectAccountId, locationId ='tml_GP5oQgqI
     throw new AppError(`${error.message}`, 200);
   }
 }
+
 
 async function getTerminalLocation(
   locationId='tml_GP5oQgqIvzs3VW',
