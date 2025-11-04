@@ -39,7 +39,10 @@ const {
   deletedCustomer,
   subscriptions,
   couponTimeSlot,
-  customerOnConnectAccount
+  customerOnConnectAccount,
+  cities,
+  countries,
+  zones
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -53,6 +56,8 @@ const { sendCouponNotificationToCustomers } = require('../eventDrivenCommunicati
 const { response } = require('../../utils/response')
 const ThrowNotification = require('../../utils/throwNotification')
 const ThrowSalonPermotionalNotification = require('../../utils/throwNotificationBySalon')
+const { findZones } = require('../../utils/zoneFind');
+
 const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
 const {
   processAllAppointments,
@@ -123,6 +128,10 @@ exports.addSalonDetail = async (req, res, next) => {
     throw new appError(message, 200);
   }
 
+  const zone = await findZones(addressDetail.lat, addressDetail.lng);
+  console.log("Zone:", zone);
+  let zoneId = zone[0].id
+
   const addressData = await addressDBS.create(addressDetail);
   const newEntry = await salonDetail.create({
     salonName,
@@ -187,6 +196,10 @@ exports.addSalonDetail = async (req, res, next) => {
     },
     { where: { userId } },
   );
+
+  await addressDBS.update({ zoneId: zoneId }, { where: { id: addressData.id } })
+
+  await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
 
   return res.json(
     returnFunction('1', 'Salon details added successfully!', newEntry, ''),
@@ -3361,9 +3374,93 @@ exports.fetchInvoice = async (req, res, next) => {
  * Create Connection Token and Client Secret
  * ________________________________________
  */
+// exports.createConnectionToken = async (req, res, next) => {
+//   try {
+//     const userId = req.user.id;
+
+//     const { amount } = req.body;
+//     // Find the salon and get the connect account ID
+//     const salonData = await salonDetail.findOne({
+//       where: { userId },
+//       include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
+//     });
+    
+//     console.log("salonData=======================+++++",salonData.connectAccountId)
+    
+//     let salonConnectId=salonData.connectAccountId
+
+//     if (!salonData) {
+//       return next(new appError('Salon not found', 404));
+//     }
+
+//     if (!salonData.connectAccountId) {
+//       return next(new appError('Salon connect account not found. Please complete onboarding first.', 400));
+//     }
+
+//     // Check if customer exists in customerOnConnectAccount table
+//     let customerOnConnect = await customerOnConnectAccount.findOne({
+//       where: { 
+//         salonDetailId: salonData.id,
+//         connectAccountId: salonData.connectAccountId,
+//         userId: salonData.user.id
+//       }
+//     });
+
+//     let customerId;
+    
+//     console.log("customerId===++++=======++++++++++++======",customerId)
+
+//     if (!customerOnConnect) {
+//       // Create customer in the connect account
+      
+//       console.log("Going into this =============================+++++")
+//       customerId = await Stripe.addCustomer(
+//         `${salonData.user.firstName} ${salonData.user.lastName}`,
+//         salonData.user.email,
+//         salonData.connectAccountId
+//       );
+
+//       // Save customer in customerOnConnectAccount table
+//       await customerOnConnectAccount.create({
+//         customerId: customerId,
+//         connectAccountId: salonData.connectAccountId,
+//         salonDetailId: salonData.id,
+//         userId: salonData.user.id,
+//         status: true
+//       });
+//     } else {
+//       customerId = customerOnConnect.customerId;
+//     }
+
+//     // Create connection token for Stripe Terminal
+//     // In live mode, you need to pass a location ID
+//     // For now, we're passing null which works in test mode
+//     // In production, you'll need to provide an actual location ID from your database
+//     const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId, null);
+    
+//     // Create setup intent for client secret using the connect account
+//     const directCharge = await Stripe.createOneTapePayment(amount,salonConnectId);
+//     console.log('directCharge', directCharge)
+//     return res.json(
+//       returnFunction('1', 'Connection token and client secret created successfully', {
+//         connectionToken,
+//         clientSecret: directCharge.client_secret,
+//         paymentIntentId: directCharge.id,
+//         customerId,
+//         connectAccountId: salonData.connectAccountId
+//       }, '')
+//     );
+//   } catch (error) {
+//     console.error('Error creating connection token:', error);
+//     return next(new appError('Failed to create connection token and client secret', 500));
+//   }
+// };
+
+
 exports.createConnectionToken = async (req, res, next) => {
-  try {
     const userId = req.user.id;
+    
+    console.log("CALING THE API  OF CREATE TOKEN")
 
     const { amount } = req.body;
     // Find the salon and get the connect account ID
@@ -3372,17 +3469,18 @@ exports.createConnectionToken = async (req, res, next) => {
       include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
     });
     
-    console.log("salonData=======================+++++",salonData.connectAccountId)
+    //console.log("salonData=======================+++++",salonData.connectAccountId)
     
-    let salonConnectId=salonData.connectAccountId
+    // let salonConnectId=salonData.connectAccountId
+    let salonConnectId='acct_1R64stEFgyBEZR5p';
 
-    if (!salonData) {
-      return next(new appError('Salon not found', 404));
-    }
+    // if (!salonData) {
+    //   return next(new appError('Salon not found', 404));
+    // }
 
-    if (!salonData.connectAccountId) {
-      return next(new appError('Salon connect account not found. Please complete onboarding first.', 400));
-    }
+    // if (!salonData.connectAccountId) {
+    //   return next(new appError('Salon connect account not found. Please complete onboarding first.', 400));
+    // }
 
     // Check if customer exists in customerOnConnectAccount table
     let customerOnConnect = await customerOnConnectAccount.findOne({
@@ -3410,7 +3508,7 @@ exports.createConnectionToken = async (req, res, next) => {
       // Save customer in customerOnConnectAccount table
       await customerOnConnectAccount.create({
         customerId: customerId,
-        connectAccountId: salonData.connectAccountId,
+        connectAccountId: salonConnectId,
         salonDetailId: salonData.id,
         userId: salonData.user.id,
         status: true
@@ -3423,11 +3521,21 @@ exports.createConnectionToken = async (req, res, next) => {
     // In live mode, you need to pass a location ID
     // For now, we're passing null which works in test mode
     // In production, you'll need to provide an actual location ID from your database
-    const connectionToken = await Stripe.createConnectionToken(salonData.connectAccountId, null);
+    const connectionToken = await Stripe.createConnectionToken('tml_GP5oQgqIvzs3VW');
     
     // Create setup intent for client secret using the connect account
     const directCharge = await Stripe.createOneTapePayment(amount,salonConnectId);
     console.log('directCharge', directCharge)
+    
+     let outObj={
+        connectionToken,
+        clientSecret: directCharge.client_secret,
+        paymentIntentId: directCharge.id,
+        customerId,
+        connectAccountId: salonData.connectAccountId
+    }
+   
+     console.log('outObj========================+++++++', outObj)
     return res.json(
       returnFunction('1', 'Connection token and client secret created successfully', {
         connectionToken,
@@ -3437,8 +3545,4 @@ exports.createConnectionToken = async (req, res, next) => {
         connectAccountId: salonData.connectAccountId
       }, '')
     );
-  } catch (error) {
-    console.error('Error creating connection token:', error);
-    return next(new appError('Failed to create connection token and client secret', 500));
-  }
 };

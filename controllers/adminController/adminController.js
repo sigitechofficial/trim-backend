@@ -37,6 +37,9 @@ const {
   rentChairPayout,
   rentChairEarning,
   salaryPayout,
+  countries,
+  cities,
+  zones
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -2713,4 +2716,59 @@ exports.deleteFAQs = async (req, res, next) => {
       data: {},
     }),
   )
+}
+
+// ^ Add Countires
+exports.addCountries = async (req, res, next) => {
+
+  const countrieFind=await countries.findOne({ where: { name: req.body.name } })
+  if (countrieFind) {
+    return next(new appError('Country already exists', 400))
+  }
+  const data = await countries.create(req.body)
+  return res.status(200).json(response({ message: 'Country added successfully', data: { countries: data } }))
+}
+
+// ^ Get Countries
+exports.getCountries = async (req, res, next) => {
+  const data = await countries.findAll()
+  return res.status(200).json(response({ data: { countries: data } }))
+}
+
+
+// ^ Add Cities
+exports.addCities = async (req, res, next) => {
+  const cityFind=await cities.findOne({ where: { name: req.body.name } })
+  if (cityFind) {
+    return next(new appError('City already exists', 400))
+  }
+  const data = await cities.create(req.body)
+  return res.status(200).json(response({ message: 'City added successfully', data: { cities: data } }))
+}
+
+// ^ Get Cities
+exports.getCities = async (req, res, next) => {
+  const data = await cities.findAll()
+  return res.status(200).json(response({ data: { cities: data } }))
+}
+
+// ^ Add Zones
+exports.addZones = async (req, res, next) => {
+  const zoneFind=await zones.findOne({ where: { zoneName: req.body.zoneName } })
+  if (zoneFind) {
+    return next(new appError('Zone already exists', 400))
+  }
+  const data = await zones.create(req.body)
+  return res.status(200).json(response({ message: 'Zone added successfully', data: { zones: data } }))
+}
+
+// ^ Update Zones
+exports.updateZones = async (req, res, next) => {
+  const data = await zones.update(req.body, { where: { id: req.params?.id } })
+  return res.status(200).json(response({ message: 'Zone updated successfully', data: { zones: data } }))
+}
+// ^ Get Zones
+exports.getZones = async (req, res, next) => {
+  const data = await zones.findAll()
+  return res.status(200).json(response({ data: { zones: data } }))
 }

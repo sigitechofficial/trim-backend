@@ -84,6 +84,8 @@ const {
   socketForCalendar,
 } = require('../eventDrivenCommunication/calendarView')
 const Communication = require('../eventDrivenCommunication/appointmentCheckout')
+const { findZones } = require('../../utils/zoneFind');
+
 //! Return Function
 //* DEMO. Eamil Testing ----------------------
 const axios = require('axios')
@@ -219,250 +221,6 @@ exports.notificationTesting = async (req, res, next) => {
 
 //* 1.Get Home ----------------------
 
-// exports.home = async (req, res, next) => {
-//   const currentDay = CustomDate.currentDay()
-//   const { targetLat, targetLng } = req.body
-//   const rangeInKm = req.body.rangeInKm || 15
-//   const condition = { status: true }
-
-//   // Build price condition if provided
-//   const priceCondition = req.body?.price
-//     ? { price: { [Op.lte]: req.body?.price } }
-//     : {}
-
-//   // Build time condition if day and time are provided
-//   if (req.body.day && req.body.startTime && req.body.endTime) {
-//     condition.day = req.body.day
-//     condition.openingTime = { [Op.lte]: req.body.startTime }
-//     condition.closingTime = { [Op.gte]: req.body.endTime }
-//   }
-
-//   // Fetch liked salons if favorite filter is applied
-//   const likedSalons = await favorite.findAll({
-//     where: { userId: req?.user?.id || 0 },
-//     attributes: ['salonDetailId'],
-//   })
-//   const likeIds =
-//     likedSalons?.length > 0 ? likedSalons.map((ele) => ele.salonDetailId) : []
-
-//   // Initialize salon conditions
-//   const salonCondition = {
-//     [Op.or]: [
-//       { isExternalEmployee: true },
-//       { registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly } },
-//     ],
-//     approvedByAdmin: true,
-//     status: 1,
-//     deleted: 0,
-//   }
-
-//   // Apply favorite filter if requested
-//   if (req.params?.favorite && req?.user) {
-//     if (likedSalons.length < 1) {
-//       return res.status(200).json(response({ data: { slons: [] } }))
-//     }
-//     salonCondition.id = { [Op.or]: likeIds }
-//   }
-
-//   // Haversine formula for distance calculation
-//   const formula = `(6371 * 
-//     acos(
-//       cos(radians(${targetLat})) * cos(radians(lat)) * 
-//       cos(radians(lng) - radians(${targetLng})) + 
-//       sin(radians(${targetLat})) * sin(radians(lat))
-//     )
-//   )`
-
-//   // Refactored salon conditions incorporating service and time filters
-//   const finalSalonCondition = {
-//     ...salonCondition,
-//     // Distance filter
-//     ...(targetLat &&
-//       targetLng && {
-//         [Op.and]: literal(`${formula} <= ${rangeInKm}`),
-//       }),
-
-//     // Service price filter
-//     ...(req.body.price && {
-//       id: {
-//         [Op.in]: literal(`(
-//           SELECT DISTINCT salonDetailId FROM services
-//           WHERE services.salonDetailId = salonDetail.id 
-//             AND services.price <= ${req.body.price}
-//         )`),
-//       },
-//     }),
-//     // Time filter
-//     ...(req.body.day &&
-//       req.body.time && {
-//         id: {
-//           [Op.in]: literal(`(
-//           SELECT DISTINCT salonDetailId FROM times
-//           WHERE times.salonDetailId = salonDetail.id 
-//             AND times.day = '${req.body.day}' 
-//             AND times.openingTime <= '${req.body.time}' 
-//             AND times.closingTime >= '${req.body.time}'
-//         )`),
-//         },
-//       }),
-//     ...(req?.body?.serviceType && {
-//       id: {
-//         [Op.in]: literal(`(
-//             SELECT DISTINCT salonDetailId FROM services
-//           WHERE services.salonDetailId = salonDetail.id 
-//               AND services.serviceTypeId = ${req?.body?.serviceType}
-//           )`),
-//       },
-//     }),
-//   }
-
-//   console.log('ðŸš€ ~ exports.home= ~  finalSalonCondition:', finalSalonCondition)
-
-//   // Construct the query body without including 'service' and 'time'
-//   const body = {
-//     where: finalSalonCondition,
-//     attributes: [
-//       'id',
-//       'salonName',
-//       'coverImage',
-//       'isExternalEmployee',
-//       'isOnline',
-//       [
-//         literal(`(
-//           SELECT FORMAT(AVG(ratings.value), 1)
-//           FROM ratings
-//           WHERE ratings.salonDetailId = salonDetail.id
-//         )`),
-//         'salonAverageRating',
-//       ],
-//       [
-//         literal(`(
-//           SELECT COUNT(ratings.id)
-//           FROM ratings
-//           WHERE ratings.salonDetailId = salonDetail.id
-//         )`),
-//         'ratingCount',
-//       ],
-//     ],
-//     include: [
-//       // {
-//       //   model: rating,
-//       //   attributes: [],
-//       //   on: { salonDetailId: col('salonDetail.id') },
-//       //   required: false,
-//       // },
-//       {
-//         model: addressDBS,
-//         required: true,
-//         attributes: [
-//           'id',
-//           'streetAddress',
-//           'city',
-//           'district',
-//           'province',
-//           'country',
-//           'lat',
-//           'lng',
-//           'building',
-//           'postalCode',
-//         ],
-//       },
-//       {
-//         model: service,
-//         required: true,
-//         attributes: ['id', 'serviceName', 'price', 'discount'],
-//       },
-//       {
-//         model: user,
-//         where: { status: true, deleted: 0 },
-//         required: true,
-//         attributes: ['id'],
-//       },
-//     ],
-//     // group: ['salonDetail.id'],
-//     having: req.params?.favorite
-//       ? undefined
-//       : literal(`${formula} <= ${rangeInKm}`),
-//   }
-
-//   // Add distance attribute if not filtering by favorites
-//   if (!req.params?.favorite) {
-//     body.attributes.push([literal(`${formula}`), 'distance'])
-//   }
-
-//   let results = await salonDetail.findAll(body)
-
-//   results = JSON.parse(JSON.stringify(results))
-//   if (results.length > 0) {
-//     results = results.map((salon) => {
-//       const found = likeIds.some((id) => id === salon.id)
-//       return { ...salon, like: found }
-//     })
-//   }
-//   // console.log('ðŸš€ ~ exports.home= ~ results:', results)
-//   let appointments = []
-//   if (req.user && req.user.id) {
-//     appointments = await booking.findAll({
-//       where: {
-//         customerId: req.user.id,
-//         status: { [Op.or]: ['pending', 'book'] },
-//       },
-//       attributes: [
-//         'id',
-//         `status`,
-//         `startTime`,
-//         `endTime`,
-//         `on`,
-//         'total',
-//         'actualCapturedAmount',
-//         [
-//           literal(
-//             `(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`,
-//           ),
-//           'serviceCount',
-//         ],
-//       ],
-
-//       include: [
-//         {
-//           model: salonDetail,
-//           attributes: [
-//             'id',
-//             `salonName`,
-//             'coverImage',
-//             // [literal('FORMAT(AVG(ratings.value), 1)'), 'salonAverageRating'],
-//             // [fn('COUNT', col('ratings.id')), 'ratingCount']
-//           ],
-//           include: [
-//             { model: addressDBS, attributes: [`streetAddress`, `city`] },
-//             { model: rating, attributes: [] },
-//           ],
-//         },
-//         {
-//           model: jobs,
-//           attributes: [],
-//         },
-//       ],
-//     })
-//   }
-
-
-//   const output = {
-//     data: {
-//       slons: results,
-//       appointments,
-//       currencyUnit: CURRENCY_UNIT,
-//       distanceUnit: 'km',
-//     },
-//   }
-
-//   if (req.params.favorite) {
-//     output.data = { slons: results }
-//   }
-
-//   return res.status(200).json(response(output))
-// }
-
 exports.home = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
@@ -483,6 +241,15 @@ exports.home = async (req, res, next) => {
     condition.openingTime = { [Op.lte]: req.body.startTime || req.query.startTime }
     condition.closingTime = { [Op.gte]: req.body.endTime || req.query.endTime }
   }
+  
+  // Haversine formula for distance calculation
+  const formula = `(6371 * 
+    acos(
+      cos(radians(${targetLat})) * cos(radians(lat)) * 
+      cos(radians(lng) - radians(${targetLng})) + 
+      sin(radians(${targetLat})) * sin(radians(lat))
+    )
+  )`
 
   // Fetch favorite salon IDs
   const likedSalons = await favorite.findAll({
@@ -503,6 +270,19 @@ exports.home = async (req, res, next) => {
     deleted: 0,
   }
 
+  // Find zone based on customer's lat/lng
+  let customerZoneId = null
+  let customerZoneName = null
+  if (targetLat && targetLng) {
+    const zones = await findZones(targetLat, targetLng)
+    if (zones && zones.length > 0) {
+      customerZoneId = zones[0].id // store scalar
+      customerZoneName = zones[0].zoneName || null
+    }
+  }
+
+  console.log("customerZone===================>>>>", customerZoneId)
+
   if (req.params?.favorite && req?.user) {
     if (likedSalons.length < 1) {
       return res.status(200).json(response({ data: { slons: [] } }))
@@ -510,22 +290,10 @@ exports.home = async (req, res, next) => {
     salonCondition.id = { [Op.or]: likeIds }
   }
 
-  // Haversine formula for distance calculation
-  const formula = `(6371 * 
-    acos(
-      cos(radians(${targetLat})) * cos(radians(lat)) * 
-      cos(radians(lng) - radians(${targetLng})) + 
-      sin(radians(${targetLat})) * sin(radians(lat))
-    )
-  )`
-
   // Final conditions with optional filters
   const finalSalonCondition = {
     ...salonCondition,
-    ...(targetLat &&
-      targetLng && {
-        [Op.and]: literal(`${formula} <= ${rangeInKm}`),
-      }),
+    ...(customerZoneId ? { zoneId: customerZoneId } : {}), // Filter by customer zoneId
     ...((req.body.price || req.query.price) && {
       id: {
         [Op.in]: literal(`(
@@ -601,7 +369,9 @@ exports.home = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'zoneId'
         ],
+        // No zoneId filtering here, as it is done directly on salonDetail
       },
       {
         model: service,
@@ -615,16 +385,15 @@ exports.home = async (req, res, next) => {
         attributes: ['id'],
       },
     ],
-    // ✅ Only apply HAVING filter if not favorites
     having: !req.params?.favorite
       ? literal(`${formula} <= ${rangeInKm}`)
       : undefined,
   }
 
-  // ✅ Always include distance if lat/lng are provided
+  // Always include distance if lat/lng are provided
   if (targetLat && targetLng) {
     body.attributes.push([literal(`${formula}`), 'distance'])
-    body.order = [[literal('distance'), 'ASC']]  // 👈 SORT BY DISTANCE ASC
+    body.order = [[literal('distance'), 'ASC']]  // SORT BY DISTANCE ASC
   }
 
   // Fetch salon results
@@ -701,17 +470,17 @@ exports.home = async (req, res, next) => {
       distanceUnit: 'km',
       highestPriceAcrossAllSalons,
       lowestPriceAcrossAllSalons,
+      customerZone: customerZoneId ? { id: customerZoneId, name: customerZoneName } : null
     },
   }
 
-  // ✅ For favorites: keep distance + other salon fields, just drop appointments
+  // For favorites: keep distance + other salon fields, just drop appointments
   if (req.params.favorite) {
     delete output.data.appointments
   }
 
   return res.status(200).json(response(output))
 }
-
 
 
 

@@ -22,6 +22,11 @@ module.exports=(sequelize,DataTypes)=>{
     })
 
     zones.associate=(models)=>{
+        zones.hasMany(models.addressDBS);
+        models.addressDBS.belongsTo(zones);
+
+        zones.hasMany(models.salonDetail)
+        models.salonDetail.belongsTo(zones);
     }
     return zones;
 }

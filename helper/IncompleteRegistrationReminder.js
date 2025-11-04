@@ -80,13 +80,13 @@ module.exports = function (data) {
   const progressSummaryHtml = `
     <div style="text-align:center; margin:30px 0;">
       <h2 style="margin:0 0 15px 0; color:#000000; font-size:28px; font-weight:700; text-transform:uppercase;">
-        ${completionPercentage < 30 ? 'Critical Setup Required'
-          : completionPercentage < 70 ? 'Almost There - Setup Incomplete'
-          : 'Final Steps Needed'}
+        ${completionPercentage < 30 ? 'ALMOST THERE!'
+          : completionPercentage < 70 ? 'ALMOST THERE!'
+          : 'ALMOST THERE!'}
       </h2>
       <p style="margin:0; color:#000000; font-size:16px;">
-        ${completedSteps} of ${totalSteps} steps complete — <strong>${completionPercentage}%</strong>.
-        ${completionPercentage < 100 ? 'Finish the remaining steps to start accepting bookings.' : 'Setup complete!'}
+        You've completed ${completedSteps} of ${totalSteps} steps to setup your account.
+        ${completionPercentage < 100 ? 'If you still want to use Trim please see the below list of remaining steps.' : 'Setup complete!'}
       </p>
     </div>
   `
@@ -149,7 +149,7 @@ module.exports = function (data) {
                 <thead>
                   <tr>
                     <th width="66%" align="left" style="padding:10px 12px; font:700 13px Arial,Helvetica,sans-serif; text-transform:uppercase; color:#000; border-bottom:1px solid #000000;">Step</th>
-                    <th width="34%" align="right" style="padding:10px 12px; font:700 13px Arial,Helvetica,sans-serif; text-transform:uppercase; color:#000; border-bottom:1px solid #000000;">Status</th>
+                    <th width="34%" align="right" style="padding:10px 12px; font:700 13px Arial,Helvetica,sans-serif; text-transform:uppercase; color:#000; border-bottom:1px solid #000000;padding-right:80px">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,23 +167,13 @@ module.exports = function (data) {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
                 <tr>
                   <td align="center" style="border:1px solid #000000; background:#000000;">
-                    <a href="#" style="display:inline-block; padding:12px 24px; text-decoration:none; font-weight:600; font-size:16px; color:#FFFFFF;">${callToAction}</a>
+                    <a href="https://trimworldwide.com/BusinessSplash" style="display:inline-block; padding:12px 24px; text-decoration:none; font-weight:600; font-size:16px; color:#FFFFFF;">${callToAction}</a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
         </table>
-
-        <!-- Need help (left aligned) -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="row-content" width="500" style="margin:0 auto;">
-          <tr>
-            <td style="padding:10px 10px 0 10px; text-align:left;">
-              <div style="color:#000000; font:400 14px Arial,Helvetica,sans-serif;">${footerText}</div>
-            </td>
-          </tr>
-        </table>
-
         ${footer}
 
       </td>

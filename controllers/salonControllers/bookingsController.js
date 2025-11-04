@@ -2355,7 +2355,7 @@ exports.checkOutMinimalPayment = async (req, res, next) => {
     // Update booking status and payment info
     bookingData.status = 'complete';
     bookingData.finalPayment = 'paid';
-    bookingData.paymentMethod = 'minimal_payment'; // New payment method for tracking
+    bookingData.paymentMethod = 'card'; // New payment method for tracking
     bookingData.subTotal = bookingData.total;
     await bookingData.save();
 
