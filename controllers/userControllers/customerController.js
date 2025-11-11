@@ -221,45 +221,291 @@ exports.notificationTesting = async (req, res, next) => {
 
 //* 1.Get Home ----------------------
 
+// exports.home = async (req, res, next) => {
+//   const currentDay = CustomDate.currentDay()
+
+//   // ✅ Support both POST (body) and GET (query)
+//   const targetLat = req.body?.targetLat || req.query?.targetLat
+//   const targetLng = req.body?.targetLng || req.query?.targetLng
+//   const rangeInKm = req.body?.rangeInKm || req.query?.rangeInKm || 15
+//   const condition = { status: true }
+
+//   // Price condition for filtering salons
+//   const priceCondition = req.body?.price || req.query?.price
+//     ? { price: { [Op.lte]: req.body?.price || req.query?.price } }
+//     : {}
+
+//   // Filter by day and time
+//   if ((req.body.day || req.query.day) && (req.body.startTime || req.query.startTime) && (req.body.endTime || req.query.endTime)) {
+//     condition.day = req.body.day || req.query.day
+//     condition.openingTime = { [Op.lte]: req.body.startTime || req.query.startTime }
+//     condition.closingTime = { [Op.gte]: req.body.endTime || req.query.endTime }
+//   }
+  
+//   // Haversine formula for distance calculation
+//   const formula = `(6371 * 
+//     acos(
+//       cos(radians(${targetLat})) * cos(radians(lat)) * 
+//       cos(radians(lng) - radians(${targetLng})) + 
+//       sin(radians(${targetLat})) * sin(radians(lat))
+//     )
+//   )`
+
+//   // Fetch favorite salon IDs
+//   const likedSalons = await favorite.findAll({
+//     where: { userId: req?.user?.id || 0 },
+//     attributes: ['salonDetailId'],
+//   })
+//   const likeIds =
+//     likedSalons?.length > 0 ? likedSalons.map((ele) => ele.salonDetailId) : []
+
+//   // Base salon condition
+//   const salonCondition = {
+//     [Op.or]: [
+//       { isExternalEmployee: true },
+//       { registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly } },
+//     ],
+//     approvedByAdmin: true,
+//     status: 1,
+//     deleted: 0,
+//   }
+
+//   // Find zone based on customer's lat/lng
+//   let customerZoneId = null
+//   let customerZoneName = null
+//   if (targetLat && targetLng) {
+//     const zones = await findZones(targetLat, targetLng)
+//     if (zones && zones.length > 0) {
+//       customerZoneId = zones[0].id // store scalar
+//       customerZoneName = zones[0].zoneName || null
+//     }
+//   }
+
+//   console.log("customerZone===================>>>>", customerZoneId)
+
+//   if (req.params?.favorite && req?.user) {
+//     if (likedSalons.length < 1) {
+//       return res.status(200).json(response({ data: { slons: [] } }))
+//     }
+//     salonCondition.id = { [Op.or]: likeIds }
+//   }
+
+//   // Final conditions with optional filters
+//   const finalSalonCondition = {
+//     ...salonCondition,
+//     ...(customerZoneId ? { zoneId: customerZoneId } : {}), // Filter by customer zoneId
+//     ...((req.body.price || req.query.price) && {
+//       id: {
+//         [Op.in]: literal(`(
+//           SELECT DISTINCT salonDetailId FROM services
+//           WHERE services.salonDetailId = salonDetail.id 
+//             AND services.price <= ${req.body.price || req.query.price}
+//         )`),
+//       },
+//     }),
+//     ...((req.body.day || req.query.day) &&
+//       (req.body.time || req.query.time) && {
+//         id: {
+//           [Op.in]: literal(`(
+//           SELECT DISTINCT salonDetailId FROM times
+//           WHERE times.salonDetailId = salonDetail.id 
+//             AND times.day = '${req.body.day || req.query.day}' 
+//             AND times.openingTime <= '${req.body.time || req.query.time}' 
+//             AND times.closingTime >= '${req.body.time || req.query.time}'
+//         )`),
+//         },
+//       }),
+//     ...(req?.body?.serviceType || req?.query?.serviceType
+//       ? {
+//           id: {
+//             [Op.in]: literal(`(
+//               SELECT DISTINCT salonDetailId FROM services
+//               WHERE services.salonDetailId = salonDetail.id 
+//                 AND services.serviceTypeId = ${req?.body?.serviceType || req?.query?.serviceType}
+//             )`),
+//           },
+//         }
+//       : {}),
+//   }
+
+//   // Query salons
+//   const body = {
+//     where: finalSalonCondition,
+//     attributes: [
+//       'id',
+//       'salonName',
+//       'coverImage',
+//       'isExternalEmployee',
+//       'isOnline',
+//       [
+//         literal(`(
+//           SELECT FORMAT(AVG(ratings.value), 1)
+//           FROM ratings
+//           WHERE ratings.salonDetailId = salonDetail.id
+//         )`),
+//         'salonAverageRating',
+//       ],
+//       [
+//         literal(`(
+//           SELECT COUNT(ratings.id)
+//           FROM ratings
+//           WHERE ratings.salonDetailId = salonDetail.id
+//         )`),
+//         'ratingCount',
+//       ],
+//     ],
+//     include: [
+//       {
+//         model: addressDBS,
+//         required: true,
+//         attributes: [
+//           'id',
+//           'streetAddress',
+//           'city',
+//           'district',
+//           'province',
+//           'country',
+//           'lat',
+//           'lng',
+//           'building',
+//           'postalCode',
+//           'zoneId'
+//         ],
+//         // No zoneId filtering here, as it is done directly on salonDetail
+//       },
+//       {
+//         model: service,
+//         required: true,
+//         attributes: ['id', 'serviceName', 'price', 'discount'],
+//       },
+//       {
+//         model: user,
+//         where: { status: true, deleted: 0 },
+//         required: true,
+//         attributes: ['id'],
+//       },
+//     ],
+//     having: !req.params?.favorite
+//       ? literal(`${formula} <= ${rangeInKm}`)
+//       : undefined,
+//   }
+
+//   // Always include distance if lat/lng are provided
+//   if (targetLat && targetLng) {
+//     body.attributes.push([literal(`${formula}`), 'distance'])
+//     body.order = [[literal('distance'), 'ASC']]  // SORT BY DISTANCE ASC
+//   }
+
+//   // Fetch salon results
+//   let results = await salonDetail.findAll(body)
+//   results = JSON.parse(JSON.stringify(results))
+
+//   // Map salons with like and max discount
+//   if (results.length > 0) {
+//     results = results.map((salon) => {
+//       const found = likeIds.some((id) => id === salon.id)
+//       const discounts = (salon.services || []).map((s) => s.discount || 0)
+//       const maxDiscount = discounts.length > 0 ? Math.max(...discounts) : 0
+//       return { ...salon, like: found, averageDiscount: maxDiscount }
+//     })
+//   }
+
+//   // Fetch customer appointments
+//   let appointments = []
+//   if (req.user && req.user.id) {
+//     appointments = await booking.findAll({
+//       where: {
+//         customerId: req.user.id,
+//         status: { [Op.or]: ['pending', 'book'] },
+//       },
+//       attributes: [
+//         'id',
+//         `status`,
+//         `startTime`,
+//         `endTime`,
+//         `on`,
+//         'total',
+//         'actualCapturedAmount',
+//         [
+//           literal(
+//             `(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`,
+//           ),
+//           'serviceCount',
+//         ],
+//       ],
+//       include: [
+//         {
+//           model: salonDetail,
+//           attributes: ['id', 'salonName', 'coverImage'],
+//           include: [
+//             { model: addressDBS, attributes: [`streetAddress`, `city`] },
+//             { model: rating, attributes: [] },
+//           ],
+//         },
+//         { model: jobs, attributes: [] },
+//       ],
+//       order: [['id', 'DESC']],
+//     })
+//   }
+
+//   // Compute global highest and lowest service prices across all salons
+//   const allServicePrices = results.flatMap(salon =>
+//     (salon.services || []).map(s => Number(s.price))
+//   )
+
+//   const highestPriceAcrossAllSalons = allServicePrices.length > 0
+//     ? Number(Math.max(...allServicePrices)).toFixed(2)
+//     : "0.00"
+
+//   const lowestPriceAcrossAllSalons = allServicePrices.length > 0
+//     ? Number(Math.min(...allServicePrices)).toFixed(2)
+//     : "0.00"
+
+//   // Final response
+//   const output = {
+//     data: {
+//       slons: results,
+//       appointments,
+//       currencyUnit: CURRENCY_UNIT,
+//       distanceUnit: 'km',
+//       highestPriceAcrossAllSalons,
+//       lowestPriceAcrossAllSalons,
+//       customerZone: customerZoneId ? { id: customerZoneId, name: customerZoneName } : null
+//     },
+//   }
+
+//   // For favorites: keep distance + other salon fields, just drop appointments
+//   if (req.params.favorite) {
+//     delete output.data.appointments
+//   }
+
+//   return res.status(200).json(response(output))
+// }
+
 exports.home = async (req, res, next) => {
-  const currentDay = CustomDate.currentDay()
+  const currentDay = CustomDate.currentDay();
 
   // ✅ Support both POST (body) and GET (query)
-  const targetLat = req.body?.targetLat || req.query?.targetLat
-  const targetLng = req.body?.targetLng || req.query?.targetLng
-  const rangeInKm = req.body?.rangeInKm || req.query?.rangeInKm || 15
-  const condition = { status: true }
+  const targetLat = req.body?.targetLat || req.query?.targetLat;
+  const targetLng = req.body?.targetLng || req.query?.targetLng;
+  const rangeInKm = req.body?.rangeInKm || req.query?.rangeInKm || 15;
 
-  // Price condition for filtering salons
-  const priceCondition = req.body?.price || req.query?.price
-    ? { price: { [Op.lte]: req.body?.price || req.query?.price } }
-    : {}
-
-  // Filter by day and time
+  // Build time filter if provided
+  const timeCondition = {};
   if ((req.body.day || req.query.day) && (req.body.startTime || req.query.startTime) && (req.body.endTime || req.query.endTime)) {
-    condition.day = req.body.day || req.query.day
-    condition.openingTime = { [Op.lte]: req.body.startTime || req.query.startTime }
-    condition.closingTime = { [Op.gte]: req.body.endTime || req.query.endTime }
+    timeCondition.day = req.body.day || req.query.day;
+    timeCondition.openingTime = { [Op.lte]: req.body.startTime || req.query.startTime };
+    timeCondition.closingTime = { [Op.gte]: req.body.endTime || req.query.endTime };
   }
-  
-  // Haversine formula for distance calculation
-  const formula = `(6371 * 
-    acos(
-      cos(radians(${targetLat})) * cos(radians(lat)) * 
-      cos(radians(lng) - radians(${targetLng})) + 
-      sin(radians(${targetLat})) * sin(radians(lat))
-    )
-  )`
 
-  // Fetch favorite salon IDs
+  // Fetch favorite salon IDs for this user (if any)
   const likedSalons = await favorite.findAll({
     where: { userId: req?.user?.id || 0 },
     attributes: ['salonDetailId'],
-  })
-  const likeIds =
-    likedSalons?.length > 0 ? likedSalons.map((ele) => ele.salonDetailId) : []
+  });
+  const likeIds = likedSalons?.length ? likedSalons.map(e => e.salonDetailId) : [];
 
-  // Base salon condition
+  // Base salon filter (no zone filter at all)
   const salonCondition = {
     [Op.or]: [
       { isExternalEmployee: true },
@@ -268,67 +514,72 @@ exports.home = async (req, res, next) => {
     approvedByAdmin: true,
     status: 1,
     deleted: 0,
-  }
+  };
 
-  // Find zone based on customer's lat/lng
-  let customerZoneId = null
-  let customerZoneName = null
-  if (targetLat && targetLng) {
-    const zones = await findZones(targetLat, targetLng)
-    if (zones && zones.length > 0) {
-      customerZoneId = zones[0].id // store scalar
-      customerZoneName = zones[0].zoneName || null
-    }
-  }
-
-  console.log("customerZone===================>>>>", customerZoneId)
-
+  // If asking only for favorites
   if (req.params?.favorite && req?.user) {
-    if (likedSalons.length < 1) {
-      return res.status(200).json(response({ data: { slons: [] } }))
+    if (!likeIds.length) {
+      return res.status(200).json(response({ data: { slons: [] } }));
     }
-    salonCondition.id = { [Op.or]: likeIds }
+    salonCondition.id = { [Op.or]: likeIds };
   }
 
-  // Final conditions with optional filters
+  // Haversine formula for distance (km)
+  const formula = `(6371 *
+    acos(
+      cos(radians(${targetLat})) * cos(radians(lat)) *
+      cos(radians(lng) - radians(${targetLng})) +
+      sin(radians(${targetLat})) * sin(radians(lat))
+    )
+  )`;
+
+  // Optional filters (price, time, service type) added via subqueries
   const finalSalonCondition = {
     ...salonCondition,
-    ...(customerZoneId ? { zoneId: customerZoneId } : {}), // Filter by customer zoneId
+
+    // Distance gating only when coords are provided
+    ...(targetLat && targetLng ? { [Op.and]: literal(`${formula} <= ${rangeInKm}`) } : {}),
+
+    // Max price across any service in the salon
     ...((req.body.price || req.query.price) && {
       id: {
         [Op.in]: literal(`(
-          SELECT DISTINCT salonDetailId FROM services
-          WHERE services.salonDetailId = salonDetail.id 
-            AND services.price <= ${req.body.price || req.query.price}
+          SELECT DISTINCT services.salonDetailId
+          FROM services
+          WHERE services.salonDetailId = salonDetail.id
+            AND services.price <= ${req.body?.price || req.query?.price}
         )`),
       },
     }),
-    ...((req.body.day || req.query.day) &&
-      (req.body.time || req.query.time) && {
-        id: {
-          [Op.in]: literal(`(
-          SELECT DISTINCT salonDetailId FROM times
-          WHERE times.salonDetailId = salonDetail.id 
-            AND times.day = '${req.body.day || req.query.day}' 
-            AND times.openingTime <= '${req.body.time || req.query.time}' 
-            AND times.closingTime >= '${req.body.time || req.query.time}'
-        )`),
-        },
-      }),
-    ...(req?.body?.serviceType || req?.query?.serviceType
-      ? {
-          id: {
-            [Op.in]: literal(`(
-              SELECT DISTINCT salonDetailId FROM services
-              WHERE services.salonDetailId = salonDetail.id 
-                AND services.serviceTypeId = ${req?.body?.serviceType || req?.query?.serviceType}
-            )`),
-          },
-        }
-      : {}),
-  }
 
-  // Query salons
+    // Day/time availability
+    ...((req.body.day || req.query.day) && (req.body.time || req.query.time) && {
+      id: {
+        [Op.in]: literal(`(
+          SELECT DISTINCT times.salonDetailId
+          FROM times
+          WHERE times.salonDetailId = salonDetail.id
+            AND times.day = '${req.body?.day || req.query?.day}'
+            AND times.openingTime <= '${req.body?.time || req.query?.time}'
+            AND times.closingTime >= '${req.body?.time || req.query?.time}'
+        )`),
+      },
+    }),
+
+    // Service type filter
+    ...((req.body.serviceType || req.query.serviceType) && {
+      id: {
+        [Op.in]: literal(`(
+          SELECT DISTINCT services.salonDetailId
+          FROM services
+          WHERE services.salonDetailId = salonDetail.id
+            AND services.serviceTypeId = ${req.body?.serviceType || req.query?.serviceType}
+        )`),
+      },
+    }),
+  };
+
+  // Build query
   const body = {
     where: finalSalonCondition,
     attributes: [
@@ -369,9 +620,9 @@ exports.home = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
-          'zoneId'
+          // ⛔️ zoneId removed from filtering entirely; just return whatever is stored
+          'zoneId',
         ],
-        // No zoneId filtering here, as it is done directly on salonDetail
       },
       {
         model: service,
@@ -385,33 +636,36 @@ exports.home = async (req, res, next) => {
         attributes: ['id'],
       },
     ],
-    having: !req.params?.favorite
-      ? literal(`${formula} <= ${rangeInKm}`)
-      : undefined,
-  }
 
-  // Always include distance if lat/lng are provided
+    // When NOT favorites view, apply HAVING distance <= range
+    having: !req.params?.favorite ? literal(`${formula} <= ${rangeInKm}`) : undefined,
+  };
+
+  // Always compute/sort by distance if coords present
   if (targetLat && targetLng) {
-    body.attributes.push([literal(`${formula}`), 'distance'])
-    body.order = [[literal('distance'), 'ASC']]  // SORT BY DISTANCE ASC
+    body.attributes.push([literal(`${formula}`), 'distance']);
+    body.order = [[literal('distance'), 'ASC']];
   }
 
-  // Fetch salon results
-  let results = await salonDetail.findAll(body)
-  results = JSON.parse(JSON.stringify(results))
+  // Fetch salons
+  let results = await salonDetail.findAll(body);
+  results = JSON.parse(JSON.stringify(results));
 
-  // Map salons with like and max discount
-  if (results.length > 0) {
-    results = results.map((salon) => {
-      const found = likeIds.some((id) => id === salon.id)
-      const discounts = (salon.services || []).map((s) => s.discount || 0)
-      const maxDiscount = discounts.length > 0 ? Math.max(...discounts) : 0
-      return { ...salon, like: found, averageDiscount: maxDiscount }
-    })
+  // Add like + average/max discount (choose one; here we use max for usefulness)
+  if (results.length) {
+    results = results.map(salon => {
+      const liked = likeIds.includes(salon.id);
+      const discounts = (salon.services || []).map(s => s.discount || 0);
+      const maxDiscount = discounts.length ? Math.max(...discounts) : 0;
+      return { ...salon, like: liked, averageDiscount: maxDiscount };
+    });
+
+    // Keep distance sort (already applied). If you want to sort by discount instead, comment next line.
+    // results.sort((a, b) => b.averageDiscount - a.averageDiscount);
   }
 
-  // Fetch customer appointments
-  let appointments = []
+  // Upcoming/pending appointments for this customer (for the home header)
+  let appointments = [];
   if (req.user && req.user.id) {
     appointments = await booking.findAll({
       where: {
@@ -420,49 +674,36 @@ exports.home = async (req, res, next) => {
       },
       attributes: [
         'id',
-        `status`,
-        `startTime`,
-        `endTime`,
-        `on`,
+        'status',
+        'startTime',
+        'endTime',
+        'on',
         'total',
         'actualCapturedAmount',
-        [
-          literal(
-            `(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`,
-          ),
-          'serviceCount',
-        ],
+        [literal(`(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`), 'serviceCount'],
       ],
       include: [
         {
           model: salonDetail,
           attributes: ['id', 'salonName', 'coverImage'],
           include: [
-            { model: addressDBS, attributes: [`streetAddress`, `city`] },
+            { model: addressDBS, attributes: ['streetAddress', 'city'] },
             { model: rating, attributes: [] },
           ],
         },
         { model: jobs, attributes: [] },
       ],
       order: [['id', 'DESC']],
-    })
+    });
   }
 
-  // Compute global highest and lowest service prices across all salons
-  const allServicePrices = results.flatMap(salon =>
-    (salon.services || []).map(s => Number(s.price))
-  )
-
-  const highestPriceAcrossAllSalons = allServicePrices.length > 0
-    ? Number(Math.max(...allServicePrices)).toFixed(2)
-    : "0.00"
-
-  const lowestPriceAcrossAllSalons = allServicePrices.length > 0
-    ? Number(Math.min(...allServicePrices)).toFixed(2)
-    : "0.00"
+  // Global min/max price across returned salons
+  const allServicePrices = results.flatMap(s => (s.services || []).map(x => Number(x.price)));
+  const highestPriceAcrossAllSalons = allServicePrices.length ? Number(Math.max(...allServicePrices)).toFixed(2) : '0.00';
+  const lowestPriceAcrossAllSalons  = allServicePrices.length ? Number(Math.min(...allServicePrices)).toFixed(2) : '0.00';
 
   // Final response
-  const output = {
+  const payload = {
     data: {
       slons: results,
       appointments,
@@ -470,19 +711,16 @@ exports.home = async (req, res, next) => {
       distanceUnit: 'km',
       highestPriceAcrossAllSalons,
       lowestPriceAcrossAllSalons,
-      customerZone: customerZoneId ? { id: customerZoneId, name: customerZoneName } : null
+      // ⛔️ customerZone removed entirely
     },
+  };
+
+  if (req.params?.favorite) {
+    delete payload.data.appointments;
   }
 
-  // For favorites: keep distance + other salon fields, just drop appointments
-  if (req.params.favorite) {
-    delete output.data.appointments
-  }
-
-  return res.status(200).json(response(output))
-}
-
-
+  return res.status(200).json(response(payload));
+};
 
 
 //* 2.Get Salon Details -------------Modified----
