@@ -128,9 +128,9 @@ exports.addSalonDetail = async (req, res, next) => {
     throw new appError(message, 200);
   }
 
-  const zone = await findZones(addressDetail.lat, addressDetail.lng);
-  console.log("Zone:", zone);
-  let zoneId = zone[0].id
+  // const zone = await findZones(addressDetail.lat, addressDetail.lng);
+  // console.log("Zone:", zone);
+  // let zoneId = zone[0].id
 
   const addressData = await addressDBS.create(addressDetail);
   const newEntry = await salonDetail.create({
