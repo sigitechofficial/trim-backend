@@ -234,6 +234,12 @@ protect,
 catchAsync(appController.initStripeCustomeronConnectAccount),
 )
 
+//Post Route to create setup intent and attach card
+router.post('/create-setup-intent',
+protect,
+catchAsync(appController.createSetupIntent),
+)
+
 //Post Route to Attach Meta Data to Transfer
 router.post('/update-transfer-metadata',
 protect,
