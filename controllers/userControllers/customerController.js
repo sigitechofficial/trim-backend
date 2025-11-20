@@ -1916,7 +1916,18 @@ exports.bookAppointment = async (req, res, next) => {
   });
 
   if(book.initialPaymentIntend){
-        Stripe.updatePaymentIntentDescription(book.initialPaymentIntend, book, salon.connectAccountId)
+    // Fetch customer email for metadata
+    const customer = await user.findByPk(customerId, {
+      attributes: ['email']
+    });
+    const customerEmail = customer?.email || '';
+    
+    Stripe.updatePaymentIntentDescription(
+      book.initialPaymentIntend, 
+      book, 
+      salon.connectAccountId,
+      customerEmail
+    )
   }
 
   socketForCalendar({ appointmentId: book?.id, type: 'new' })
@@ -3405,6 +3416,109 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     });
 };
 
+/*
+ * Create Setup Intent and Attach Card
+ * This API creates a SetupIntent for the customer to save their payment method
+ */
+exports.createSetupIntent = async (req, res, next) => {
+  const customerId = req.user.id;
+  const { salonId } = req.body;
+
+  try {
+    // Get user details
+    const userDetails = await user.findByPk(customerId, {
+      attributes: ['firstName', 'lastName', 'email', 'stripeCustomerId'],
+    });
+
+    if (!userDetails) {
+      throw new AppError('User not found', 200);
+    }
+
+    // Get salon's connected account
+    const account = await salonDetail.findOne({
+      where: { id: salonId },
+      attributes: ['id', 'connectAccountId'],
+    });
+
+    if (!account) {
+      throw new AppError('Salon not found', 200);
+    }
+
+    if (!account.connectAccountId) {
+      throw new AppError('Salon has not completed Stripe onboarding', 200);
+    }
+
+    const connectAccountId = account.connectAccountId;
+
+    // Check if customer exists on this connected account
+    let stripeCustomerId = null;
+    const existingCustomer = await customerOnConnectAccount.findOne({
+      where: {
+        userId: customerId,
+        connectAccountId: connectAccountId,
+      },
+      attributes: ['customerId'],
+    });
+
+    if (existingCustomer?.customerId) {
+      // Verify customer still exists in Stripe
+      const stripeCustomer = await Stripe.getCustomer(
+        existingCustomer.customerId,
+        connectAccountId
+      );
+
+      if (stripeCustomer) {
+        stripeCustomerId = existingCustomer.customerId;
+      }
+    }
+
+    // If customer doesn't exist, create one
+    if (!stripeCustomerId) {
+      const fullName = `${userDetails.firstName} ${userDetails.lastName}`;
+      const email = userDetails.email;
+
+      stripeCustomerId = await Stripe.addCustomer(
+        fullName,
+        email,
+        connectAccountId
+      );
+
+      // Save to customerOnConnectAccount table
+      await customerOnConnectAccount.create({
+        userId: customerId,
+        customerId: stripeCustomerId,
+        connectAccountId: connectAccountId,
+        status: true,
+        salonDetailId: account.id,
+      });
+
+      // Update user table
+      if (!userDetails.stripeCustomerId) {
+        await user.update({ stripeCustomerId }, { where: { id: customerId } });
+      }
+    }
+
+    // Create SetupIntent
+    const setupIntent = await Stripe.setupIntent(stripeCustomerId, connectAccountId);
+
+    console.log('✅ SetupIntent created:', setupIntent.id);
+
+    const output = response({
+      message: 'Setup intent created successfully',
+      data: {
+        clientSecret: setupIntent.client_secret,
+        setupIntentId: setupIntent.id,
+        stripeCustomerId: stripeCustomerId,
+        stripeAccountId: connectAccountId,
+      },
+    });
+
+    return res.status(200).json(output);
+  } catch (error) {
+    console.error('❌ Error creating setup intent:', error.message);
+    throw new AppError(error.message || 'Failed to create setup intent', 200);
+  }
+};
 
 // Controller to send appointment reminders before 24 hours of the appointment
 // exports.sendReminder = async (req, res) => {

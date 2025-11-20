@@ -197,9 +197,9 @@ exports.addSalonDetail = async (req, res, next) => {
     { where: { userId } },
   );
 
-  await addressDBS.update({ zoneId: zoneId }, { where: { id: addressData.id } })
+//   await addressDBS.update({ zoneId: zoneId }, { where: { id: addressData.id } })
 
-  await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
+  //await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
 
   return res.json(
     returnFunction('1', 'Salon details added successfully!', newEntry, ''),

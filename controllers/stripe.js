@@ -1123,6 +1123,7 @@ const setupIntent = async (customerId, accountId = null) => {
   try {
     const setupIntentData = {
       customer: customerId,
+      payment_method_types: ['card'], // Explicitly set to card only (Klarna is not supported for SetupIntents)
     };
 
     let setupIntent;
@@ -1513,20 +1514,32 @@ async function checkStripeAccountStatus(connectAccountId) {
 
 
 /*
- * Update Booking Description
+ * Update Booking Description and Metadata
 */
-async function updatePaymentIntentDescription(paymentIntentId, booking, connectAccountId) {
+async function updatePaymentIntentDescription(paymentIntentId, booking, connectAccountId, customerEmail = null) {
   try {
+    const updateData = {
+      description: `Payment for Booking BK-${booking.id}`,
+      metadata: {
+        bookingId: booking.id?.toString() || '',
+        customerId: booking.customerId?.toString() || '',
+        salonDetailId: booking.salonDetailId?.toString() || '',
+      }
+    };
+
+    // Add customer email to metadata if provided
+    if (customerEmail) {
+      updateData.metadata.customerEmail = customerEmail;
+    }
+
     const updated = await stripe.paymentIntents.update(
       paymentIntentId,
-      {
-        description: `Payment for Booking BK-${booking.id}`,
-      },
+      updateData,
       {
         stripeAccount: connectAccountId, // 👈 tells Stripe which account owns the PI
       }
     );
-    console.log("✅ Description updated for PI:", updated.id, updated.description);
+    console.log("✅ Description and metadata updated for PI:", updated.id, updated.description);
     return updated;
   } catch (err) {
     console.error("❌ Failed to update PaymentIntent description:", err.message);
