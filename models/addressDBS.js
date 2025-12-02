@@ -10,6 +10,21 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: '',
     },
+    town:{
+      type: DataTypes.STRING(),
+      allowNull: true,
+      defaultValue: '',
+    },
+    streetLineAddress1:{
+      type: DataTypes.STRING(),
+      allowNull: true,
+      defaultValue: '',
+    },
+    streetLineAddress2:{
+      type: DataTypes.STRING(),
+      allowNull: true,
+      defaultValue: '',
+    },
     building: {
       type: DataTypes.STRING(),
       allowNull: true,

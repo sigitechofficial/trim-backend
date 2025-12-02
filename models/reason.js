@@ -32,6 +32,10 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'reasonId',
       as: 'subscriptionReason',
     })
+
+
+    reason.hasMany(models.deletedCustomer)
+    models.deletedCustomer.belongsTo(reason)
   }
 
   return reason

@@ -313,7 +313,7 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
-    attributes: ['id', 'parentSalonId', 'onlinePayments'],
+    attributes: ['id', 'parentSalonId', 'onlinePayments','registrationExpiryDate','registrationDate'],
   })
   console.log(req.body)
   let parentSalonName = ''
@@ -539,6 +539,8 @@ exports.calendarAppointments = async (req, res, next) => {
       parentSalonName,
       onlinePayments: salon?.onlinePayments ?? true,
       subscriptionExpire,
+      registrationExpiryDate: salon?.registrationExpiryDate,
+      registrationDate: salon?.registrationDate,
     },
   })
 
