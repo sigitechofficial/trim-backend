@@ -184,10 +184,35 @@ router.get('/salon-policies/:salon', catchAsync(appController.salonPolicies))
 
 router.get('/check-subscription', catchAsync(appController.checkSubscription))
 
+// Account Deletion Routes
+router.get(
+  '/account-deletion-reasons',
+  catchAsync(appController.fetchAccountDeletionReasons),
+)
+
 router.post(
   '/delete-customer',
   protect,
   catchAsync(appController.accountDelete),
+)
+
+// Account Recovery Routes
+// Browser-based recovery (via email link)
+router.get(
+  '/recover-account',
+  catchAsync(appController.recoverAccountByToken),
+)
+
+
+// Lambda Functions (for cron jobs)
+router.get(
+  '/lambda/account-recovery-reminder',
+  catchAsync(appController.accountRecoveryReminder),
+)
+
+router.get(
+  '/lambda/permanent-deletion',
+  catchAsync(appController.permanentAccountDeletion),
 )
 
 router.post('/logout', protect, catchAsync(appController.logout))

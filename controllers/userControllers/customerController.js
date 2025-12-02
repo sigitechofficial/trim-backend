@@ -1,6 +1,7 @@
 const dotenv = require('dotenv')
 dotenv.config({ path: '../.env' })
 const { CURRENCY_UNIT, STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY } = process.env
+const crypto = require('crypto')
 
 const { Op, literal, col, fn, where } = require('sequelize')
 
@@ -40,6 +41,10 @@ const {
   couponTimeSlot,
   couponOnBooking,
   wallet,
+  otpVerification,
+  reason,
+  subscriptions,
+  allergies,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -56,6 +61,7 @@ const testing = require('../../helper/testing')
 const tankyou = require('../../helper/ThankYouForVisiting')
 const DEMO = require('../../helper/demo')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
+const otpGenerator = require('otp-generator')
 const CustomDateNew =require('../../utils/customDateNew')
 const {
   calculatePayoutsOnBooking,
@@ -745,6 +751,7 @@ exports.salonDetails = async (req, res, next) => {
       'isExternalEmployee',
       'isVATRegistered',
       'vatType',
+      'platformFee',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
@@ -2289,9 +2296,33 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
     ],
   })
 
+  // Check salon subscription status
+  let subscriptionExpire = false
+  if (output.salonDetail && output.salonDetail.id) {
+    const salonSubscription = await subscriptions.findOne({
+      where: { salonDetailId: output.salonDetail.id },
+      attributes: ['subscriptionId'],
+      order: [['createdAt', 'DESC']], // Get the latest subscription
+    })
+
+    if (salonSubscription && salonSubscription.subscriptionId) {
+      const subscriptionStatus = await Stripe.getSubscriptionStatus(salonSubscription.subscriptionId)
+      
+      // Check if subscription is cancelled
+      if (subscriptionStatus === 'canceled' || subscriptionStatus === 'cancelled') {
+        subscriptionExpire = true
+      }
+    }
+  }
+
   return res.status(200).json(
     response({
-      data: { appointments: output, policies, currencyUnit: CURRENCY_UNIT },
+      data: { 
+        appointments: output, 
+        policies, 
+        currencyUnit: CURRENCY_UNIT,
+        subscriptionExpire,
+      },
     }),
   )
 }
@@ -2966,18 +2997,37 @@ exports.clientFeedBack = async (req, res, next) => {
 }
 
 //!Account Delete
-//* 1. Customer Account Delete
+//* 1. Customer Account Delete (Single API - No OTP)
 exports.accountDelete = async (req, res, next) => {
   const id = req.user.id
+  const { reasonId } = req.body
+
+  if (!reasonId) {
+    throw new AppError('Reason ID is required', 200)
+  }
+
+  // Validate reason exists
+  const reasonData = await reason.findOne({
+    where: { id: reasonId, status: true },
+  })
+
+  if (!reasonData) {
+    throw new AppError('Invalid reason or reason not found', 200)
+  }
+
+  // Get user data before deletion
   const data = await user.findOne({
     where: { id },
     attributes: [
+      'id',
       'firstName',
       'lastName',
       'image',
       'email',
       'countryCode',
       'phoneNum',
+      'password',
+      'stripeCustomerId',
       [
         literal(
           `(SELECT COUNT(*) 
@@ -2997,22 +3047,667 @@ exports.accountDelete = async (req, res, next) => {
       200,
     )
 
-  await deletedCustomer.create({ userId: id, ...data.get({ plain: true }) })
+  // Generate recovery token (32 bytes = 64 hex characters)
+  const recoveryToken = crypto.randomBytes(32).toString('hex')
+  console.log('🔍 Generated Recovery Token:', recoveryToken)
+  console.log('🔍 Recovery Token Length:', recoveryToken.length)
+
+  // Save to deletedCustomer table with reasonId and recoveryToken
+  try {
+    const createdRecord = await deletedCustomer.create({
+      userId: id,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      countryCode: data.countryCode,
+      phoneNum: data.phoneNum,
+      image: data.image,
+      password: data.password,
+      stripeCustomerId: data.stripeCustomerId,
+      deletedAt: new Date(),
+      recovered: false,
+      permanentlyDeleted: false,
+      reasonId: reasonId,
+      recoveryToken: recoveryToken,
+    })
+
+    console.log('✅ Created DeletedCustomer Record ID:', createdRecord.id)
+    console.log('✅ Saved Recovery Token:', createdRecord.recoveryToken)
+    console.log('✅ Saved Token Length:', createdRecord.recoveryToken?.length)
+    console.log('✅ Token Match Check:', createdRecord.recoveryToken === recoveryToken)
+    
+    // Verify it was saved correctly by querying it back
+    const verifyRecord = await deletedCustomer.findByPk(createdRecord.id, {
+      attributes: ['id', 'email', 'recoveryToken', 'userId'],
+    })
+    console.log('✅ Verification - Record exists:', verifyRecord ? 'YES' : 'NO')
+    if (verifyRecord) {
+      console.log('✅ Verification - Token matches:', verifyRecord.recoveryToken === recoveryToken)
+    }
+  } catch (error) {
+    console.error('❌ Error creating deletedCustomer record:', error)
+    throw error
+  }
+
+  // Hard delete user (not anonymous)
+  await user.destroy({ where: { id } })
+
+  // Delete device tokens
+  await deviceToken.destroy({ where: { userId: id } })
+
+  // Do NOT delete from Stripe (keep stripeCustomerId)
+
+  // Send recovery email immediately after deletion with recovery token
+  const emailData = {
+    firstName: data.firstName,
+    lastName: data.lastName,
+    email: data.email,
+    recoveryToken: recoveryToken,
+  }
+  // Send recovery email
+  EmailResetPasswordOtpToAll(null, emailData, 'recoverAccount', 'customer')
+
+  return res.json(response({ message: 'Account deleted successfully', data: {} }))
+}
+
+//* 2. Fetch Account Deletion Reasons
+exports.fetchAccountDeletionReasons = async (req, res, next) => {
+  // Fetch all active reasons (you can filter by type if needed)
+  const reasons = await reason.findAll({
+    where: { status: true },
+    attributes: ['id', 'reason', 'type'],
+    order: [['createdAt', 'DESC']],
+  })
+
+  return res.json(
+    response({
+      message: 'Account deletion reasons',
+      data: { reasons },
+    }),
+  )
+}
+
+//!Account Recovery
+//* 1. Recover Account via Token (Browser-based, no OTP)
+exports.recoverAccountByToken = async (req, res, next) => {
+  let { token } = req.query
+
+  // Handle URL encoding - decode if needed
+  if (token) {
+    token = decodeURIComponent(token)
+  }
+
+  console.log('🔍 Recovery Token Received (raw):', req.query.token)
+  console.log('🔍 Recovery Token Received (decoded):', token)
+  console.log('🔍 Token Length:', token?.length)
+
+  if (!token) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">Invalid Recovery Link</h1>
+        <p>The recovery link is invalid or missing.</p>
+      </body>
+      </html>
+    `)
+  }
+
+  // Clean and trim the token
+  const cleanToken = token.trim()
+
+  console.log('🔍 Clean Token:', cleanToken)
+  console.log('🔍 Clean Token Length:', cleanToken.length)
+
+  // Find deleted customer by recovery token
+  // Note: Using paranoid: false to include soft-deleted records if any
+  const deletedData = await deletedCustomer.findOne({
+    where: {
+      recoveryToken: cleanToken,
+      recovered: false,
+      permanentlyDeleted: false,
+    },
+    paranoid: false, // Include soft-deleted records
+  })
+
+  console.log('🔍 Deleted Data Found:', deletedData ? 'YES' : 'NO')
+  
+  if (deletedData) {
+    console.log('🔍 Deleted Data ID:', deletedData.id)
+    console.log('🔍 Deleted Data Email:', deletedData.email)
+    console.log('🔍 Deleted Data Token:', deletedData.recoveryToken)
+    console.log('🔍 Deleted Data Token Length:', deletedData.recoveryToken?.length)
+    console.log('🔍 Token Match:', deletedData.recoveryToken === cleanToken)
+  } else {
+    // Debug: Check if any records exist with similar tokens or all records
+    const allRecords = await deletedCustomer.findAll({
+      attributes: ['id', 'email', 'recoveryToken', 'recovered', 'permanentlyDeleted'],
+      limit: 5,
+      order: [['createdAt', 'DESC']],
+    })
+    console.log('🔍 Recent deletedCustomer records:', allRecords.length)
+    allRecords.forEach((record, index) => {
+      console.log(`🔍 Record ${index + 1}:`, {
+        id: record.id,
+        email: record.email,
+        tokenLength: record.recoveryToken?.length,
+        tokenStart: record.recoveryToken?.substring(0, 20),
+        recovered: record.recovered,
+        permanentlyDeleted: record.permanentlyDeleted,
+      })
+    })
+    
+    // Try to find by partial token match
+    const partialMatch = await deletedCustomer.findOne({
+      where: {
+        recoveryToken: { [Op.like]: `${cleanToken.substring(0, 20)}%` },
+      },
+    })
+    console.log('🔍 Partial token match found:', partialMatch ? 'YES' : 'NO')
+  }
+
+  if (!deletedData) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">Invalid Recovery Link</h1>
+        <p>The recovery link is invalid or has already been used.</p>
+        <p style="font-size: 12px; color: #999; margin-top: 20px;">Token: ${token?.substring(0, 20)}...</p>
+      </body>
+      </html>
+    `)
+  }
+
+  // Check if recovery token has an expiry date
+  // Currently, recovery tokens don't have an expiry field, so we check if it exists
+  const tokenHasExpiry = deletedData.recoveryTokenExpiry || deletedData.tokenExpiry || deletedData.expiresAt
+  
+  // If token doesn't have expiry, generate new token, send recovery email, and proceed with recovery
+  if (!tokenHasExpiry) {
+    console.log('🔍 Recovery token has no expiry - generating new token and sending recovery email')
+    
+    // Generate new recovery token
+    const newRecoveryToken = crypto.randomBytes(32).toString('hex')
+    console.log('🔍 New Recovery Token Generated:', newRecoveryToken)
+    console.log('🔍 New Recovery Token Length:', newRecoveryToken.length)
+    
+    // Update deletedCustomer record with new token
+    await deletedCustomer.update(
+      {
+        recoveryToken: newRecoveryToken,
+      },
+      { where: { id: deletedData.id } },
+    )
+    
+    // Send recovery email with new token
+    const emailData = {
+      firstName: deletedData.firstName,
+      lastName: deletedData.lastName,
+      email: deletedData.email,
+      recoveryToken: newRecoveryToken,
+    }
+    
+    // Send recovery email
+    EmailResetPasswordOtpToAll(null, emailData, 'recoverAccount', 'customer')
+    console.log('✅ New recovery email sent with updated token')
+    
+    // Update deletedData object with new token for subsequent processing
+    deletedData.recoveryToken = newRecoveryToken
+  }
+
+  // Check if within 30 days
+  const deletedAt = new Date(deletedData.deletedAt)
+  const now = new Date()
+  const daysDiff = Math.floor((now - deletedAt) / (1000 * 60 * 60 * 24))
+
+  if (daysDiff > 30) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Expired</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">Recovery Period Expired</h1>
+        <p>The 30-day recovery period has expired. Your account cannot be recovered.</p>
+      </body>
+      </html>
+    `)
+  }
+
+  // Get userId - use from deletedData or find by email
+  let userIdToRestore = deletedData.userId
+  
+  if (!userIdToRestore) {
+    // Fallback: Find user by email (including soft-deleted)
+    const userByEmail = await user.findOne({
+      where: { email: deletedData.email },
+      paranoid: false, // Include soft-deleted records
+      attributes: ['id'],
+    })
+    if (userByEmail) {
+      userIdToRestore = userByEmail.id
+    }
+  }
+
+  if (!userIdToRestore) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">User Not Found</h1>
+        <p>Unable to recover account. User record not found.</p>
+      </body>
+      </html>
+    `)
+  }
+
+  // Check if user exists (including soft-deleted)
+  const existingUser = await user.findByPk(userIdToRestore, {
+    paranoid: false, // Include soft-deleted records
+  })
+
+  if (!existingUser) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">User Not Found</h1>
+        <p>Unable to recover account. User record not found.</p>
+      </body>
+      </html>
+    `)
+  }
+
+  // Check if user is already recovered (not soft-deleted)
+  if (!existingUser.deletedAt) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">Account Already Recovered</h1>
+        <p>Your account has already been recovered.</p>
+      </body>
+      </html>
+    `)
+  }
+
+  try {
+    // Restore user by updating the existing record (not creating new one)
+    // Restore all original data from deletedCustomer and set deletedAt to null
+    await user.update(
+      {
+        firstName: deletedData.firstName,
+        lastName: deletedData.lastName,
+        email: deletedData.email,
+        countryCode: deletedData.countryCode || null,
+        phoneNum: deletedData.phoneNum || '',
+        image: deletedData.image || '',
+        password: deletedData.password, // Already hashed
+        stripeCustomerId: deletedData.stripeCustomerId || null,
+        deleted: false,
+        verifiedAt: new Date(),
+        deletedAt: null, // This restores the soft-deleted user
+      },
+      {
+        where: { id: userIdToRestore },
+        paranoid: false, // Allow updating soft-deleted records
+      },
+    )
+
+    // Fetch the restored user
+    const restoredUser = await user.findByPk(userIdToRestore)
+
+    // Mark as recovered in deletedCustomer
+    await deletedCustomer.update(
+      {
+        recovered: true,
+      },
+      { where: { id: deletedData.id } },
+    )
+
+    // Return success HTML page
+    return res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Success</title>
+        <style>
+          body { 
+            font-family: 'Chivo', Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px;
+            background-color: #f5f5f5;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .success { color: #4caf50; }
+          .button {
+            display: inline-block;
+            background-color: #000;
+            color: #fff;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1 class="success">✓ Account Recovered Successfully!</h1>
+          <p>Your account has been successfully recovered. You can now log in to your account.</p>
+          <a href="https://trimworldwide.com/SplashScreen" class="button">Go to Login</a>
+        </div>
+      </body>
+      </html>
+    `)
+  } catch (error) {
+    console.error('Recovery error:', error)
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Recovery - Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+          .error { color: #d32f2f; }
+        </style>
+      </head>
+      <body>
+        <h1 class="error">Recovery Failed</h1>
+        <p>An error occurred while recovering your account. Please try again or contact support.</p>
+      </body>
+      </html>
+    `)
+  }
+}
+
+//!Lambda Functions
+//* 1. Account Recovery Reminder (Lambda - Daily Cron)
+exports.accountRecoveryReminder = async (req, res, next) => {
+  const now = new Date()
+  
+  // Calculate 30 days ago using JavaScript and convert to UTC start of day
+  // This ensures consistent date calculations
+  const today = new Date(now)
+  today.setUTCHours(0, 0, 0, 0)
+  
+  const thirtyDaysAgo = new Date(today)
+  thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30)
+  
+  console.log('today (UTC start)=====================>>>', today.toISOString())
+  console.log('thirtyDaysAgo (UTC start)=====================>>>', thirtyDaysAgo.toISOString())
+  console.log('now=====================>>>', now.toISOString())
+
+  // DEBUG: First, check ALL deleted customers to see what's in the database
+  // IMPORTANT: deletedCustomer model has paranoid: true, which filters out records with deletedAt IS NOT NULL
+  // Since this table STORES deleted customer data (deletedAt is a regular field), we need paranoid: false
+  const allDeletedCheck = await deletedCustomer.findAll({
+    paranoid: false, // Override paranoid behavior - we want to see ALL records
+    attributes: ['id', 'userId', 'email', 'deletedAt', 'recovered', 'permanentlyDeleted'],
+    order: [['deletedAt', 'DESC']],
+    limit: 10,
+  })
+  console.log('===== DEBUG: All deleted customers (first 10):', allDeletedCheck.length, '=====')
+  allDeletedCheck.forEach(record => {
+    const deletedAtDate = record.deletedAt ? new Date(record.deletedAt) : null
+    console.log(`- id=${record.id}, deletedAt=${record.deletedAt} (ISO: ${deletedAtDate?.toISOString()}), recovered=${record.recovered}, permanentlyDeleted=${record.permanentlyDeleted}, email=${record.email}`)
+  })
+
+  // DEBUG: Check records that match the boolean conditions only
+  const booleanMatchCheck = await deletedCustomer.findAll({
+    paranoid: false, // Override paranoid behavior
+    where: {
+      recovered: false,
+      permanentlyDeleted: false,
+    },
+    attributes: ['id', 'userId', 'email', 'deletedAt', 'recovered', 'permanentlyDeleted'],
+    order: [['deletedAt', 'DESC']],
+    limit: 10,
+  })
+  console.log(`===== DEBUG: Records matching boolean conditions (recovered=false, permanentlyDeleted=false): ${booleanMatchCheck.length} =====`)
+  booleanMatchCheck.forEach(record => {
+    const deletedAtDate = record.deletedAt ? new Date(record.deletedAt) : null
+    console.log(`- id=${record.id}, deletedAt=${record.deletedAt} (ISO: ${deletedAtDate?.toISOString()}), email=${record.email}`)
+    
+    if (deletedAtDate) {
+      const isWithin30Days = deletedAtDate >= thirtyDaysAgo && deletedAtDate <= now
+      console.log(`  -> Should be included? ${isWithin30Days} (deletedAt >= thirtyDaysAgo: ${deletedAtDate >= thirtyDaysAgo}, deletedAt <= now: ${deletedAtDate <= now})`)
+    }
+  })
+
+  const dateMatchCheck = await deletedCustomer.findAll({
+    paranoid: false, // Override paranoid behavior
+    where: {
+      [Op.and]: [
+        literal(`deletedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`),
+        literal(`deletedAt <= NOW()`),
+      ],
+    },
+    attributes: ['id', 'userId', 'email', 'deletedAt', 'recovered', 'permanentlyDeleted'],
+    order: [['deletedAt', 'DESC']],
+    limit: 10,
+  })
+  console.log(`===== DEBUG: Records matching DATE condition only (within 30 days): ${dateMatchCheck.length} =====`)
+  dateMatchCheck.forEach(record => {
+    console.log(`- id=${record.id}, deletedAt=${record.deletedAt}, recovered=${record.recovered}, permanentlyDeleted=${record.permanentlyDeleted}, email=${record.email}`)
+  })
+
+  const deletedCustomers = await deletedCustomer.findAll({
+    paranoid: false, // Override paranoid behavior - we need all records
+    where: {
+      [Op.and]: [
+        literal(`DATE(deletedAt) >= DATE_SUB(DATE(NOW()), INTERVAL 30 DAY)`),
+        literal(`DATE(deletedAt) <= DATE(NOW())`),
+        literal(`recovered = 0`), // BOOLEAN stored as 0/1 in MySQL
+        literal(`permanentlyDeleted = 0`), // BOOLEAN stored as 0/1 in MySQL
+      ],
+    },
+    attributes: ['id', 'userId', 'firstName', 'lastName', 'email', 'deletedAt', 'recoveryToken'],
+    order: [['deletedAt', 'DESC']],
+  })
+
+  console.log('===== Filtered deleted customers (within 30 days):', deletedCustomers.length, '=====')
+  if (deletedCustomers.length > 0) {
+    deletedCustomers.forEach(cust => {
+      console.log(`- Found: deletedAt=${cust.deletedAt}, email=${cust.email}`)
+    })
+  }
+
+  if (deletedCustomers.length === 0) {
+
+    return res.status(200).json(
+      response({
+        message: 'No accounts pending recovery',
+        data: { count: 0 },
+      }),
+    )
+  }
+
+  // Calculate days since deletion and send appropriate reminders
+  const reminders = []
+  for (const deletedCust of deletedCustomers) {
+    const deletedAt = new Date(deletedCust.deletedAt)
+    const daysSinceDeletion = Math.floor((now - deletedAt) / (1000 * 60 * 60 * 24))
+    const daysRemaining = 30 - daysSinceDeletion
+
+    // Send reminder based on days
+    if (
+      daysSinceDeletion === 1 ||
+      daysSinceDeletion === 14 ||
+      daysSinceDeletion === 29
+    ) {
+      // Generate new recovery token if it doesn't exist
+      let recoveryTokenToUse = deletedCust.recoveryToken
+      let emailSent = false
+      
+      // If token doesn't exist, generate new one
+      if (!recoveryTokenToUse) {
+        recoveryTokenToUse = crypto.randomBytes(32).toString('hex')
+        // Update the record with new token
+        await deletedCustomer.update(
+          { recoveryToken: recoveryTokenToUse },
+          { where: { id: deletedCust.id } },
+        )
+      }
+      
+      // Send recovery reminder email with recovery token
+      const emailData = {
+        firstName: deletedCust.firstName,
+        lastName: deletedCust.lastName,
+        email: deletedCust.email,
+        recoveryToken: recoveryTokenToUse,
+      }
+      
+      EmailResetPasswordOtpToAll(null, emailData, 'recoverAccount', 'customer')
+      console.log(`✅ Recovery reminder email sent to ${deletedCust.email} (Day ${daysSinceDeletion})`)
+      emailSent = true
+      
+      reminders.push({
+        email: deletedCust.email,
+        daysRemaining,
+        daysSinceDeletion,
+        emailSent,
+      })
+    }
+  }
+  return res.status(200).json(
+    {
+      message: 'Recovery reminders processed',
+      data: {
+        count: deletedCustomers.length,
+        remindersSent: reminders.length,
+        reminders,
+      },
+    }
+  );
+};
+
+//* 2. Permanent Account Deletion (Lambda - Daily Cron)
+exports.permanentAccountDeletion = async (req, res, next) => {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  // Find all deleted customers older than 30 days, not recovered
+  const expiredCustomers = await deletedCustomer.findAll({
+    where: {
+      deletedAt: {
+        [Op.lt]: thirtyDaysAgo,
+      },
+      recovered: false,
+      permanentlyDeleted: false,
+    },
+    attributes: ['id', 'userId', 'email', 'deletedAt'],
+  })
+
+  if (expiredCustomers.length === 0) {
+    return res.status(200).json(
+      response({
+        message: 'No accounts to permanently delete',
+        data: { count: 0 },
+      }),
+    )
+  }
+
+  // Make users Anonymous (they should already be deleted, but in case they exist)
+  for (const deletedCust of expiredCustomers) {
+    // Check if user still exists (shouldn't, but safety check)
+    const existingUser = await user.findByPk(deletedCust.userId)
+    if (existingUser) {
   await user.update(
     {
       deleted: true,
       firstName: 'Anonymous',
       lastName: 'Customer',
-      email: `Anonymous${id}@gmail.com`,
+          email: `Anonymous${deletedCust.userId}@gmail.com`,
       countryCode: '+00',
       phoneNum: '000 0000000',
       image: '',
     },
-    { where: { id } },
+        { where: { id: deletedCust.userId } },
+      )
+    }
+
+    // Anonymize all allergies for this user
+    await allergies.update(
+      {
+        name: 'Anonymous Customer',
+        reaction: '',
+        note: '',
+        severity: 'Unknown',
+        allergyType: 'None',
+      },
+      { where: { userId: deletedCust.userId } },
+    )
+
+    // Mark as permanently deleted
+    await deletedCustomer.update(
+      {
+        permanentlyDeleted: true,
+      },
+      { where: { userId: deletedCust.userId } },
+    )
+  }
+
+  return res.status(200).json(
+    response({
+      message: 'Accounts permanently deleted',
+      data: {
+        count: expiredCustomers.length,
+        deletedAccounts: expiredCustomers.map((c) => ({
+          userId: c.userId,
+          email: c.email,
+        })),
+      },
+    }),
   )
-  Stripe.deleteCustomer(data?.stripeCustomerId)
-  deviceToken.destroy({ where: { userId: id } })
-  return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
 //! Notifications

@@ -1858,5 +1858,863 @@ module.exports = function (OTP, data, type, to) {
 
   }
 
+  if (type && type == 'deleteAccount' && to === 'customer') {
+    let subText = 'Delete Account';
+    let preOtpText = `You requested to delete your account. Use the code below to confirm account deletion.`
+    let postOtpText = `If you didn't request this, please ignore this email. Your account won't be deleted without confirming the code above.`
+
+    let subject = `Trim - Account Deletion Confirmation`
+    const name = `${data.firstName} ${data.lastName}`
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
+    console.log(
+      '🚀 ~ sigidevelopers:',
+      attachment.footer.concat(attachment.security),
+    )
+    const otp = `${OTP}`
+    transporter.sendMail(
+      {
+        from: process.env.EMAIL_USERNAME, // sender address
+        to: to, // list of receivers
+        subject: subject, // Subject line
+        attachments: attachment.footer.concat(attachment.security),
+        html: `<!DOCTYPE html>
+
+       <html
+    lang="en"
+    xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:v="urn:schemas-microsoft-com:vml"
+  >
+    <head>
+      <title></title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&display=swap"  
+        rel="stylesheet"
+      />
+      <meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+      <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+      <style>
+        * {
+          box-sizing: border-box;
+        }
+  
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: Chivo, sans-serif
+        }
+  
+        a[x-apple-data-detectors] {
+          color: inherit !important;
+          text-decoration: inherit !important;
+        }
+  
+        #MessageViewBody a {
+          color: inherit;
+          text-decoration: none;
+        }
+  
+        p {
+          line-height: inherit;
+        }
+  
+        .desktop_hide,
+        .desktop_hide table {
+          mso-hide: all;
+          display: none;
+          max-height: 0px;
+          overflow: hidden;
+        }
+  
+        .image_block img + div {
+          display: none;
+        }
+  
+        @media (max-width: 520px) {
+          .desktop_hide table.icons-inner,
+          .social_block.desktop_hide .social-table {
+            display: inline-block !important;
+          }
+  
+          .icons-inner {
+            text-align: center;
+          }
+  
+          .icons-inner td {
+            margin: 0 auto;
+          }
+  
+          .mobile_hide {
+            display: none;
+          }
+  
+          .row-content {
+            width: 100% !important;
+          }
+  
+          .stack .column {
+            width: 100%;
+            display: block;
+          }
+  
+          .mobile_hide {
+            min-height: 0;
+            max-height: 0;
+            max-width: 0;
+            overflow: hidden;
+            font-size: 0px;
+          }
+  
+          .desktop_hide,
+          .desktop_hide table {
+            display: table !important;
+            max-height: none !important;
+          }
+        }
+      </style>
+    </head>
+    <body
+      style="
+        background-color: #fff;
+        margin: 0;
+        padding: 0;
+        -webkit-text-size-adjust: none;
+        text-size-adjust: none;
+      "
+    >
+      <table
+      border="0"
+      cellpadding="0"
+      cellspacing="0"
+      class="nl-container"
+      role="presentation"
+      background-color:
+      #fff;
+      width="100%"
+    >
+      <tbody>
+        <tr>
+          <td>
+            <table
+              cellpadding="0"
+              cellspacing="0"
+              class="row row-1"
+              role="presentation"
+              width="100%"
+            >
+              <tbody>
+                <tr>
+                  <td>
+                    <table
+                      align="center"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      class="row-content stack"
+                      role="presentation"
+                      style="color: #000; width: 500px; margin: 0 auto"
+                      width="500"
+                    >
+                      <tbody>
+                        <tr>
+                          <td
+                            class="column column-1"
+                            style="
+                              font-weight: 400;
+                              text-align: left;
+                              padding-bottom: 5px;
+                              padding-top: 5px;
+                              vertical-align: top;
+                              border-top: 0px;
+                              border-right: 0px;
+                              border-bottom: 0px;
+                              border-left: 0px;
+                            "
+                            width="100%"
+                          >
+                            <table
+                              cellpadding="5"
+                              cellspacing="0"
+                              class="image_block block-1"
+                              role="presentation"
+                              width="100%"
+                            >
+                              <tr>
+                                <td class="pad">
+                                  <div
+                                    align="center"
+                                    class="alignment"
+                                    style="line-height: 10px"
+                                  >
+                                    <img
+                                      src="cid:forgotPassword"
+                                      style="
+                                        display: block;
+                                        height: auto;
+                                        border: 0;
+                                        max-width: 120px;
+                                        width: 100%;
+                                      "
+                                      width="100"
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <table
+              align="center"
+              border="0"
+              cellpadding="0"
+              cellspacing="0"
+              class="row row-5"
+              role="presentation"
+              width="100%"
+            >
+              <tbody>
+                <tr>
+                  <td>
+                    <table
+                      align="center"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      class="row-content stack"
+                      role="presentation"
+                      style="
+                        border-radius: 0;
+                        color: #000;
+                        width: 500px;
+                        margin: 0 auto;
+                      "
+                      width="500"
+                    >
+                      <tbody>
+                        <tr>
+                          <td
+                            class="column column-1"
+                            style="
+                              font-weight: 400;
+                              text-align: left;
+                              padding-bottom: 5px;
+                              padding-top: 5px;
+                              vertical-align: top;
+                              border-top: 0px;
+                              border-right: 0px;
+                              border-bottom: 0px;
+                              border-left: 0px;
+                            "
+                            width="100%"
+                          >
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="heading_block block-3"
+                              role="presentation"
+                              width="100%"
+                            >
+                              <tr>
+                                <td
+                                  class="pad"
+                                  style="text-align: center; width: 100%"
+                                >
+                                  <h1
+                                    style="
+                                      margin: 0;
+                                      color: #000;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 30px;
+                                      font-weight: 700;
+                                      letter-spacing: normal;
+                                      line-height: 120%;
+                                      text-align: center;
+                                      margin-top: 0;
+                                      margin-bottom: 0;
+                                    "
+                                  >
+                                    ${subText}
+                                  </h1>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="paragraph_block block-2"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td>
+                                  <div
+                                    style="
+                                      color: #000000cc;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 16px;
+                                      font-weight: 400;
+                                      letter-spacing: 0px;
+                                      text-align: left;
+                                    "
+                                  >
+                                    <p style="line-height: 18px">
+                                      Hi ${name},
+                                    </p>
+                                    <p style="line-height: 18px">
+                                      ${preOtpText}
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="text_block block-4"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td
+                                  class="pad"
+                                  style="
+                                    padding-bottom: 10px;
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    padding-top: 10px;
+                                  "
+                                >
+                                  <div style="font-family: sans-serif">
+                                    <div
+                                      class=""
+                                      style="
+                                        font-size: 14px;
+                                        font-family: Chivo, sans-serif;
+                                        mso-line-height-rule: exactly;
+                                        color: #000000;
+                                        line-height: 1.2;
+                                      "
+                                    >
+                                      <p
+                                        style="
+                                          margin: 0;
+                                          font-size: 14px;
+                                          text-align: center;
+                                        "
+                                      >
+                                        <span
+                                          style="
+                                            font-size: 32px;
+                                            font-weight: 700;
+                                            letter-spacing: 8px;
+                                          "
+                                          >${otp}</span
+                                        >
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="paragraph_block block-2"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td>
+                                  <div
+                                    style="
+                                      color: #000000cc;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 16px;
+                                      font-weight: 400;
+                                      letter-spacing: 0px;
+                                      text-align: left;
+                                    "
+                                  >
+                                    <p style="line-height: 18px">
+                                      ${postOtpText}
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+       ${footer}
+      `,
+      },
+      function (error, info) {
+        if (error) {
+          console.log(error)
+        } else {
+          console.log(info)
+        }
+      },
+    )
+  }
+
+  if (type && type == 'recoverAccount' && to === 'customer') {
+    let subText = 'Account Deleted';
+    let preOtpText = `You have deleted your account. If you want to cancel the deletion and recover your account, click the button below. You have 30 days to recover your account.`
+    let postOtpText = `If you didn't delete your account, please contact support immediately.`
+
+    let subject = `Trim - Cancel Account Deletion`
+    const name = `${data.firstName} ${data.lastName}`
+    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
+    console.log(
+      '🚀 ~ sigidevelopers:',
+      attachment.footer.concat(attachment.security),
+    )
+    
+    // Generate recovery URL with token - Points to BACKEND API endpoint
+    // The backend serves HTML directly from this endpoint
+    let backendUrl
+    const env = process.env.NODE_ENV || 'development'
+    switch(env) {
+      case 'production':
+        backendUrl = 'https://backend.trimworldwide.com'
+        break
+      case 'test':
+        backendUrl = 'https://stage.trimworldwide.com'
+        break
+      default:
+        backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`
+    }
+    // Full path: /customer/recover-account (customer is the route prefix)
+    // URL encode the token to handle any special characters
+    const encodedToken = encodeURIComponent(data.recoveryToken)
+    const recoveryUrl = `${backendUrl}/customer/recover-account?token=${encodedToken}`
+    console.log('🔍 Recovery URL Generated:', recoveryUrl)
+    console.log('🔍 Token in URL:', data.recoveryToken)
+    console.log('🔍 Token Length:', data.recoveryToken?.length)
+    transporter.sendMail(
+      {
+        from: process.env.EMAIL_USERNAME, // sender address
+        to: to, // list of receivers
+        subject: subject, // Subject line
+        attachments: attachment.footer.concat(attachment.security),
+        html: `<!DOCTYPE html>
+
+       <html
+    lang="en"
+    xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:v="urn:schemas-microsoft-com:vml"
+  >
+    <head>
+      <title></title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&display=swap"  
+        rel="stylesheet"
+      />
+      <meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+      <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+      <style>
+        * {
+          box-sizing: border-box;
+        }
+  
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: Chivo, sans-serif
+        }
+  
+        a[x-apple-data-detectors] {
+          color: inherit !important;
+          text-decoration: inherit !important;
+        }
+  
+        #MessageViewBody a {
+          color: inherit;
+          text-decoration: none;
+        }
+  
+        p {
+          line-height: inherit;
+        }
+  
+        .desktop_hide,
+        .desktop_hide table {
+          mso-hide: all;
+          display: none;
+          max-height: 0px;
+          overflow: hidden;
+        }
+  
+        .image_block img + div {
+          display: none;
+        }
+  
+        @media (max-width: 520px) {
+          .desktop_hide table.icons-inner,
+          .social_block.desktop_hide .social-table {
+            display: inline-block !important;
+          }
+  
+          .icons-inner {
+            text-align: center;
+          }
+  
+          .icons-inner td {
+            margin: 0 auto;
+          }
+  
+          .mobile_hide {
+            display: none;
+          }
+  
+          .row-content {
+            width: 100% !important;
+          }
+  
+          .stack .column {
+            width: 100%;
+            display: block;
+          }
+  
+          .mobile_hide {
+            min-height: 0;
+            max-height: 0;
+            max-width: 0;
+            overflow: hidden;
+            font-size: 0px;
+          }
+  
+          .desktop_hide,
+          .desktop_hide table {
+            display: table !important;
+            max-height: none !important;
+          }
+        }
+      </style>
+    </head>
+    <body
+      style="
+        background-color: #fff;
+        margin: 0;
+        padding: 0;
+        -webkit-text-size-adjust: none;
+        text-size-adjust: none;
+      "
+    >
+      <table
+      border="0"
+      cellpadding="0"
+      cellspacing="0"
+      class="nl-container"
+      role="presentation"
+      background-color:
+      #fff;
+      width="100%"
+    >
+      <tbody>
+        <tr>
+          <td>
+            <table
+              cellpadding="0"
+              cellspacing="0"
+              class="row row-1"
+              role="presentation"
+              width="100%"
+            >
+              <tbody>
+                <tr>
+                  <td>
+                    <table
+                      align="center"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      class="row-content stack"
+                      role="presentation"
+                      style="color: #000; width: 500px; margin: 0 auto"
+                      width="500"
+                    >
+                      <tbody>
+                        <tr>
+                          <td
+                            class="column column-1"
+                            style="
+                              font-weight: 400;
+                              text-align: left;
+                              padding-bottom: 5px;
+                              padding-top: 5px;
+                              vertical-align: top;
+                              border-top: 0px;
+                              border-right: 0px;
+                              border-bottom: 0px;
+                              border-left: 0px;
+                            "
+                            width="100%"
+                          >
+                            <table
+                              cellpadding="5"
+                              cellspacing="0"
+                              class="image_block block-1"
+                              role="presentation"
+                              width="100%"
+                            >
+                              <tr>
+                                <td class="pad">
+                                  <div
+                                    align="center"
+                                    class="alignment"
+                                    style="line-height: 10px"
+                                  >
+                                    <img
+                                      src="cid:forgotPassword"
+                                      style="
+                                        display: block;
+                                        height: auto;
+                                        border: 0;
+                                        max-width: 120px;
+                                        width: 100%;
+                                      "
+                                      width="100"
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <table
+              align="center"
+              border="0"
+              cellpadding="0"
+              cellspacing="0"
+              class="row row-5"
+              role="presentation"
+              width="100%"
+            >
+              <tbody>
+                <tr>
+                  <td>
+                    <table
+                      align="center"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      class="row-content stack"
+                      role="presentation"
+                      style="
+                        border-radius: 0;
+                        color: #000;
+                        width: 500px;
+                        margin: 0 auto;
+                      "
+                      width="500"
+                    >
+                      <tbody>
+                        <tr>
+                          <td
+                            class="column column-1"
+                            style="
+                              font-weight: 400;
+                              text-align: left;
+                              padding-bottom: 5px;
+                              padding-top: 5px;
+                              vertical-align: top;
+                              border-top: 0px;
+                              border-right: 0px;
+                              border-bottom: 0px;
+                              border-left: 0px;
+                            "
+                            width="100%"
+                          >
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="heading_block block-3"
+                              role="presentation"
+                              width="100%"
+                            >
+                              <tr>
+                                <td
+                                  class="pad"
+                                  style="text-align: center; width: 100%"
+                                >
+                                  <h1
+                                    style="
+                                      margin: 0;
+                                      color: #000;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 30px;
+                                      font-weight: 700;
+                                      letter-spacing: normal;
+                                      line-height: 120%;
+                                      text-align: center;
+                                      margin-top: 0;
+                                      margin-bottom: 0;
+                                    "
+                                  >
+                                    ${subText}
+                                  </h1>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="paragraph_block block-2"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td>
+                                  <div
+                                    style="
+                                      color: #000000cc;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 16px;
+                                      font-weight: 400;
+                                      letter-spacing: 0px;
+                                      text-align: left;
+                                    "
+                                  >
+                                    <p style="line-height: 18px">
+                                      Hi ${name},
+                                    </p>
+                                    <p style="line-height: 18px">
+                                      ${preOtpText}
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="button_block block-4"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td
+                                  class="pad"
+                                  style="
+                                    padding-bottom: 10px;
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    padding-top: 10px;
+                                    text-align: center;
+                                  "
+                                >
+                                  <div align="center" class="alignment">
+                                    <a
+                                      href="${recoveryUrl}"
+                                      style="
+                                        background-color: #000;
+                                        border: none;
+                                        color: #fff;
+                                        display: inline-block;
+                                        font-family: Chivo, sans-serif;
+                                        font-size: 16px;
+                                        font-weight: 400;
+                                        padding: 15px 30px;
+                                        text-align: center;
+                                        text-decoration: none;
+                                        border-radius: 5px;
+                                      "
+                                      target="_blank"
+                                    >
+                                      Cancel Account Deletion
+                                    </a>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                            <table
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              class="paragraph_block block-2"
+                              role="presentation"
+                              style="word-break: break-word"
+                              width="100%"
+                            >
+                              <tr>
+                                <td>
+                                  <div
+                                    style="
+                                      color: #000000cc;
+                                      direction: ltr;
+                                      font-family: Chivo, sans-serif;
+                                      font-size: 16px;
+                                      font-weight: 400;
+                                      letter-spacing: 0px;
+                                      text-align: left;
+                                    "
+                                  >
+                                    <p style="line-height: 18px">
+                                      ${postOtpText}
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+       ${footer}
+      `,
+      },
+      function (error, info) {
+        if (error) {
+          console.log(error)
+        } else {
+          console.log(info)
+        }
+      },
+    )
+  }
+
 
 }

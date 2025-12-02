@@ -30,6 +30,34 @@ module.exports = (sequelize) => {
         allowNull: true,
         defaultValue: '',
       },
+      password: {
+        type: DataTypes.STRING(),
+        allowNull: true,
+      },
+      stripeCustomerId: {
+        type: DataTypes.STRING(),
+        allowNull: true,
+      },
+      deletedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
+      recovered: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      },
+      permanentlyDeleted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      },
+      recoveryToken: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        unique: true,
+      },
     },
     {
       primaryKey: true,
@@ -40,6 +68,14 @@ module.exports = (sequelize) => {
         {
           fields: ['email'],
           name: 'user_email_index',
+        },
+        {
+          fields: ['userId'],
+          name: 'user_id_index',
+        },
+        {
+          fields: ['deletedAt'],
+          name: 'deleted_at_index',
         },
       ],
     },

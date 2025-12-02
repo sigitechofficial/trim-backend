@@ -556,6 +556,9 @@ exports.fecthSalons = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'town',
+          'streetLineAddress1',
+          'streetLineAddress2',
         ],
       },
       {
