@@ -15,6 +15,7 @@ const {
   employeeAccess,
   employeeAccessDefault,
   salonProfiles,
+  subscriptions,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
@@ -674,6 +675,26 @@ exports.login = async (req, res, next) => {
         response.data.profileCompletion.accountConnected = isConnected;
         response.data.stripeRestrictions = { reason, currentlyDue };
       }
+
+      // 🔹 Check subscription status
+      let subscriptionStatus = null;
+      if (salon?.id) {
+        try {
+          const salonSubscription = await subscriptions.findOne({
+            where: { salonDetailId: salon.id },
+            attributes: ['subscriptionId'],
+            order: [['createdAt', 'DESC']], // Get the latest subscription
+          });
+
+          if (salonSubscription && salonSubscription.subscriptionId) {
+            subscriptionStatus = await Stripe.getSubscriptionStatus(salonSubscription.subscriptionId);
+            console.log('🚀 ~ Subscription Status:', subscriptionStatus);
+          }
+        } catch (err) {
+          console.error("❌ Subscription status check failed:", err.message);
+        }
+      }
+      response.data.profileCompletion.subscriptionStatus = subscriptionStatus;
     }
   }
 
@@ -1017,18 +1038,38 @@ exports.session = async (req, res, next) => {
   }
 
   const salon = User.salonDetails[0]
-  let stripeReason = null
+  let stripeRestrictions = null
+  let subscriptionStatus = null
 
   // 🔹 Live Stripe check
   if (salon?.connectAccountId) {
     try {
-      const { isConnected, reason } = await Stripe.checkStripeAccountStatus(salon.connectAccountId)
-      stripeReason = reason
+      const { isConnected, reason, currentlyDue } = await Stripe.checkStripeAccountStatus(salon.connectAccountId)
+      // Set stripeRestrictions to match login API format
+      stripeRestrictions = { reason, currentlyDue }
       if (salon.wallet) {
         await salon.wallet.update({ accountConnected: isConnected })
       }
     } catch (err) {
       console.error("❌ Stripe check in session failed:", err.message)
+    }
+  }
+
+  // 🔹 Check subscription status
+  if (salon?.id) {
+    try {
+      const salonSubscription = await subscriptions.findOne({
+        where: { salonDetailId: salon.id },
+        attributes: ['subscriptionId'],
+        order: [['createdAt', 'DESC']], // Get the latest subscription
+      })
+
+      if (salonSubscription && salonSubscription.subscriptionId) {
+        subscriptionStatus = await Stripe.getSubscriptionStatus(salonSubscription.subscriptionId)
+        console.log('🚀 ~ Subscription Status:', subscriptionStatus)
+      }
+    } catch (err) {
+      console.error("❌ Subscription status check failed:", err.message)
     }
   }
 
@@ -1073,8 +1114,9 @@ exports.session = async (req, res, next) => {
         hasTeamMembers: salon.employees.length !== 0,
         hasSubscription: isSubscription,
         accountConnected: salon?.wallet?.accountConnected ? true : false,
-        stripeRestrictionReason: stripeReason, // 🔹 added
+        subscriptionStatus: subscriptionStatus, // Subscription status (e.g., 'active', 'canceled', 'cancelled', etc.)
       },
+      ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
     },
     error: '',
   })

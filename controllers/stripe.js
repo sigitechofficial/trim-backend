@@ -1505,10 +1505,11 @@ async function checkStripeAccountStatus(connectAccountId) {
       isConnected,
       reason: account.requirements?.disabled_reason || null,
       currentlyDue: account.requirements?.currently_due || [],
+      requirements: account.requirements || null, // Full requirements object
     };
   } catch (err) {
     console.error("❌ Stripe account check failed:", err.message);
-    return { isConnected: false, reason: "api_error" };
+    return { isConnected: false, reason: "api_error", requirements: null };
   }
 }
 
