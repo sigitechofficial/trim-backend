@@ -3633,18 +3633,32 @@ exports.accountRecoveryReminder = async (req, res, next) => {
 //* 2. Permanent Account Deletion (Lambda - Daily Cron)
 exports.permanentAccountDeletion = async (req, res, next) => {
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  
+  // Calculate today's date at start of day (UTC)
+  const today = new Date(now);
+  today.setUTCHours(0, 0, 0, 0);
+  
+  // Calculate 30 days ago from today (UTC start of day)
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
+  
+  console.log('today (UTC start)=====================>>>', today.toISOString());
+  console.log('thirtyDaysAgo (UTC start)=====================>>>', thirtyDaysAgo.toISOString());
+  console.log('now=====================>>>', now.toISOString());
 
-  // Find all deleted customers older than 30 days, not recovered
+  // Find all deleted customers within the last 30 days (from today going back 30 days), not recovered
+  // IMPORTANT: deletedCustomer model has paranoid: true, which filters out records with deletedAt IS NOT NULL
+  // Since this table STORES deleted customer data (deletedAt is a regular field), we need paranoid: false
   const expiredCustomers = await deletedCustomer.findAll({
+    paranoid: false, // Override paranoid behavior - we need all records
     where: {
       deletedAt: {
-        [Op.lt]: thirtyDaysAgo,
+        [Op.between]: [thirtyDaysAgo, now],
       },
       recovered: false,
       permanentlyDeleted: false,
     },
-    attributes: ['id', 'userId', 'email', 'deletedAt'],
+    attributes: ['id', 'userId', 'email', 'deletedAt', 'firstName', 'lastName'],
   })
 
   if (expiredCustomers.length === 0) {
@@ -3659,33 +3673,72 @@ exports.permanentAccountDeletion = async (req, res, next) => {
   // Make users Anonymous (they should already be deleted, but in case they exist)
   for (const deletedCust of expiredCustomers) {
     // Check if user still exists (shouldn't, but safety check)
-    const existingUser = await user.findByPk(deletedCust.userId)
+    const existingUser = await user.findByPk(deletedCust.userId, {
+      attributes: ['id', 'userTypeId'],
+    })
+    
     if (existingUser) {
-  await user.update(
-    {
-      deleted: true,
-      firstName: 'Anonymous',
-      lastName: 'Customer',
+      const isSalon = existingUser.userTypeId === 2 // userTypeId 2 = Salon
+      
+      // Anonymize user
+      await user.update(
+        {
+          deleted: true,
+          firstName: 'Anonymous',
+          lastName: isSalon ? 'Salon' : 'Customer',
           email: `Anonymous${deletedCust.userId}@gmail.com`,
-      countryCode: '+00',
-      phoneNum: '000 0000000',
-      image: '',
-    },
+          countryCode: '+00',
+          phoneNum: '000 0000000',
+          image: '',
+        },
         { where: { id: deletedCust.userId } },
       )
+
+      // If user is a salon, also anonymize salonDetail
+      if (isSalon) {
+        const salonData = await salonDetail.findOne({
+          where: { userId: deletedCust.userId },
+          attributes: ['id'],
+        })
+        
+        if (salonData) {
+          await salonDetail.update(
+            {
+              salonName: 'Anonymous Salon',
+              businessEmail: `Anonymous${salonData.id}@gmail.com`,
+              businessCountryCode: '+00',
+              businessPhoneNum: '000 0000000',
+              description: '',
+              coverImage: '',
+            },
+            { where: { userId: deletedCust.userId } },
+          )
+        }
+      } else {
+        // Anonymize all allergies for customers only
+        await allergies.update(
+          {
+            name: 'Anonymous Customer',
+            reaction: '',
+            note: '',
+            severity: 'Unknown',
+            allergyType: 'None',
+          },
+          { where: { userId: deletedCust.userId } },
+        )
+      }
     }
 
-    // Anonymize all allergies for this user
-    await allergies.update(
-      {
-        name: 'Anonymous Customer',
-        reaction: '',
-        note: '',
-        severity: 'Unknown',
-        allergyType: 'None',
-      },
-      { where: { userId: deletedCust.userId } },
-    )
+    // Send permanent deletion notification email
+    const emailData = {
+      firstName: deletedCust.firstName,
+      lastName: deletedCust.lastName,
+      email: deletedCust.email,
+    }
+    
+    // Send deletion notification email
+    EmailResetPasswordOtpToAll(null, emailData, 'deleteAccount', 'customer')
+    console.log(`✅ Permanent deletion notification email sent to ${deletedCust.email}`)
 
     // Mark as permanently deleted
     await deletedCustomer.update(
