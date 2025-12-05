@@ -262,10 +262,14 @@ exports.choosePlan = async (req, res, next) => {
     ; (salonData.approvedByAdmin = true),
       (salonData.registrationDate = dateManipulation.stampToDate(
         subscription.current_period_start,
-      )),
-      (salonData.registrationExpiryDate = dateManipulation.stampToDate(
-        subscription.current_period_end,
       ))
+  
+  // Add 5 days grace period to registration expiry date
+  const expiryDate = new Date(subscription.current_period_end * 1000)
+  expiryDate.setDate(expiryDate.getDate() + 5) // Add 5 grace days
+  const expiryDateWithGrace = Math.floor(expiryDate.getTime() / 1000) // Convert back to Unix timestamp
+  salonData.registrationExpiryDate = dateManipulation.stampToDate(expiryDateWithGrace)
+  
   salonData.subscriptionPlan = subscription.id
   await salonData.save()
   const check = await wallet.findOne({

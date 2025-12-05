@@ -1123,7 +1123,7 @@ const setupIntent = async (customerId, accountId = null) => {
   try {
     const setupIntentData = {
       customer: customerId,
-      payment_method_types: ['card'], // Explicitly set to card only (Klarna is not supported for SetupIntents)
+      payment_method_types: ['card','link'], // Explicitly set to card only (Klarna is not supported for SetupIntents)
     };
 
     let setupIntent;
