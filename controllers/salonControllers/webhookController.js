@@ -6,6 +6,7 @@ const StripeHandler = require('../stripe')
 const AppError = require('../../utils/appError')
 const dateManipulation = require('../../utils/dateManipulation')
 const ThrowNotification = require('../../utils/throwNotification')
+const PayoutBlockedEmail = require('../../helper/PayoutBlockedEmail')
 const { salonDetail, user, subscriptions, deviceToken } = require('../../models')
 
 // const subscriptions = require('../models/subscriptions')
@@ -339,8 +340,15 @@ exports.emailtesting = async (req, res, next) => {
 
 //====================================================================================================//
 
-let connectEndpointSecret='whsec_SEhbpAjhCx2naWI3Y5hnfLJy8l4fvev4'
 
+let connectEndpointSecret;
+
+if (process.env.NODE_ENV === 'test') {
+  connectEndpointSecret = process.env.connect_stage_signature
+} else {
+  connectEndpointSecret = process.env.connect_live_signature
+}
+console.log("ЁЯЪА ~ endpointSecret:", endpointSecret)
 exports.stripeConnectWebhookEventHandler = async (req, res) => {
   let event;
   try {
@@ -359,6 +367,12 @@ case 'account.updated': {
 
   const salon = await salonDetail.findOne({
     where: { connectAccountId: account.id },
+    include: [
+      {
+        model: user,
+        attributes: ['id', 'firstName', 'lastName', 'email'],
+      },
+    ],
   });
 
   if (!salon) break;
@@ -370,6 +384,54 @@ case 'account.updated': {
   });
   const tokenArray = tokens.map(t => t.tokenId);
 
+  // 🔹 Check if payouts are paused/blocked
+  if (account.payouts_enabled === false) {
+    console.log('⚠️ Payouts are blocked for account:', account.id);
+    
+    // Update salon account status
+    await salon.update({ accountConnected: false });
+
+    // Get salon owner details for email
+    const salonOwner = salon.user || await user.findByPk(salon.userId, {
+      attributes: ['id', 'firstName', 'lastName', 'email'],
+    });
+
+    // Send push notification
+    if (tokenArray.length > 0) {
+      ThrowNotification(tokenArray, {
+        title: 'Payouts Blocked',
+        body: 'Your payouts have been temporarily paused. Please check your Stripe account for more details.',
+      });
+    }
+
+            // Send email notification
+            if (salonOwner?.email) {
+              try {
+                const emailData = {
+                  firstName: salonOwner.firstName,
+                  lastName: salonOwner.lastName,
+                  email: salonOwner.email,
+                  salonName: salon.salonName || 'Your Salon',
+                  disabledReason: account.requirements?.disabled_reason || 'Account restrictions',
+                };
+                
+                PayoutBlockedEmail(emailData);
+                console.log('✅ Payout blocked email sent to:', salonOwner.email);
+              } catch (emailError) {
+                console.error('❌ Error sending payout blocked email:', emailError.message);
+              }
+            }
+
+    // Log the event
+    console.log('🚨 Payouts blocked for salon:', {
+      salonId: salon.id,
+      salonName: salon.salonName,
+      connectAccountId: account.id,
+      disabledReason: account.requirements?.disabled_reason,
+    });
+  }
+
+  // Check for additional requirements
   if (account.requirements?.currently_due?.length > 0) {
     await salon.update({ accountConnected: false });
 
@@ -382,7 +444,9 @@ case 'account.updated': {
     });
   }
 
+  // Check if account is fully verified and payouts are enabled
   if (
+    account.payouts_enabled === true &&
     account.requirements?.currently_due?.length === 0 &&
     !account.requirements?.disabled_reason
   ) {
@@ -394,6 +458,86 @@ case 'account.updated': {
   }
   break;
 }
+
+      case 'capability.updated': {
+        const capability = event.data.object;
+        const accountId = event.account; // Connect account ID
+
+        // Only handle payout capability changes
+        if (capability.id === 'payouts') {
+          const salon = await salonDetail.findOne({
+            where: { connectAccountId: accountId },
+            include: [
+              {
+                model: user,
+                attributes: ['id', 'firstName', 'lastName', 'email'],
+              },
+            ],
+          });
+
+          if (!salon) break;
+
+          // Fetch tokens for notifications
+          const tokens = await deviceToken.findAll({
+            where: { userId: salon.userId },
+            attributes: ['tokenId'],
+          });
+          const tokenArray = tokens.map(t => t.tokenId);
+
+          // Check if payout capability is inactive or pending
+          if (capability.status === 'inactive' || capability.status === 'pending') {
+            console.log('⚠️ Payout capability is inactive/pending for account:', accountId);
+
+            // Update salon account status
+            await salon.update({ accountConnected: false });
+
+            // Get salon owner details
+            const salonOwner = salon.user || await user.findByPk(salon.userId, {
+              attributes: ['id', 'firstName', 'lastName', 'email'],
+            });
+
+            // Send push notification
+            if (tokenArray.length > 0) {
+              ThrowNotification(tokenArray, {
+                title: 'Payouts Blocked',
+                body: 'Your payouts have been temporarily paused. Please check your Stripe account for more details.',
+              });
+            }
+
+            // Send email notification
+            if (salonOwner?.email) {
+              try {
+                const emailData = {
+                  firstName: salonOwner.firstName,
+                  lastName: salonOwner.lastName,
+                  email: salonOwner.email,
+                  salonName: salon.salonName || 'Your Salon',
+                  disabledReason: 'Capability restrictions',
+                  capabilityStatus: capability.status === 'inactive' ? 'inactive' : 'pending verification',
+                };
+                
+                PayoutBlockedEmail(emailData);
+                console.log('✅ Payout capability blocked email sent to:', salonOwner.email);
+              } catch (emailError) {
+                console.error('❌ Error sending payout capability blocked email:', emailError.message);
+              }
+            }
+
+            // Log the event
+            console.log('🚨 Payout capability blocked for salon:', {
+              salonId: salon.id,
+              salonName: salon.salonName,
+              connectAccountId: accountId,
+              capabilityStatus: capability.status,
+            });
+          } else if (capability.status === 'active') {
+            // Payouts are active - update account status
+            await salon.update({ accountConnected: true });
+            console.log('✅ Payout capability is active for salon:', salon.id);
+          }
+        }
+        break;
+      }
 
       case 'account.application.deauthorized':
         console.log('⚠️ Account disconnected:', event.data.object.id);
