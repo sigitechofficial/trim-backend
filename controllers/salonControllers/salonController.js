@@ -3276,7 +3276,7 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
-  Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
+  //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
   deleteEmployeesAll(salon?.id)
   return res.json(response({ message: 'Account deleted', data: { data } }))
