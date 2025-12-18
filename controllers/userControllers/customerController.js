@@ -4655,7 +4655,26 @@ exports.sendReminder = async (req, res) => {
 
       // Build appointment Date (treat 'on' + 'startTime' as Asia/Karachi local)
       const apptDateTime = new Date(`${b.on}T${b.startTime}`); // raw
-      const apptLocalStr = apptDateTime.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }); // formatted
+      
+      // Format date as DD/MM/YYYY with time in Asia/Karachi timezone
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Karachi',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(apptDateTime);
+      const day = parts.find(p => p.type === 'day').value;
+      const month = parts.find(p => p.type === 'month').value;
+      const year = parts.find(p => p.type === 'year').value;
+      const hour = parts.find(p => p.type === 'hour').value;
+      const minute = parts.find(p => p.type === 'minute').value;
+      
+      const apptLocalStr = `${day}/${month}/${year} @ ${hour}:${minute}`; // DD/MM/YYYY HH:mm format
 
       // Decide which reminder this booking is for
       const apptForCompare = new Date(`${b.on}T${b.startTime}`); // JS date for comparison to windows created from 'now'
@@ -4673,22 +4692,22 @@ exports.sendReminder = async (req, res) => {
         which === '24h'
           ? {
               title: 'Upcoming Booking (Customer)',
-              body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
+              body: `Your booking with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
             }
           : {
               title: 'Upcoming Booking (Customer)',
-              body: `Your appointment with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
             };
 
       const notifSalon =
         which === '24h'
           ? {
               title: 'Upcoming Booking (Salon)',
-              body: `You have an appointment with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
+              body: `You have an booking with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
             }
           : {
               title: 'Upcoming Booking (Salon)',
-              body: `You have an appointment with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
+              body: `You have an booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
