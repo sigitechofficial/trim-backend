@@ -1891,7 +1891,94 @@ exports.bookAppointment = async (req, res, next) => {
   if (!book)
     throw new AppError('Something went wrong appointment not booked', 200)
 
-  //TODO  intial payment will be charge be Here
+  // Charge upfront amount if payment intent is provided and payment method is card
+  if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend && appointment.initialPayment > 0) {
+    try {
+      // Get salon's connected account
+      const salon = await salonDetail.findByPk(appointment.salonDetailId, {
+        attributes: ['connectAccountId']
+      });
+
+      if (!salon || !salon.connectAccountId) {
+        await booking.destroy({ where: { id: book.id } });
+        throw new AppError('Salon connected account not found', 200);
+      }
+
+      // Get customer's stripe customer ID on connected account
+      const client = await user.findByPk(customerId, {
+        attributes: ['stripeCustomerId'],
+      });
+
+      if (!client?.stripeCustomerId) {
+        await booking.destroy({ where: { id: book.id } });
+        throw new AppError('Customer Stripe ID not found', 200);
+      }
+
+      // Verify customer exists on connected account
+      const confirmCustomerId = await Stripe.getCustomer(
+        client.stripeCustomerId,
+        salon.connectAccountId
+      );
+
+      if (!confirmCustomerId) {
+        await booking.destroy({ where: { id: book.id } });
+        throw new AppError('Customer not found on salon Stripe account', 200);
+      }
+
+      // Calculate expected amount (upfront + tip)
+      const tipAmount = appointment.tip || 0;
+      const expectedAmount = appointment.initialPayment + tipAmount;
+
+      // Retrieve and confirm payment intent
+      const confirmedPayment = await Stripe.retrieveAndConfirmPaymentIntent(
+        req.body.initialPaymentIntend,
+        appointment.stripeCardId,
+        salon.connectAccountId
+      );
+
+      // Check if payment succeeded
+      if (confirmedPayment.status !== 'succeeded') {
+        await booking.destroy({ where: { id: book.id } });
+        throw new AppError(`Payment failed with status: ${confirmedPayment.status}`, 200);
+      }
+
+      // Verify the charged amount matches expected amount (allow small rounding differences)
+      const chargedAmount = confirmedPayment.amount / 100; // Convert from cents to pounds
+      const amountDifference = Math.abs(chargedAmount - expectedAmount);
+      
+      if (amountDifference > 0.01) { // Allow 1 penny difference for rounding
+        console.warn(`⚠️ Amount mismatch: Expected £${expectedAmount}, Charged £${chargedAmount}`);
+        // Don't fail, but log the warning
+      }
+
+      // Update booking with actual captured amount
+      // actualCapturedAmount should be the upfront amount (excluding tip)
+      const actualUpfrontAmount = appointment.initialPayment;
+
+      await book.update({
+        actualCapturedAmount: actualUpfrontAmount,
+        initialPaymentIntend: confirmedPayment.id,
+      });
+
+      console.log(`✅ Upfront payment charged: £${actualUpfrontAmount} (Total charged: £${chargedAmount}, Tip: £${tipAmount})`);
+
+    } catch (error) {
+      // Rollback booking if payment fails
+      await booking.destroy({ where: { id: book.id } });
+      console.error('❌ Payment charge failed, booking rolled back:', error.message);
+      throw new AppError(`Payment failed: ${error.message}`, 200);
+    }
+  } else if (req.body.paymentMethod === 'cash') {
+    // For cash payments, set actualCapturedAmount to 0
+    await book.update({
+      actualCapturedAmount: 0,
+    });
+  } else if (req.body.paymentMethod === 'card' && appointment.initialPayment === 0) {
+    // If card payment but no upfront amount, set actualCapturedAmount to 0
+    await book.update({
+      actualCapturedAmount: 0,
+    });
+  }
 
   const finalInput = JobsInput.map((service) => ({
     ...service,
@@ -4268,6 +4355,88 @@ exports.createSetupIntent = async (req, res, next) => {
   }
 };
 
+//* 4.5.3 Capture Payment info with Setup Intent (Alternative to Payment Intent) -----------------
+
+exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
+  //Partial payment upfront using Setup Intent
+  console.log(
+    '🚀 ~ exports.captureUpFrontPaymentInfoWithSetupIntent= ~ req.body:',
+    req.body.stripeCustomerId,
+  )
+  
+  const customerId = req.user.id
+  console.log("CustomerId=================>>>>",customerId)
+
+  if (!req.body.onlinePayments)
+    throw new AppError('Salon does not accept online payments.', 200)
+  if (!req.body.stripeCustomerId)
+    throw new AppError('Salon does not accept online payments.', 200)
+
+  const upFrontAmount =
+    req.body.advanceAmount && req.body.advanceAmount > 0
+      ? parseFloat(req.body.advanceAmount)
+      : 0
+  const platformFee = req.body?.platformFee
+    ? parseFloat(req.body?.platformFee)
+    : 0
+  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
+  const advanceAmount = upFrontAmount + tip 
+  const actualCapturedAmount = upFrontAmount
+  const account = await salonDetail.findOne({
+    where: { id: req.body.salonId },
+    attributes: ['connectAccountId'],
+  })
+  
+  console.log("account.connectAccountId===========<><><><>>>><<<<<<<<<<<<<<>>>>>>>>>><<<<<<<<<<",account.connectAccountId)
+  let stripeCustomerId=req.body.stripeCustomerId;
+  let confirmCustomerId=await Stripe.getCustomer(stripeCustomerId,account.connectAccountId)
+        console.log("confirmCustomerId------<><><><><><><><>",confirmCustomerId)
+
+  if(!confirmCustomerId){
+      throw new AppError("User Not Exists on Stripe Connect Account")
+  }
+  console.log("Stripe CustomerId-===============================>>>>",confirmCustomerId)
+  const ephemeralKey = await Stripe.createEphemeralKey(
+    confirmCustomerId,
+    account.connectAccountId
+  )
+  
+  // Create connection token for Stripe Terminal
+  // In live mode, you need to pass a location ID
+  // For now, we're passing null which works in test mode
+  // In production, you'll need to provide an actual location ID
+  const connectionToken = await Stripe.createConnectionToken(null, null)
+
+  // Create Setup Intent instead of Payment Intent
+  // Setup Intent is used to save payment method, then charge separately later
+  const setupIntent =
+    advanceAmount > 0
+      ? await Stripe.setupIntent(
+          confirmCustomerId,
+          account.connectAccountId,
+        )
+      : null
+
+  const data = {
+    ephemeralKeySecret: ephemeralKey ? ephemeralKey.secret : '',
+    connectionToken: connectionToken,
+    client_secret: setupIntent ? setupIntent.client_secret : '',
+    setupIntentId: setupIntent ? setupIntent.id : '',
+    paymentIntendId: null, // No payment intent with setup intent approach
+    initialPayment: upFrontAmount,
+    tip: tip,
+    platformFee,
+    actualCapturedAmount: actualCapturedAmount,
+    stripeCustomerId: confirmCustomerId,
+    stripeAccountId:account.connectAccountId,
+  }
+  
+  console.log("Data================================><><><><><><>",data);
+
+  const output = response({ status: '1', message: 'Advance payment setup intent created', data })
+  return res.status(200).json(output)
+}
+
 // Controller to send appointment reminders before 24 hours of the appointment
 // exports.sendReminder = async (req, res) => {
 //   try {
@@ -4486,7 +4655,26 @@ exports.sendReminder = async (req, res) => {
 
       // Build appointment Date (treat 'on' + 'startTime' as Asia/Karachi local)
       const apptDateTime = new Date(`${b.on}T${b.startTime}`); // raw
-      const apptLocalStr = apptDateTime.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }); // formatted
+      
+      // Format date as DD/MM/YYYY with time in Asia/Karachi timezone
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Karachi',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(apptDateTime);
+      const day = parts.find(p => p.type === 'day').value;
+      const month = parts.find(p => p.type === 'month').value;
+      const year = parts.find(p => p.type === 'year').value;
+      const hour = parts.find(p => p.type === 'hour').value;
+      const minute = parts.find(p => p.type === 'minute').value;
+      
+      const apptLocalStr = `${day}/${month}/${year} @ ${hour}:${minute}`; // DD/MM/YYYY HH:mm format
 
       // Decide which reminder this booking is for
       const apptForCompare = new Date(`${b.on}T${b.startTime}`); // JS date for comparison to windows created from 'now'
@@ -4504,22 +4692,22 @@ exports.sendReminder = async (req, res) => {
         which === '24h'
           ? {
               title: 'Upcoming Booking (Customer)',
-              body: `Your appointment with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
+              body: `Your booking with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
             }
           : {
               title: 'Upcoming Booking (Customer)',
-              body: `Your appointment with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
             };
 
       const notifSalon =
         which === '24h'
           ? {
               title: 'Upcoming Booking (Salon)',
-              body: `You have an appointment with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
+              body: `You have an booking with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
             }
           : {
               title: 'Upcoming Booking (Salon)',
-              body: `You have an appointment with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
+              body: `You have an booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);

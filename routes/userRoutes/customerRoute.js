@@ -90,6 +90,11 @@ router.post(
   protect,
   catchAsync(appController.captureUpFrontPaymentInfoFromWeb),
 )
+router.post(
+  '/upfront-payment-info-setup-intent',
+  protect,
+  catchAsync(appController.captureUpFrontPaymentInfoWithSetupIntent),
+)
 
 router.post(
   '/solo-employee-appointment-schedule/:bookingId',

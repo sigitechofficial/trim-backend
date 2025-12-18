@@ -1055,10 +1055,67 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
 
 
 
+/*
+ * Retrieve and Confirm Payment Intent for Upfront Payment
+ */
+async function retrieveAndConfirmPaymentIntent(paymentIntentId, paymentMethodId, connectAccountId) {
+  try {
+    const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
+    
+    // Retrieve the payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      stripeOptions
+    );
+    
+    console.log("🔍 Payment Intent Status:", paymentIntent.status);
+    
+    // If already succeeded, return it
+    if (paymentIntent.status === 'succeeded') {
+      return paymentIntent;
+    }
+    
+    // If requires confirmation, confirm it
+    if (paymentIntent.status === 'requires_confirmation' || paymentIntent.status === 'requires_payment_method') {
+      const confirmedIntent = await stripe.paymentIntents.confirm(
+        paymentIntentId,
+        {
+          payment_method: paymentMethodId,
+        },
+        stripeOptions
+      );
+      
+      // Wait a moment for the payment to process
+      if (confirmedIntent.status === 'processing') {
+        // Poll for completion (max 3 attempts, 1 second apart)
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const updatedIntent = await stripe.paymentIntents.retrieve(
+            paymentIntentId,
+            stripeOptions
+          );
+          if (updatedIntent.status === 'succeeded') {
+            return updatedIntent;
+          }
+        }
+      }
+      
+      return confirmedIntent;
+    }
+    
+    // If status is not what we expect, throw error
+    throw new AppError(`Payment intent is in ${paymentIntent.status} status and cannot be confirmed`, 200);
+    
+  } catch (error) {
+    console.error("❌ retrieveAndConfirmPaymentIntent error:", error.message);
+    throw new AppError(`Failed to confirm payment: ${error.message}`, 200);
+  }
+}
+
 async function refundFullPayment(paymentIntentId, connectAccountId = null, metadata = null) {
   try {
     const stripeOptions = connectAccountId ? { stripeAccount: connectAccountId } : {};
-
+    
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, stripeOptions);
     console.log("⚡ refundFullPayment ~ paymentIntent:", JSON.stringify(paymentIntent));
 
@@ -1721,7 +1778,8 @@ module.exports = {
   getInvoiceDetails,
   createConnectionToken,
   createOneTapePayment,
-  getTerminalLocation
+  getTerminalLocation,
+  retrieveAndConfirmPaymentIntent
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
