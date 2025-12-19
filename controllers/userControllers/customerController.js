@@ -4691,23 +4691,23 @@ exports.sendReminder = async (req, res) => {
       const notifCustomer =
         which === '24h'
           ? {
-              title: 'Upcoming Booking (Customer)',
-              body: `Your booking with ${salonUser.firstName} is tomorrow at ${apptLocalStr}. We look forward to seeing you!`,
+              title: 'Upcoming Booking',
+              body: `Your booking with ${salonUser.firstName} is tomorrow  ${apptLocalStr}`,
             }
           : {
-              title: 'Upcoming Booking (Customer)',
-              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}. See you soon!`,
+              title: 'Upcoming Booking',
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}`,
             };
 
       const notifSalon =
         which === '24h'
           ? {
-              title: 'Upcoming Booking (Salon)',
-              body: `You have an booking with ${customer.firstName} tomorrow at ${apptLocalStr}.`,
+              title: 'Upcoming Booking',
+              body: `You have an booking with ${customer.firstName} tomorrow at ${apptLocalStr}`,
             }
           : {
-              title: 'Upcoming Booking (Salon)',
-              body: `You have an booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}.`,
+              title: 'Upcoming Booking',
+              body: `You have an booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
