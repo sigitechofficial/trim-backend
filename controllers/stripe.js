@@ -192,11 +192,14 @@ async function createPaymentMethod(paymentMethodToken) {
  * 2 :  Get All Card ________________________
  */
 
-async function cards(customerId) {
+async function cards(customerId, connectAccountId = null) {
   try {
+    const params = { type: "card" };
+    const options = connectAccountId ? { stripeAccount: connectAccountId } : {};
     const paymentMethods = await stripe.customers.listPaymentMethods(
       customerId,
-      { type: "card" }
+      params,
+      options
     );
     return paymentMethods;
   } catch (error) {

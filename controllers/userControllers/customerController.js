@@ -4202,12 +4202,24 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       );
 
       if (stripeCustomer) {
+        // Fetch cards for this customer on the connected account
+        let cardsCount = 0;
+        try {
+          const paymentMethods = await Stripe.cards(existing.customerId, connectAccountId);
+          cardsCount = paymentMethods?.data?.length || 0;
+        } catch (error) {
+          console.error('Error fetching cards:', error.message);
+          // If error fetching cards, just return 0
+          cardsCount = 0;
+        }
+
         return res.status(200).json({
           status: '1',
           message: 'Stripe Customer Fetched',
           data: {
             stripeCustomerId: existing.customerId,
             stripeAccountId: connectAccountId,
+            cardsCount: cardsCount,
           },
         });
       }
@@ -4240,13 +4252,25 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     // Step 6: Update user table with stripeCustomerId
     await user.update({ stripeCustomerId }, { where: { id: customerId } });
 
-    // Step 7: Return success response
+    // Step 7: Fetch cards for this customer on the connected account
+    let cardsCount = 0;
+    try {
+      const paymentMethods = await Stripe.cards(stripeCustomerId, connectAccountId);
+      cardsCount = paymentMethods?.data?.length || 0;
+    } catch (error) {
+      console.error('Error fetching cards:', error.message);
+      // If error fetching cards, just return 0
+      cardsCount = 0;
+    }
+
+    // Step 8: Return success response
     return res.status(200).json({
       status: '1',
       message: 'Stripe customer initialized',
       data: {
         stripeCustomerId: stripeCustomerId,
         stripeAccountId: connectAccountId,
+        cardsCount: cardsCount,
       },
     });
 };
