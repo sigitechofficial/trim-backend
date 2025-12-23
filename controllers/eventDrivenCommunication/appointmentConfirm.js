@@ -56,7 +56,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
           title: `Booking assigned`,
-          body: `A new booking has been booked with ${fullName} on ${ele.dateTime} for ${ele.service}`,
+          body: `A new booking has been made by ${fullName} for ${ele.dateTime} for a ${ele.service}`,
         }
         ThrowNotification(
           employeesTokens,
