@@ -4765,7 +4765,7 @@ exports.sendReminder = async (req, res) => {
             };
 
       // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
-      const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for';
+      const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for a';
       const serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
       const notifSalon =
         which === '24h'
