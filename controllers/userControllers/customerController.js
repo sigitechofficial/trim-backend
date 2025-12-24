@@ -4728,16 +4728,16 @@ exports.sendReminder = async (req, res) => {
           .filter(Boolean); // Remove any null/undefined values
       }
       
-      // Format service names for notification
+      // Format service names for notification (without "for a" or "for" prefix)
       let servicesText = '';
       if (servicesNames.length > 0) {
         if (servicesNames.length === 1) {
-          servicesText = ` for a ${servicesNames[0]}`;
+          servicesText = servicesNames[0]; // Just the service name
         } else if (servicesNames.length === 2) {
-          servicesText = ` for ${servicesNames[0]} and ${servicesNames[1]}`;
+          servicesText = `${servicesNames[0]} and ${servicesNames[1]}`;
         } else {
           // For 3+ services, show first service and count
-          servicesText = ` for ${servicesNames[0]} and ${servicesNames.length - 1} more service${servicesNames.length - 1 > 1 ? 's' : ''}`;
+          servicesText = `${servicesNames[0]} and ${servicesNames.length - 1} more service${servicesNames.length - 1 > 1 ? 's' : ''}`;
         }
       }
 
@@ -4757,23 +4757,25 @@ exports.sendReminder = async (req, res) => {
         which === '24h'
           ? {
               title: 'Upcoming booking',
-              body: `Your booking with ${salonUser.firstName} is tomorrow ${time12Hour} @ ${dateShort}`,
+              body: `Your booking with ${salonUser.firstName} is tomorrow ${dateShort}  @ ${time12Hour}`,
             }
           : {
               title: 'Upcoming booking',
-              body: `Your booking with ${salonUser.firstName} is in about 2 hours ${time12Hour} @ ${dateShort}`,
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours ${dateShort}  @ ${time12Hour}`,
             };
 
       // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
+      const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for';
+      const serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
       const notifSalon =
         which === '24h'
           ? {
               title: 'Upcoming booking',
-              body: `You have a booking with ${customer.firstName} tomorrow at ${time12Hour} on ${dateShort} for a ${servicesText}`,
+              body: `You have a booking with ${customer.firstName} tomorrow at ${time12Hour} on ${dateShort}${serviceTextWithPrefix}`,
             }
           : {
               title: 'Upcoming booking',
-              body: `You have a booking with ${customer.firstName} at ${time12Hour} on ${dateShort}for a ${servicesText}`,
+              body: `You have a booking with ${customer.firstName} at ${time12Hour} on ${dateShort}${serviceTextWithPrefix}`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
