@@ -4712,6 +4712,14 @@ exports.sendReminder = async (req, res) => {
       
       const apptLocalStr = `${day}/${month}/${year} @ ${hour}:${minute}`; // DD/MM/YYYY HH:mm format
 
+      // Format date and time for salon notification (DD/MM/YY and 12-hour format)
+      const yearShort = year.slice(-2); // Get last 2 digits of year
+      const hour12 = parseInt(hour, 10);
+      const hour12Formatted = hour12 === 0 ? 12 : hour12 > 12 ? hour12 - 12 : hour12;
+      const ampm = hour12 >= 12 ? 'pm' : 'am';
+      const time12Hour = `${hour12Formatted}:${minute}${ampm}`;
+      const dateShort = `${day}/${month}/${yearShort}`; // DD/MM/YY format
+
       // Extract service names from jobs
       let servicesNames = [];
       if (b.jobs && b.jobs.length > 0) {
@@ -4724,7 +4732,7 @@ exports.sendReminder = async (req, res) => {
       let servicesText = '';
       if (servicesNames.length > 0) {
         if (servicesNames.length === 1) {
-          servicesText = ` for ${servicesNames[0]}`;
+          servicesText = ` for a ${servicesNames[0]}`;
         } else if (servicesNames.length === 2) {
           servicesText = ` for ${servicesNames[0]} and ${servicesNames[1]}`;
         } else {
@@ -4749,22 +4757,23 @@ exports.sendReminder = async (req, res) => {
         which === '24h'
           ? {
               title: 'Upcoming booking',
-              body: `Your booking with ${salonUser.firstName} is tomorrow ${apptLocalStr}${servicesText}`,
+              body: `Your booking with ${salonUser.firstName} is tomorrow ${time12Hour} @ ${dateShort}`,
             }
           : {
               title: 'Upcoming booking',
-              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}${servicesText}`,
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours ${time12Hour} @ ${dateShort}`,
             };
 
+      // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
       const notifSalon =
         which === '24h'
           ? {
               title: 'Upcoming booking',
-              body: `You have a booking with ${customer.firstName} tomorrow at ${apptLocalStr}${servicesText}`,
+              body: `You have a booking with ${customer.firstName} tomorrow at ${time12Hour} on ${dateShort} for a ${servicesText}`,
             }
           : {
               title: 'Upcoming booking',
-              body: `You have a booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}${servicesText}`,
+              body: `You have a booking with ${customer.firstName} at ${time12Hour} on ${dateShort}for a ${servicesText}`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
