@@ -48,7 +48,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
     const fullName = `${emailInput.user.firstName} ${emailInput.user.lastName}`
     const salonNotification = {
       title: `New booking`,
-      body: `${fullName} has booked on ${dateTime}.`,
+      body: `${fullName} has booked ${dateTime} for a ${ele.service}.`,
     }
 
     if (bookingData?.employeeData.length > 0) {
