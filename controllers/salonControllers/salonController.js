@@ -1468,8 +1468,20 @@ exports.customerSubscription = async (req, res, next) => {
     where: {
       userId,
     },
+    attributes: ['id', 'subscriptionPlan', 'registrationExpiryDate', 'registrationDate', 'subscriptionPrice', 'subscriptionLatestPaymentStatus', 'metadata'],
   })
-  if (!salonData?.subscriptionPlan) {
+  
+  console.log('🚀 ~ customerSubscription ~ salonData:', salonData ? {
+    id: salonData.id,
+    subscriptionPlan: salonData.subscriptionPlan,
+    hasSubscriptionPlan: !!salonData.subscriptionPlan,
+  } : 'salonData is null');
+  
+  if (!salonData) {
+    return res.json(returnFunction('2', 'Salon not found', {}, ''))
+  }
+  
+  if (!salonData.subscriptionPlan || (typeof salonData.subscriptionPlan === 'string' && salonData.subscriptionPlan.trim() === '')) {
     return res.json(returnFunction('2', 'No subscription plan', {}, ''))
   }
   const customerSubscription = await Stripe.getSubscription(
