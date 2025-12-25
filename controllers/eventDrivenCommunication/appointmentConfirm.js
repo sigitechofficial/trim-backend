@@ -46,9 +46,23 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
       body: `Your booking with ${emailInput?.salonDetail?.salonName} on ${dateTime} has been confirmed.`,
     }
     const fullName = `${emailInput.user.firstName} ${emailInput.user.lastName}`
+    
+    // Get service names from jobs
+    const serviceNames = emailInput?.jobs?.map(job => job?.service?.serviceName).filter(Boolean) || []
+    let serviceText = ''
+    if (serviceNames.length === 0) {
+      serviceText = 'service'
+    } else if (serviceNames.length === 1) {
+      serviceText = serviceNames[0]
+    } else if (serviceNames.length === 2) {
+      serviceText = `${serviceNames[0]} and ${serviceNames[1]}`
+    } else {
+      serviceText = `${serviceNames[0]} and ${serviceNames.length - 1} more`
+    }
+    
     const salonNotification = {
       title: `New booking`,
-      body: `${fullName} has booked on ${dateTime}.`,
+      body: `${fullName} has booked ${dateTime} for ${serviceText}.`,
     }
 
     if (bookingData?.employeeData.length > 0) {
@@ -56,7 +70,7 @@ exports.onlineAppointmentConfirm = async (bookingId) => {
         const employeesTokens = ele.tokens
         const employeeNotification = {
           title: `Booking assigned`,
-          body: `A new booking has been booked with ${fullName} on ${ele.dateTime} for ${ele.service}`,
+          body: `A new booking has been made by ${fullName} for ${ele.dateTime} for a ${ele.service}`,
         }
         ThrowNotification(
           employeesTokens,

@@ -4202,12 +4202,24 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       );
 
       if (stripeCustomer) {
+        // Fetch cards for this customer on the connected account
+        let cardsCount = 0;
+        try {
+          const paymentMethods = await Stripe.cards(existing.customerId, connectAccountId);
+          cardsCount = paymentMethods?.data?.length || 0;
+        } catch (error) {
+          console.error('Error fetching cards:', error.message);
+          // If error fetching cards, just return 0
+          cardsCount = 0;
+        }
+
         return res.status(200).json({
           status: '1',
           message: 'Stripe Customer Fetched',
           data: {
             stripeCustomerId: existing.customerId,
             stripeAccountId: connectAccountId,
+            cardsCount: cardsCount,
           },
         });
       }
@@ -4240,13 +4252,25 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     // Step 6: Update user table with stripeCustomerId
     await user.update({ stripeCustomerId }, { where: { id: customerId } });
 
-    // Step 7: Return success response
+    // Step 7: Fetch cards for this customer on the connected account
+    let cardsCount = 0;
+    try {
+      const paymentMethods = await Stripe.cards(stripeCustomerId, connectAccountId);
+      cardsCount = paymentMethods?.data?.length || 0;
+    } catch (error) {
+      console.error('Error fetching cards:', error.message);
+      // If error fetching cards, just return 0
+      cardsCount = 0;
+    }
+
+    // Step 8: Return success response
     return res.status(200).json({
       status: '1',
       message: 'Stripe customer initialized',
       data: {
         stripeCustomerId: stripeCustomerId,
         stripeAccountId: connectAccountId,
+        cardsCount: cardsCount,
       },
     });
 };
@@ -4596,20 +4620,32 @@ exports.sendReminder = async (req, res) => {
           {
             reminderSent: false,
             [Op.and]: literal(`
-              TIMESTAMP(\`on\`, startTime)
+              TIMESTAMP(\`booking\`.\`on\`, \`booking\`.\`startTime\`)
               BETWEEN '${w24.startStr}' AND '${w24.endStr}'
             `),
           },
           {
             twoHoursReminder: false,
             [Op.and]: literal(`
-              TIMESTAMP(\`on\`, startTime)
+              TIMESTAMP(\`booking\`.\`on\`, \`booking\`.\`startTime\`)
               BETWEEN '${w2.startStr}' AND '${w2.endStr}'
             `),
           },
         ],
       },
       attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder'],
+      include: [
+        {
+          model: jobs,
+          attributes: ['id', 'serviceId'],
+          include: [
+            {
+              model: service,
+              attributes: ['serviceName'],
+            },
+          ],
+        },
+      ],
     });
 
     console.log("🚀 ~ matching bookings:", bookings.length);
@@ -4676,6 +4712,35 @@ exports.sendReminder = async (req, res) => {
       
       const apptLocalStr = `${day}/${month}/${year} @ ${hour}:${minute}`; // DD/MM/YYYY HH:mm format
 
+      // Format date and time for salon notification (DD/MM/YY and 12-hour format)
+      const yearShort = year.slice(-2); // Get last 2 digits of year
+      const hour12 = parseInt(hour, 10);
+      const hour12Formatted = hour12 === 0 ? 12 : hour12 > 12 ? hour12 - 12 : hour12;
+      const ampm = hour12 >= 12 ? 'pm' : 'am';
+      const time12Hour = `${hour12Formatted}:${minute}${ampm}`;
+      const dateShort = `${day}/${month}/${yearShort}`; // DD/MM/YY format
+
+      // Extract service names from jobs
+      let servicesNames = [];
+      if (b.jobs && b.jobs.length > 0) {
+        servicesNames = b.jobs
+          .map((job) => job.service?.serviceName)
+          .filter(Boolean); // Remove any null/undefined values
+      }
+      
+      // Format service names for notification (without "for a" or "for" prefix)
+      let servicesText = '';
+      if (servicesNames.length > 0) {
+        if (servicesNames.length === 1) {
+          servicesText = servicesNames[0]; // Just the service name
+        } else if (servicesNames.length === 2) {
+          servicesText = `${servicesNames[0]} and ${servicesNames[1]}`;
+        } else {
+          // For 3+ services, show first service and count
+          servicesText = `${servicesNames[0]} and ${servicesNames.length - 1} more service${servicesNames.length - 1 > 1 ? 's' : ''}`;
+        }
+      }
+
       // Decide which reminder this booking is for
       const apptForCompare = new Date(`${b.on}T${b.startTime}`); // JS date for comparison to windows created from 'now'
       let which = null;
@@ -4691,23 +4756,26 @@ exports.sendReminder = async (req, res) => {
       const notifCustomer =
         which === '24h'
           ? {
-              title: 'Upcoming Booking',
-              body: `Your booking with ${salonUser.firstName} is tomorrow  ${apptLocalStr}`,
+              title: 'Upcoming booking',
+              body: `Your booking with ${salonUser.firstName} is tomorrow ${dateShort}  @ ${time12Hour}`,
             }
           : {
-              title: 'Upcoming Booking',
-              body: `Your booking with ${salonUser.firstName} is in about 2 hours at ${apptLocalStr}`,
+              title: 'Upcoming booking',
+              body: `Your booking with ${salonUser.firstName} is in about 2 hours ${dateShort}  @ ${time12Hour}`,
             };
 
+      // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
+      const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for a';
+      const serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
       const notifSalon =
         which === '24h'
           ? {
-              title: 'Upcoming Booking',
-              body: `You have an booking with ${customer.firstName} tomorrow at ${apptLocalStr}`,
+              title: 'Upcoming booking',
+              body: `You have a booking with ${customer.firstName} tomorrow at ${time12Hour} on ${dateShort}${serviceTextWithPrefix}`,
             }
           : {
-              title: 'Upcoming Booking',
-              body: `You have an booking with ${customer.firstName} in about 2 hours at ${apptLocalStr}`,
+              title: 'Upcoming booking',
+              body: `You have a booking with ${customer.firstName} at ${time12Hour} on ${dateShort}${serviceTextWithPrefix}`,
             };
 
       const custTokens = (customer.deviceTokens || []).map((t) => t.tokenId).filter(Boolean);
