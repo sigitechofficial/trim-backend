@@ -2,9 +2,22 @@
 
 This document contains all notification messages sent by the Trim backend application, organized by recipient type and event.
 
+## 🔍 QUICK REFERENCE
+
+- **📱 CUSTOMER NOTIFICATIONS** - Sent to customers (15 types)
+- **🏪 SALON NOTIFICATIONS** - Sent to salon owners (13 types)
+- **👨‍💼 EMPLOYEE NOTIFICATIONS** - Sent to salon employees (4 types)
+- **🔔 ADMIN NOTIFICATIONS** - Admin/system notifications (2 types)
+
+> **Important:** Reminder notifications (24h and 2h) have different formats for customers vs salons:
+> - **Customer reminders:** Include date and time only (NO service names)
+> - **Salon reminders:** Include date, time, AND service names
+
 ---
 
 ## 📱 CUSTOMER NOTIFICATIONS
+
+> **Note:** Customer reminder notifications (24h and 2h) do NOT include service names, only date and time.
 
 ### 1. Booking Confirmed
 - **Title:** `Booking confirmed`
@@ -48,17 +61,21 @@ This document contains all notification messages sent by the Trim backend applic
 - **File:** `controllers/eventDrivenCommunication/appointmentNoshow.js`
 - **Trigger:** When customer doesn't show up
 
-### 8. Upcoming Booking Reminder (24 hours)
+### 8. Upcoming Booking Reminder (24 hours) - **CUSTOMER**
 - **Title:** `Upcoming booking`
-- **Body:** `Your booking with [SALON_OWNER_FIRST_NAME] is tomorrow [DD/MM/YYYY @ HH:mm][for SERVICE_NAME(s)]`
+- **Body:** `Your booking with [SALON_OWNER_FIRST_NAME] is tomorrow [DD/MM/YY] @ [HH:mm]pm`
+- **Example:** `Your booking with John is tomorrow 25/12/25 @ 5:00pm`
 - **File:** `controllers/userControllers/customerController.js` (sendReminder)
 - **Trigger:** 24 hours before appointment
+- **Recipient:** Customer
 
-### 9. Upcoming Booking Reminder (2 hours)
+### 9. Upcoming Booking Reminder (2 hours) - **CUSTOMER**
 - **Title:** `Upcoming booking`
-- **Body:** `Your booking with [SALON_OWNER_FIRST_NAME] is in about 2 hours at [DD/MM/YYYY @ HH:mm][for SERVICE_NAME(s)]`
+- **Body:** `Your booking with [SALON_OWNER_FIRST_NAME] is in about 2 hours [DD/MM/YY] @ [HH:mm]pm`
+- **Example:** `Your booking with John is in about 2 hours 25/12/25 @ 3:00pm`
 - **File:** `controllers/userControllers/customerController.js` (sendReminder)
 - **Trigger:** 2 hours before appointment
+- **Recipient:** Customer
 
 ### 10. Review Request (Cash Payment)
 - **Title:** `Review`
@@ -100,11 +117,16 @@ This document contains all notification messages sent by the Trim backend applic
 
 ## 🏪 SALON NOTIFICATIONS
 
-### 1. New Booking
+> **Note:** Salon reminder notifications (24h and 2h) include service names in the format "for a [ServiceName]" or "for a [Service1] and [Service2]".
+
+### 1. New Booking - **SALON**
 - **Title:** `New booking`
-- **Body:** `[CUSTOMER_FULL_NAME] has booked on [DATE_TIME].`
+- **Body:** `[CUSTOMER_FULL_NAME] has booked [DATE_TIME] for [SERVICE_NAME(s)].`
+- **Example:** `John Doe has booked 25/12/2025, 5:00 PM for Hair cut.`
+- **Example (multiple):** `John Doe has booked 25/12/2025, 5:00 PM for Hair cut and Beard trim.`
 - **File:** `controllers/eventDrivenCommunication/appointmentConfirm.js`
 - **Trigger:** When new booking is created
+- **Recipient:** Salon
 
 ### 2. Booking Cancellation (by Customer)
 - **Title:** `Booking cancellation`
@@ -130,17 +152,23 @@ This document contains all notification messages sent by the Trim backend applic
 - **File:** `controllers/eventDrivenCommunication/appointmentNoshow.js`
 - **Trigger:** When customer doesn't show up
 
-### 6. Upcoming Booking Reminder (24 hours)
+### 6. Upcoming Booking Reminder (24 hours) - **SALON**
 - **Title:** `Upcoming booking`
-- **Body:** `You have a booking with [CUSTOMER_FIRST_NAME] tomorrow at [DD/MM/YYYY @ HH:mm][for SERVICE_NAME(s)]`
+- **Body:** `You have a booking with [CUSTOMER_FIRST_NAME] tomorrow at [HH:mm]pm on [DD/MM/YY] for a [SERVICE_NAME(s)]`
+- **Example:** `You have a booking with Test tomorrow at 5:00pm on 25/12/25 for a Hair cut`
+- **Example (multiple services):** `You have a booking with Test tomorrow at 3:59pm on 25/12/25 for a kids cut and Hkj`
 - **File:** `controllers/userControllers/customerController.js` (sendReminder)
 - **Trigger:** 24 hours before appointment
+- **Recipient:** Salon
 
-### 7. Upcoming Booking Reminder (2 hours)
+### 7. Upcoming Booking Reminder (2 hours) - **SALON**
 - **Title:** `Upcoming booking`
-- **Body:** `You have a booking with [CUSTOMER_FIRST_NAME] in about 2 hours at [DD/MM/YYYY @ HH:mm][for SERVICE_NAME(s)]`
+- **Body:** `You have a booking with [CUSTOMER_FIRST_NAME] at [HH:mm]pm on [DD/MM/YY] for a [SERVICE_NAME(s)]`
+- **Example:** `You have a booking with Test at 6:04pm on 24/12/25 for a Hair cut`
+- **Example (multiple services):** `You have a booking with Test at 6:04pm on 24/12/25 for a kids cut and Hkj`
 - **File:** `controllers/userControllers/customerController.js` (sendReminder)
 - **Trigger:** 2 hours before appointment
+- **Recipient:** Salon
 
 ### 8. Payment Received (Cash)
 - **Title:** `Payment received`
@@ -267,10 +295,19 @@ This document contains all notification messages sent by the Trim backend applic
 
 ## 📝 NOTES
 
-- **Date Format:** Most notifications use `emailDateFormate()` which formats dates as readable strings
-- **Service Names:** Included in reminder notifications (24h and 2h) - shows service name(s) if available
+- **Date Format:** 
+  - Customer reminders: `DD/MM/YY @ HH:mm`pm format (e.g., "25/12/25 @ 5:00pm")
+  - Salon reminders: `DD/MM/YY` for date, `HH:mm`pm for time (e.g., "25/12/25", "5:00pm")
+  - Other notifications use `emailDateFormate()` which formats dates as readable strings
+- **Service Names:** 
+  - Included in **SALON** reminder notifications (24h and 2h) - shows service name(s) if available
+  - Format: "for a [ServiceName]" for single service, "for a [Service1] and [Service2]" for multiple services
+  - **NOT included** in customer reminder notifications
+- **Time Format:**
+  - Customer reminders: 12-hour format with am/pm (e.g., "5:00pm")
+  - Salon reminders: 12-hour format with am/pm (e.g., "5:00pm")
 - **Dynamic Variables:** All notifications include dynamic data like customer names, salon names, dates, times, amounts, etc.
-- **File Locations:** All notification logic is primarily in `controllers/eventDrivenCommunication/` folder
+- **File Locations:** All notification logic is primarily in `controllers/eventDrivenCommunication/` folder, except reminders which are in `controllers/userControllers/customerController.js`
 - **Notification Utility:** All notifications use `ThrowNotification` from `utils/throwNotification.js`
 
 ---
