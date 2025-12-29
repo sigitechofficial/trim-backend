@@ -3932,35 +3932,189 @@ if (salonDetails?.hasObtainedFreeTrial) {
   )
 
   console.log("req.body.paymentMethodId,====================>>>>>>>",req.body.paymentMethodId,)
-  // const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer)
-  const indent = await Stripe.createSubscriptionWithPriceId(
-    stripeCustomer,
-    req.body.priceId,
-    metadata,
-    req.body.membersCount,
-    trialDays|| 0,
-    req.body.paymentMethodId,
-  )
-  //return res.json(indent);
-
-  await salonDetail.update(
-    {
-      teamSize: req.body?.membersCount,
-      metadata,
-      subscriptionPrice: req.body.subscriptionPrice,
-    },
-    { where: { userId: salon.id } },
-  )
-  const data = {
-    ephemeralKeySecret: 'ephemeralKey.secret',
-    client_secret: 'indent?.latest_invoice?.payment_intent?.client_secret',
-    subscriptionId: indent.id,
-    stripeCustomerId: stripeCustomer,
-    subscriptionPrice:req.body.subscriptionPrice
+  
+  // Get subscription price amount
+  const subscriptionAmount = parseFloat(req.body.subscriptionPrice) || 0;
+  
+  if (!subscriptionAmount || subscriptionAmount <= 0) {
+    return res.status(200).json(response({
+      status: '0',
+      message: 'Invalid subscription price',
+      data: {},
+    }));
   }
-  const output = response({ status: '1', message: 'Subscription active', data })
+  
+  // Store subscription details in metadata for later use
+  const subscriptionMetadata = {
+    ...metadata,
+    priceId: req.body.priceId,
+    membersCount: req.body.membersCount,
+    trialDays: trialDays || 0,
+    subscriptionPrice: req.body.subscriptionPrice,
+    userId: salon.id,
+    salonDetailId: salonDetails.id,
+    subscriptionName: req.body.subscriptionName,
+  };
+  
+  // Create payment intent for subscription (like captureUpFrontPaymentInfo)
+  const paymentIntent = await Stripe.createSubscriptionPaymentIntent(
+    subscriptionAmount,
+    stripeCustomer,
+    subscriptionMetadata
+  );
+  
+  const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer);
+  
+  // Return payment intent details for user to enter card
+  const data = {
+    paymentIntentId: paymentIntent.id,
+    client_secret: paymentIntent.client_secret,
+    ephemeralKeySecret: ephemeralKey.secret,
+    stripeCustomerId: stripeCustomer,
+    amount: subscriptionAmount,
+    subscriptionData: {
+      priceId: req.body.priceId,
+      membersCount: req.body.membersCount,
+      trialDays: trialDays || 0,
+      subscriptionPrice: req.body.subscriptionPrice,
+    }
+  };
+  
+  const output = response({
+    status: '1',
+    message: 'Payment intent created. Complete payment to activate subscription.',
+    data
+  });
+  
+  return res.status(200).json(output);
+}
 
-  return res.status(200).json(output)
+//* 2. Complete Subscription After Payment -----------------
+exports.completeSubscriptionAfterPayment = async (req, res, next) => {
+  try {
+    const { paymentIntentId } = req.body;
+    
+    if (!paymentIntentId) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Payment intent ID is required',
+        data: {},
+      }));
+    }
+
+    // Retrieve payment intent to get payment method
+    const paymentIntent = await Stripe.retrievePaymentIntent(paymentIntentId);
+    
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(200).json(response({
+        status: '0',
+        message: `Payment not completed. Status: ${paymentIntent.status}`,
+        data: {},
+      }));
+    }
+
+    // Get payment method from payment intent
+    const paymentMethodId = paymentIntent.payment_method;
+    if (!paymentMethodId) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Payment method not found in payment intent',
+        data: {},
+      }));
+    }
+
+    // Get subscription details from payment intent metadata
+    const metadata = paymentIntent.metadata || {};
+    const userId = parseInt(metadata.sloanId || metadata.userId);
+    const salon = await user.findByPk(userId, {
+      attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email'],
+    });
+
+    if (!salon) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'User not found',
+        data: {},
+      }));
+    }
+
+    const stripeCustomer = salon.stripeCustomerId || paymentIntent.customer;
+    const salonDetails = await salonDetail.findOne({ where: { userId: salon.id } });
+
+    if (!salonDetails) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Salon details not found',
+        data: {},
+      }));
+    }
+
+    // Prepare subscription metadata
+    const subscriptionMetadata = {
+      members: metadata.members,
+      subscriptionName: metadata.subscriptionName,
+      sloanId: salon.id,
+      salonDetailId: salonDetails.id,
+      membersCount: parseInt(metadata.membersCount || req.body.membersCount),
+      freeTrialDays: parseInt(metadata.freeTrialDays || 0),
+      paymentMethodId: paymentMethodId,
+      teamSize: parseInt(metadata.membersCount || req.body.membersCount),
+      priceId: metadata.priceId || req.body.priceId,
+      VAT: parseFloat(metadata.VAT || req.body.VAT || 0),
+    };
+
+    const trialDays = parseInt(metadata.freeTrialDays || req.body.freeTrialDays || 0);
+    const priceId = metadata.priceId || req.body.priceId;
+    const membersCount = parseInt(metadata.membersCount || req.body.membersCount);
+
+    if (!priceId) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Price ID is required',
+        data: {},
+      }));
+    }
+
+    // Create subscription with the payment method from payment intent
+    const subscription = await Stripe.createSubscriptionWithPriceId(
+      stripeCustomer,
+      priceId,
+      subscriptionMetadata,
+      membersCount,
+      trialDays,
+      paymentMethodId,
+    );
+
+    // Update salon details
+    await salonDetail.update(
+      {
+        teamSize: membersCount,
+        metadata: subscriptionMetadata,
+        subscriptionPrice: parseFloat(metadata.subscriptionPrice || req.body.subscriptionPrice),
+      },
+      { where: { userId: salon.id } },
+    );
+
+    const data = {
+      subscriptionId: subscription.id,
+      stripeCustomerId: stripeCustomer,
+      subscriptionPrice: parseFloat(metadata.subscriptionPrice || req.body.subscriptionPrice),
+      client_secret: subscription?.latest_invoice?.payment_intent?.client_secret,
+    };
+
+    return res.status(200).json(response({
+      status: '1',
+      message: 'Subscription created successfully',
+      data,
+    }));
+  } catch (error) {
+    console.error('Error completing subscription:', error);
+    return res.status(200).json(response({
+      status: '0',
+      message: error.message || 'Failed to create subscription',
+      data: {},
+    }));
+  }
 }
 
 exports.forSubcriptionUpdate = async (req, res, next) => {

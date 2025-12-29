@@ -235,6 +235,11 @@ router.post(
   '/for-subcription-payment',
   catchAsync(customerController.forSubcriptionPurchase),
 )
+router.post(
+  '/complete-subscription-after-payment',
+  protect,
+  catchAsync(customerController.completeSubscriptionAfterPayment),
+)
 
 //! Salon time History
 router.post('/save-working-hour', catchAsync(salonController.savingTimeHistory))
