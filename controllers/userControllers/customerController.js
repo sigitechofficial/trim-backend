@@ -3956,6 +3956,7 @@ if (salonDetails?.hasObtainedFreeTrial) {
     client_secret: 'indent?.latest_invoice?.payment_intent?.client_secret',
     subscriptionId: indent.id,
     stripeCustomerId: stripeCustomer,
+    subscriptionPrice:req.body.subscriptionPrice
   }
   const output = response({ status: '1', message: 'Subscription active', data })
 
