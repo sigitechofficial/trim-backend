@@ -356,7 +356,7 @@ async function createSubscriptionPaymentIntent(amount, customerId, metadata = {}
       amount: convertToCents(amount),
       currency: 'gbp',
       customer: customerId,
-      setup_future_usage: 'off_session', // Save card for future use
+      capture_method: 'automatic', // Capture payment immediately when confirmed
       payment_method_types: ['card'],
       metadata: {
         ...metadata,
