@@ -1248,6 +1248,16 @@ const setupIntent = async (customerId, accountId = null) => {
   }
 };
 
+async function retrieveSetupIntent(setupIntentId) {
+  try {
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+    return setupIntent;
+  } catch (error) {
+    console.error("Error retrieving setup intent:", error);
+    throw new AppError(`${error.message} `, 200);
+  }
+}
+
 async function subscriptionUpgradeDowngrade(
   subscriptionId,
   newPriceId,
@@ -1812,6 +1822,7 @@ module.exports = {
   getPriceById,
   createTieredPrice,
   setupIntent,
+  retrieveSetupIntent,
   expireManually,
   fetchSingleCard,
   createDirectCharge,

@@ -4086,18 +4086,18 @@ exports.completeSubscriptionAfterPayment = async (req, res, next) => {
     );
 
     // Update salon details
-    await salonDetail.update(
-      {
+  await salonDetail.update(
+    {
         teamSize: membersCount,
         metadata: subscriptionMetadata,
         subscriptionPrice: parseFloat(metadata.subscriptionPrice || req.body.subscriptionPrice),
-      },
-      { where: { userId: salon.id } },
+    },
+    { where: { userId: salon.id } },
     );
 
-    const data = {
+  const data = {
       subscriptionId: subscription.id,
-      stripeCustomerId: stripeCustomer,
+    stripeCustomerId: stripeCustomer,
       subscriptionPrice: parseFloat(metadata.subscriptionPrice || req.body.subscriptionPrice),
       client_secret: subscription?.latest_invoice?.payment_intent?.client_secret,
     };
@@ -4116,6 +4116,233 @@ exports.completeSubscriptionAfterPayment = async (req, res, next) => {
     }));
   }
 }
+
+//* 3. Create Subscription with Setup Intent - Step 1: Initialize -----------------
+exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { priceId, membersCount, freeTrialDays, subscriptionName, subscriptionPrice, VAT, members } = req.body;
+
+    // Validate required fields
+    if (!priceId || !membersCount || subscriptionPrice === undefined) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Missing required fields: priceId, membersCount, subscriptionPrice',
+        data: {},
+      }));
+    }
+
+    // Get salon user
+    const salon = await user.findOne({
+      where: { id: userId },
+      attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email', 'fullName'],
+    });
+
+    if (!salon) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Salon user not found',
+        data: {},
+      }));
+    }
+
+    // Get salon details
+    const salonDetails = await salonDetail.findOne({ where: { userId: salon.id } });
+    if (!salonDetails) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Salon details not found',
+        data: {},
+      }));
+    }
+
+    // Get or create Stripe customer
+    let stripeCustomer = salon.stripeCustomerId;
+    if (!stripeCustomer) {
+      stripeCustomer = await Stripe.addCustomer(
+        salon.fullName || `${salon.firstName} ${salon.lastName}`,
+        salon.email
+      );
+      await user.update({ stripeCustomerId: stripeCustomer }, { where: { id: salon.id } });
+    }
+
+    // Check if user has already used free trial
+    let trialDays = freeTrialDays || 0;
+    if (salonDetails?.hasObtainedFreeTrial) {
+      trialDays = 0; // User already consumed free trial
+    }
+
+    // Create metadata for subscription
+    const metadata = {
+      members: members || '',
+      subscriptionName: subscriptionName || '',
+      sloanId: salon.id,
+      salonDetailId: salonDetails.id,
+      membersCount: membersCount,
+      freeTrialDays: trialDays,
+      teamSize: membersCount,
+      priceId: priceId,
+      VAT: VAT || 0,
+      subscriptionPrice: subscriptionPrice,
+    };
+
+    // Create Setup Intent
+    const setupIntent = await Stripe.setupIntent(stripeCustomer);
+
+    // Create Ephemeral Key
+    const ephemeralKey = await Stripe.createEphemeralKey(stripeCustomer);
+
+    // Return setup intent details
+    return res.status(200).json(response({
+      status: '1',
+      message: 'Setup Intent created. Please add payment method.',
+      data: {
+        clientSecret: setupIntent.client_secret,
+        ephemeralKeySecret: ephemeralKey.secret,
+        stripeCustomerId: stripeCustomer,
+        setupIntentId: setupIntent.id,
+        subscriptionPrice: subscriptionPrice,
+      },
+    }));
+  } catch (error) {
+    console.error('Error initializing subscription with setup intent:', error);
+    return res.status(200).json(response({
+      status: '0',
+      message: error.message || 'Failed to initialize subscription',
+      data: {},
+    }));
+  }
+};
+
+//* 4. Complete Subscription with Setup Intent - Step 2 -----------------
+exports.completeSubscriptionWithSetupIntent = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { setupIntentId, priceId, membersCount, freeTrialDays, subscriptionName, subscriptionPrice, VAT, members } = req.body;
+
+    // Validate required fields
+    if (!setupIntentId || !priceId || !membersCount || subscriptionPrice === undefined) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Missing required fields: setupIntentId, priceId, membersCount, subscriptionPrice',
+        data: {},
+      }));
+    }
+
+    // Get salon user
+    const salon = await user.findOne({
+      where: { id: userId },
+      attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email'],
+    });
+
+    if (!salon) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Salon user not found',
+        data: {},
+      }));
+    }
+
+    const stripeCustomer = salon.stripeCustomerId;
+    if (!stripeCustomer) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Stripe customer ID not found',
+        data: {},
+      }));
+    }
+
+    // Get salon details
+    const salonDetails = await salonDetail.findOne({ where: { userId: salon.id } });
+    if (!salonDetails) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Salon details not found',
+        data: {},
+      }));
+    }
+
+    // Retrieve setup intent to get payment method
+    const setupIntent = await Stripe.retrieveSetupIntent(setupIntentId);
+
+    if (setupIntent.status !== 'succeeded') {
+      return res.status(200).json(response({
+        status: '0',
+        message: `Setup Intent not completed. Status: ${setupIntent.status}`,
+        data: {},
+      }));
+    }
+
+    const paymentMethodId = setupIntent.payment_method;
+    if (!paymentMethodId) {
+      return res.status(200).json(response({
+        status: '0',
+        message: 'Payment method not found in setup intent',
+        data: {},
+      }));
+    }
+
+    // Check if user has already used free trial
+    let trialDays = parseInt(freeTrialDays || 0);
+    if (salonDetails?.hasObtainedFreeTrial) {
+      trialDays = 0; // User already consumed free trial
+    }
+
+    // Create metadata for subscription
+    const metadata = {
+      members: members || '',
+      subscriptionName: subscriptionName || '',
+      sloanId: salon.id,
+      salonDetailId: salonDetails.id,
+      membersCount: membersCount,
+      freeTrialDays: trialDays,
+      paymentMethodId: paymentMethodId,
+      teamSize: membersCount,
+      priceId: priceId,
+      VAT: VAT || 0,
+    };
+
+    // Create subscription
+    const subscription = await Stripe.createSubscriptionWithPriceId(
+      stripeCustomer,
+      priceId,
+      metadata,
+      membersCount,
+      trialDays,
+      paymentMethodId
+    );
+
+    // Update salon details
+    await salonDetail.update(
+      {
+        teamSize: membersCount,
+        metadata: metadata,
+        subscriptionPrice: subscriptionPrice,
+      },
+      { where: { userId: salon.id } }
+    );
+
+    const data = {
+      subscriptionId: subscription.id,
+      stripeCustomerId: stripeCustomer,
+      subscriptionPrice: subscriptionPrice,
+      clientSecret: subscription?.latest_invoice?.payment_intent?.client_secret,
+    };
+
+    return res.status(200).json(response({
+      status: '1',
+      message: 'Subscription created successfully',
+      data,
+    }));
+  } catch (error) {
+    console.error('Error completing subscription with setup intent:', error);
+    return res.status(200).json(response({
+      status: '0',
+      message: error.message || 'Failed to create subscription',
+      data: {},
+    }));
+  }
+};
 
 exports.forSubcriptionUpdate = async (req, res, next) => {
   const salon = await user.findOne({
