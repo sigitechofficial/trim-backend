@@ -237,20 +237,17 @@ router.post(
 )
 router.post(
   '/complete-subscription-after-payment',
-  protect,
   catchAsync(customerController.completeSubscriptionAfterPayment),
 )
 
 // Setup Intent flow for subscriptions
 router.post(
   '/init-subscription-with-setup-intent',
-  protect,
   catchAsync(customerController.initSubscriptionWithSetupIntent),
 )
 
 router.post(
   '/complete-subscription-with-setup-intent',
-  protect,
   catchAsync(customerController.completeSubscriptionWithSetupIntent),
 )
 
