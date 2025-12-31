@@ -4135,7 +4135,7 @@ exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
     // Get salon user
     const salon = await user.findOne({
       where: { id: userId },
-      attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email', 'fullName'],
+      attributes: ['id', 'stripeCustomerId', 'firstName', 'lastName', 'email'],
     });
 
     if (!salon) {
@@ -4159,8 +4159,9 @@ exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
     // Get or create Stripe customer
     let stripeCustomer = salon.stripeCustomerId;
     if (!stripeCustomer) {
+      const fullName = `${salon.firstName || ''} ${salon.lastName || ''}`.trim() || salon.email;
       stripeCustomer = await Stripe.addCustomer(
-        salon.fullName || `${salon.firstName} ${salon.lastName}`,
+        fullName,
         salon.email
       );
       await user.update({ stripeCustomerId: stripeCustomer }, { where: { id: salon.id } });
