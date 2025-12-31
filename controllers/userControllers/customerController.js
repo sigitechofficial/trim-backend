@@ -4039,6 +4039,22 @@ exports.completeSubscriptionAfterPayment = async (req, res, next) => {
     }
 
     const stripeCustomer = salon.stripeCustomerId || paymentIntent.customer;
+
+    // Attach payment method to customer (required before creating subscription)
+    try {
+      await Stripe.attchPaymentMethod(paymentMethodId, stripeCustomer);
+      console.log('Payment method attached to customer successfully');
+    } catch (attachError) {
+      console.error('Error attaching payment method:', attachError);
+      // If already attached, we can continue
+      if (!attachError.message?.includes('already been attached')) {
+        return res.status(200).json(response({
+          status: '0',
+          message: `Failed to attach payment method: ${attachError.message}`,
+          data: {},
+        }));
+      }
+    }
     const salonDetails = await salonDetail.findOne({ where: { userId: salon.id } });
 
     if (!salonDetails) {
@@ -4124,7 +4140,7 @@ exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
     const { priceId, membersCount, freeTrialDays, subscriptionName, subscriptionPrice, VAT, members } = req.body;
 
     // Validate required fields
-    if (!priceId || !membersCount || subscriptionPrice === undefined) {
+    if (!priceId || subscriptionPrice === undefined) {
       return res.status(200).json(response({
         status: '0',
         message: 'Missing required fields: priceId, membersCount, subscriptionPrice',
@@ -4222,7 +4238,7 @@ exports.completeSubscriptionWithSetupIntent = async (req, res, next) => {
     const { setupIntentId, priceId, membersCount, freeTrialDays, subscriptionName, subscriptionPrice, VAT, members } = req.body;
 
     // Validate required fields
-    if (!setupIntentId || !priceId || !membersCount || subscriptionPrice === undefined) {
+    if (!setupIntentId || !priceId || subscriptionPrice === undefined) {
       return res.status(200).json(response({
         status: '0',
         message: 'Missing required fields: setupIntentId, priceId, membersCount, subscriptionPrice',
