@@ -235,6 +235,21 @@ router.post(
   '/for-subcription-payment',
   catchAsync(customerController.forSubcriptionPurchase),
 )
+router.post(
+  '/complete-subscription-after-payment',
+  catchAsync(customerController.completeSubscriptionAfterPayment),
+)
+
+// Setup Intent flow for subscriptions
+router.post(
+  '/init-subscription-with-setup-intent',
+  catchAsync(customerController.initSubscriptionWithSetupIntent),
+)
+
+router.post(
+  '/complete-subscription-with-setup-intent',
+  catchAsync(customerController.completeSubscriptionWithSetupIntent),
+)
 
 //! Salon time History
 router.post('/save-working-hour', catchAsync(salonController.savingTimeHistory))

@@ -348,6 +348,29 @@ async function createPaymentIntend(amount, customerId, paymentMethodId) {
 }
 
 /*
+ * Create Payment Intent for Subscription Payment (Direct Charge)
+ */
+async function createSubscriptionPaymentIntent(amount, customerId, metadata = {}) {
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: convertToCents(amount),
+      currency: 'gbp',
+      customer: customerId,
+      capture_method: 'automatic', // Capture payment immediately when confirmed
+      setup_future_usage: 'off_session', // Save payment method for future subscription charges
+      payment_method_types: ['card'],
+      metadata: {
+        ...metadata,
+        type: 'subscription_payment',
+      },
+    });
+    return paymentIntent;
+  } catch (error) {
+    throw new AppError(`${error.message} `, 200);
+  }
+}
+
+/*
  *  2:  GET PaymenIntend
  */
 async function paymenIntend(paymentIntentId) {
@@ -905,10 +928,18 @@ async function createSubscriptionWithPriceId(
       paymentMethodId
     );
 
-    await stripe.customers.update(customerId, {
-      invoice_settings: { default_payment_method: paymentMethodId },
-      description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
-    });
+    // Only update customer with payment method if it's provided and not empty
+    if (paymentMethodId && paymentMethodId.trim() !== '') {
+      await stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+        description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
+      });
+    } else {
+      // Update customer description only if no payment method
+      await stripe.customers.update(customerId, {
+        description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
+      });
+    }
 
     const input = {
       customer: customerId,
@@ -918,8 +949,12 @@ async function createSubscriptionWithPriceId(
       expand: ["latest_invoice.payment_intent"], // Retrieve payment intent details
       //automatic_tax: { enabled: true },
       metadata: metadata,
-      default_payment_method: paymentMethodId, // Attach the default payment method
     };
+
+    // Only add default_payment_method if paymentMethodId is provided and not empty
+    if (paymentMethodId && paymentMethodId.trim() !== '') {
+      input.default_payment_method = paymentMethodId;
+    }
 
     //  if their is a free trial then we can not get a seceret key because no payment captured i must need a payment method to proceed
 
@@ -1057,6 +1092,18 @@ async function refundPartialPayment(paymentIntentId, amountToRefund, connectAcco
 }
 
 
+
+/*
+ * Retrieve Payment Intent
+ */
+async function retrievePaymentIntent(paymentIntentId) {
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    return paymentIntent;
+  } catch (error) {
+    throw new AppError(`${error.message} `, 200);
+  }
+}
 
 /*
  * Retrieve and Confirm Payment Intent for Upfront Payment
@@ -1201,6 +1248,16 @@ const setupIntent = async (customerId, accountId = null) => {
     throw error;
   }
 };
+
+async function retrieveSetupIntent(setupIntentId) {
+  try {
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+    return setupIntent;
+  } catch (error) {
+    console.error("Error retrieving setup intent:", error);
+    throw new AppError(`${error.message} `, 200);
+  }
+}
 
 async function subscriptionUpgradeDowngrade(
   subscriptionId,
@@ -1766,6 +1823,7 @@ module.exports = {
   getPriceById,
   createTieredPrice,
   setupIntent,
+  retrieveSetupIntent,
   expireManually,
   fetchSingleCard,
   createDirectCharge,
@@ -1776,13 +1834,15 @@ module.exports = {
   listInvoicesForSubscription,
   listSubscriptionsForCustomer,
   checkStripeAccountStatus,
+  createSubscriptionPaymentIntent,
   updateTransferMetadata,
   updatePaymentIntentDescription,
   getInvoiceDetails,
   createConnectionToken,
   createOneTapePayment,
   getTerminalLocation,
-  retrieveAndConfirmPaymentIntent
+  retrieveAndConfirmPaymentIntent,
+  retrievePaymentIntent
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
