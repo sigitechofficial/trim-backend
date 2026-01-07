@@ -44,13 +44,18 @@ function generateAppStoreConnectJWT() {
   // Replace escaped newlines with actual newlines
   privateKey = privateKey.replace(/\\n/g, '\n');
   
-  // Ensure the key has proper BEGIN/END markers
+  // If key doesn't have BEGIN/END markers, add them
   if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-    throw new AppError('Invalid private key format: Missing BEGIN PRIVATE KEY', 500);
+    // Key is just the base64 string, add markers
+    privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
   }
   
+  // Ensure the key has proper END marker
   if (!privateKey.includes('END PRIVATE KEY')) {
-    throw new AppError('Invalid private key format: Missing END PRIVATE KEY', 500);
+    // If we added BEGIN but END is missing, add it
+    if (!privateKey.endsWith('-----END PRIVATE KEY-----')) {
+      privateKey = privateKey + '\n-----END PRIVATE KEY-----';
+    }
   }
   
   try {
