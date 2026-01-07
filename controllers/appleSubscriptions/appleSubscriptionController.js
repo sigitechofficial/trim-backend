@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const AppError = require('../../utils/appError');
 const { user, subscriptions, salonDetail } = require('../../models');
 const { Op } = require('sequelize');
@@ -8,8 +10,22 @@ const { Op } = require('sequelize');
 const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID;
 const APPLE_KEY_ID = process.env.APPLE_KEY_ID;
 const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
-const APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
 const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
+
+// Get private key from environment or file
+let APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
+
+// If private key file path is provided, read from file
+if (process.env.APPLE_PRIVATE_KEY_PATH) {
+  try {
+    const keyPath = path.resolve(process.env.APPLE_PRIVATE_KEY_PATH);
+    APPLE_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
+    console.log('✅ Loaded Apple private key from file');
+  } catch (error) {
+    console.error('❌ Error reading private key file:', error);
+    throw new Error('Failed to read Apple private key file');
+  }
+}
 
 /**
  * Generate JWT token for App Store Connect API
@@ -17,8 +33,25 @@ const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
 function generateAppStoreConnectJWT() {
   const now = Math.floor(Date.now() / 1000);
   
-  // Format private key (handle newlines)
-  const privateKey = APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+  // Format private key (handle newlines and quotes)
+  let privateKey = APPLE_PRIVATE_KEY;
+  
+  // Remove quotes if present
+  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.slice(1, -1);
+  }
+  
+  // Replace escaped newlines with actual newlines
+  privateKey = privateKey.replace(/\\n/g, '\n');
+  
+  // Ensure the key has proper BEGIN/END markers
+  if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+    throw new AppError('Invalid private key format: Missing BEGIN PRIVATE KEY', 500);
+  }
+  
+  if (!privateKey.includes('END PRIVATE KEY')) {
+    throw new AppError('Invalid private key format: Missing END PRIVATE KEY', 500);
+  }
   
   try {
     const token = jwt.sign(
@@ -42,7 +75,8 @@ function generateAppStoreConnectJWT() {
     return token;
   } catch (error) {
     console.error('Error generating JWT token:', error);
-    throw new AppError('Failed to generate App Store Connect token', 500);
+    console.error('Private key preview:', privateKey.substring(0, 50) + '...');
+    throw new AppError(`Failed to generate App Store Connect token: ${error.message}`, 500);
   }
 }
 
