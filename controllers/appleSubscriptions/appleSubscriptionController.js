@@ -33,12 +33,17 @@ if (process.env.APPLE_PRIVATE_KEY_PATH) {
 function generateAppStoreConnectJWT() {
   const now = Math.floor(Date.now() / 1000);
   
+  if (!APPLE_PRIVATE_KEY) {
+    throw new AppError('APPLE_PRIVATE_KEY is not set in environment variables', 500);
+  }
+  
   // Format private key (handle newlines and quotes)
-  let privateKey = APPLE_PRIVATE_KEY;
+  let privateKey = APPLE_PRIVATE_KEY.trim();
   
   // Remove quotes if present
-  if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-    privateKey = privateKey.slice(1, -1);
+  if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || 
+      (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
+    privateKey = privateKey.slice(1, -1).trim();
   }
   
   // Replace escaped newlines with actual newlines
@@ -46,17 +51,39 @@ function generateAppStoreConnectJWT() {
   
   // If key doesn't have BEGIN/END markers, add them
   if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-    // Key is just the base64 string, add markers
-    privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
-  }
-  
-  // Ensure the key has proper END marker
-  if (!privateKey.includes('END PRIVATE KEY')) {
-    // If we added BEGIN but END is missing, add it
-    if (!privateKey.endsWith('-----END PRIVATE KEY-----')) {
-      privateKey = privateKey + '\n-----END PRIVATE KEY-----';
+    // Key is just the base64 string, we need to format it properly
+    // Remove any existing newlines and split into 64-char lines
+    const base64Content = privateKey.replace(/\n/g, '').replace(/\s/g, '');
+    
+    // Split into 64-character lines (standard PEM format)
+    const lines = [];
+    for (let i = 0; i < base64Content.length; i += 64) {
+      lines.push(base64Content.substring(i, i + 64));
+    }
+    
+    privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`;
+  } else {
+    // Key has markers, but ensure proper formatting
+    // Ensure there's a newline after BEGIN and before END
+    if (!privateKey.includes('BEGIN PRIVATE KEY\n') && !privateKey.includes('BEGIN PRIVATE KEY\r\n')) {
+      privateKey = privateKey.replace('BEGIN PRIVATE KEY', 'BEGIN PRIVATE KEY\n');
+    }
+    if (!privateKey.includes('\n-----END PRIVATE KEY')) {
+      privateKey = privateKey.replace('-----END PRIVATE KEY', '\n-----END PRIVATE KEY');
+    }
+    // Ensure trailing newline
+    if (!privateKey.endsWith('\n')) {
+      privateKey = privateKey + '\n';
     }
   }
+  
+  // Debug: Log key format (first and last 100 chars only for security)
+  console.log('🔑 Private key format check:');
+  console.log('  - Has BEGIN marker:', privateKey.includes('BEGIN PRIVATE KEY'));
+  console.log('  - Has END marker:', privateKey.includes('END PRIVATE KEY'));
+  console.log('  - Key length:', privateKey.length);
+  console.log('  - First 50 chars:', privateKey.substring(0, 50));
+  console.log('  - Last 50 chars:', privateKey.substring(privateKey.length - 50));
   
   try {
     const token = jwt.sign(
@@ -77,10 +104,17 @@ function generateAppStoreConnectJWT() {
       }
     );
     
+    console.log('✅ JWT token generated successfully');
+    console.log('  - Token length:', token.length);
+    console.log('  - Key ID:', APPLE_KEY_ID);
+    console.log('  - Issuer ID:', APPLE_ISSUER_ID);
+    
     return token;
   } catch (error) {
-    console.error('Error generating JWT token:', error);
-    console.error('Private key preview:', privateKey.substring(0, 50) + '...');
+    console.error('❌ Error generating JWT token:', error.message);
+    console.error('  - Error details:', error);
+    console.error('  - Private key preview (first 100):', privateKey.substring(0, 100));
+    console.error('  - Private key preview (last 100):', privateKey.substring(privateKey.length - 100));
     throw new AppError(`Failed to generate App Store Connect token: ${error.message}`, 500);
   }
 }
@@ -117,8 +151,10 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
     // Try to fetch from App Store Connect API
     try {
       const token = generateAppStoreConnectJWT();
+      console.log('🔐 Generated token (first 50 chars):', token.substring(0, 50) + '...');
       
       // Get your app's ID first
+      console.log('📱 Fetching app with Bundle ID:', APPLE_BUNDLE_ID);
       const appResponse = await axios.get(
         `https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=${APPLE_BUNDLE_ID}`,
         {
@@ -242,7 +278,27 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
         },
       });
     } catch (apiError) {
-      console.error('App Store Connect API error:', apiError.response?.data || apiError.message);
+      console.error('❌ App Store Connect API error:', apiError.response?.data || apiError.message);
+      
+      // Log detailed error information
+      if (apiError.response?.data?.errors) {
+        const errors = apiError.response.data.errors;
+        errors.forEach(err => {
+          console.error(`  - Status: ${err.status}, Code: ${err.code}`);
+          console.error(`  - Title: ${err.title}`);
+          console.error(`  - Detail: ${err.detail}`);
+        });
+      }
+      
+      // Check if it's an authentication error
+      if (apiError.response?.status === 401) {
+        console.error('🔐 Authentication failed. Please verify:');
+        console.error('  1. APPLE_ISSUER_ID:', APPLE_ISSUER_ID);
+        console.error('  2. APPLE_KEY_ID:', APPLE_KEY_ID);
+        console.error('  3. Private key is properly formatted');
+        console.error('  4. Key ID matches the downloaded key file');
+      }
+      
       // Fallback: Return hardcoded products if API fails
       return res.status(200).json({
         status: '1',
