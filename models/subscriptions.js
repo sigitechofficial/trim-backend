@@ -48,7 +48,29 @@ module.exports = (sequelize, DataTypes) => {
     VAT:{
       type: DataTypes.DECIMAL(20, 2),
       allowNull: true,
-    }
+    },
+    // Apple-specific fields
+    appleTransactionId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    appleOriginalTransactionId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    subscriptionSource: {
+      type: DataTypes.ENUM('stripe', 'apple'),
+      defaultValue: 'stripe',
+      allowNull: true,
+    },
+    appleProductId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    appleEnvironment: {
+      type: DataTypes.ENUM('Sandbox', 'Production'),
+      allowNull: true,
+    },
   })
 
   subscriptions.associate = (models) => {}

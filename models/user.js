@@ -71,6 +71,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(),
         allowNull: true,
       },
+      appleOriginalTransactionId: {
+        type: DataTypes.STRING(),
+        allowNull: true,
+      },
       dvToken: {
         type: DataTypes.STRING(),
         allowNull: true,
