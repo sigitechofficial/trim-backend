@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const AppError = require('../../utils/appError');
 const { user, subscriptions, salonDetail } = require('../../models');
 const { Op } = require('sequelize');
@@ -37,60 +38,85 @@ function generateAppStoreConnectJWT() {
     throw new AppError('APPLE_PRIVATE_KEY is not set in environment variables', 500);
   }
   
-  // Format private key (handle newlines and quotes)
-  let privateKey = APPLE_PRIVATE_KEY.trim();
+  console.log('🔑 Starting key parsing...');
   
-  // Remove quotes if present
-  if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || 
-      (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
-    privateKey = privateKey.slice(1, -1).trim();
+  // Step 1: Get raw key and handle quotes
+  let rawKey = APPLE_PRIVATE_KEY.trim();
+  console.log('  - Raw key length:', rawKey.length);
+  console.log('  - Starts with quote:', rawKey.startsWith('"') || rawKey.startsWith("'"));
+  
+  // Remove surrounding quotes if present
+  if ((rawKey.startsWith('"') && rawKey.endsWith('"')) || 
+      (rawKey.startsWith("'") && rawKey.endsWith("'"))) {
+    rawKey = rawKey.slice(1, -1).trim();
+    console.log('  - Removed quotes, new length:', rawKey.length);
   }
   
-  // Replace escaped newlines with actual newlines
-  privateKey = privateKey.replace(/\\n/g, '\n');
+  // Step 2: Replace escaped newlines with actual newlines
+  rawKey = rawKey.replace(/\\n/g, '\n');
   
-  // If key doesn't have BEGIN/END markers, add them
-  if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-    // Key is just the base64 string, we need to format it properly
-    // Remove any existing newlines and split into 64-char lines
-    const base64Content = privateKey.replace(/\n/g, '').replace(/\s/g, '');
-    
-    // Split into 64-character lines (standard PEM format)
-    const lines = [];
-    for (let i = 0; i < base64Content.length; i += 64) {
-      lines.push(base64Content.substring(i, i + 64));
-    }
-    
-    privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`;
-  } else {
-    // Key has markers, but ensure proper formatting
-    // Ensure there's a newline after BEGIN and before END
-    if (!privateKey.includes('BEGIN PRIVATE KEY\n') && !privateKey.includes('BEGIN PRIVATE KEY\r\n')) {
-      privateKey = privateKey.replace('BEGIN PRIVATE KEY', 'BEGIN PRIVATE KEY\n');
-    }
-    if (!privateKey.includes('\n-----END PRIVATE KEY')) {
-      privateKey = privateKey.replace('-----END PRIVATE KEY', '\n-----END PRIVATE KEY');
-    }
-    // Ensure trailing newline
-    if (!privateKey.endsWith('\n')) {
-      privateKey = privateKey + '\n';
-    }
+  // Step 3: Extract ONLY the base64 content (remove all markers and whitespace)
+  let base64Content = rawKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/-{3,}/g, '')
+    .replace(/\s+/g, '')
+    .replace(/\r/g, '')
+    .replace(/\n/g, '')
+    .trim();
+  
+  console.log('  - Base64 content length:', base64Content.length);
+  console.log('  - First 30 chars:', base64Content.substring(0, 30));
+  console.log('  - Last 30 chars:', base64Content.substring(base64Content.length - 30));
+  
+  // Step 4: Validate base64 content
+  if (base64Content.length < 100) {
+    throw new AppError(`Private key base64 content is too short (${base64Content.length} chars). Expected ~120+ chars. Check APPLE_PRIVATE_KEY in .env`, 500);
   }
   
-  // Debug: Log key format (first and last 100 chars only for security)
-  console.log('🔑 Private key format check:');
-  console.log('  - Has BEGIN marker:', privateKey.includes('BEGIN PRIVATE KEY'));
-  console.log('  - Has END marker:', privateKey.includes('END PRIVATE KEY'));
-  console.log('  - Key length:', privateKey.length);
-  console.log('  - First 50 chars:', privateKey.substring(0, 50));
-  console.log('  - Last 50 chars:', privateKey.substring(privateKey.length - 50));
+  // Step 5: Rebuild proper PEM format with 64-char lines
+  const lines = [];
+  for (let i = 0; i < base64Content.length; i += 64) {
+    lines.push(base64Content.substring(i, i + 64));
+  }
   
+  const privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----`;
+  
+  console.log('  - Rebuilt key with', lines.length, 'lines');
+  console.log('  - Total PEM length:', privateKey.length);
+  
+  // Step 6: VALIDATE the key using Node's crypto module
   try {
+    console.log('  - Validating key with crypto module...');
+    const keyObject = crypto.createPrivateKey({
+      key: privateKey,
+      format: 'pem',
+      type: 'pkcs8'
+    });
+    
+    console.log('  ✅ Key validation passed!');
+    console.log('    - Key type:', keyObject.asymmetricKeyType);
+    console.log('    - Key size:', keyObject.asymmetricKeySize);
+    
+    if (keyObject.asymmetricKeyType !== 'ec') {
+      throw new AppError(`Wrong key type! Expected 'ec' (Elliptic Curve), got '${keyObject.asymmetricKeyType}'. Make sure you downloaded the correct .p8 key file from App Store Connect.`, 500);
+    }
+  } catch (cryptoError) {
+    console.error('  ❌ Crypto validation failed:', cryptoError.message);
+    console.error('  - This means the key content is invalid or corrupted');
+    console.error('  - Please download the .p8 file again from App Store Connect');
+    console.error('  - Copy the ENTIRE content including BEGIN/END markers');
+    throw new AppError(`Invalid private key: ${cryptoError.message}. Please re-download from App Store Connect.`, 500);
+  }
+  
+  // Step 7: Generate JWT token
+  try {
+    console.log('  - Generating JWT token...');
     const token = jwt.sign(
       {
         iss: APPLE_ISSUER_ID,
         iat: now,
-        exp: now + 3600, // 1 hour expiry
+        exp: now + 3600,
         aud: 'appstoreconnect-v1',
       },
       privateKey,
@@ -104,18 +130,16 @@ function generateAppStoreConnectJWT() {
       }
     );
     
-    console.log('✅ JWT token generated successfully');
+    console.log('✅ JWT token generated successfully!');
     console.log('  - Token length:', token.length);
     console.log('  - Key ID:', APPLE_KEY_ID);
     console.log('  - Issuer ID:', APPLE_ISSUER_ID);
     
     return token;
   } catch (error) {
-    console.error('❌ Error generating JWT token:', error.message);
-    console.error('  - Error details:', error);
-    console.error('  - Private key preview (first 100):', privateKey.substring(0, 100));
-    console.error('  - Private key preview (last 100):', privateKey.substring(privateKey.length - 100));
-    throw new AppError(`Failed to generate App Store Connect token: ${error.message}`, 500);
+    console.error('❌ JWT signing failed:', error.message);
+    console.error('  - This is unexpected since crypto validation passed');
+    throw new AppError(`JWT signing failed: ${error.message}`, 500);
   }
 }
 
