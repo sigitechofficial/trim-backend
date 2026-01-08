@@ -172,210 +172,159 @@ async function validateReceipt(receiptData, isProduction = true) {
  */
 exports.getAppleSubscriptionProducts = async (req, res, next) => {
   try {
-    console.log('📦 Returning Apple subscription products');
+    const token = generateAppStoreConnectJWT();
+    console.log('🔐 JWT Token generated');
+    console.log('  - Token preview:', token.substring(0, 50) + '...');
     
-    // Return hardcoded products (App Store Connect API can be enabled later)
-    // For now, this works perfectly for the subscription flow
-    const products = [
+    // Step 1: Get all apps (not filtered by bundle ID first)
+    console.log('\n📱 Step 1: Fetching all apps from App Store Connect');
+    let appsResponse;
+    try {
+      appsResponse = await axios.get(
+        'https://api.appstoreconnect.apple.com/v1/apps',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        }
+      );
+      
+      console.log('✅ Successfully fetched apps');
+      console.log('  - Total apps found:', appsResponse.data.data?.length || 0);
+      
+      // Log all bundle IDs to help debug
+      if (appsResponse.data.data && appsResponse.data.data.length > 0) {
+        console.log('\n📋 Apps in your account:');
+        appsResponse.data.data.forEach((app, index) => {
+          console.log(`  ${index + 1}. ${app.attributes.name}`);
+          console.log(`     Bundle ID: ${app.attributes.bundleId}`);
+          console.log(`     App ID: ${app.id}`);
+        });
+      }
+    } catch (error) {
+      console.error('\n❌ Failed to fetch apps from App Store Connect');
+      console.error('  - Status:', error.response?.status);
+      console.error('  - Error:', JSON.stringify(error.response?.data, null, 2));
+      throw error;
+    }
+    
+    // Step 2: Find the specific app by bundle ID
+    console.log('\n📱 Step 2: Looking for app with Bundle ID:', APPLE_BUNDLE_ID);
+    const app = appsResponse.data.data.find(
+      a => a.attributes.bundleId === APPLE_BUNDLE_ID
+    );
+    
+    if (!app) {
+      console.error('❌ App not found with Bundle ID:', APPLE_BUNDLE_ID);
+      console.error('   Available bundle IDs:', 
+        appsResponse.data.data.map(a => a.attributes.bundleId).join(', '));
+      throw new AppError(
+        `App not found with Bundle ID: ${APPLE_BUNDLE_ID}. Check if the bundle ID is correct in your .env file.`,
+        404
+      );
+    }
+    
+    const appId = app.id;
+    console.log('✅ Found app:', app.attributes.name);
+    console.log('  - App ID:', appId);
+    
+    // Step 3: Get subscription groups
+    console.log('\n📦 Step 3: Fetching subscription groups...');
+    const groupsResponse = await axios.get(
+      `https://api.appstoreconnect.apple.com/v1/apps/${appId}/subscriptionGroups`,
       {
-        productId: 'trimbiz_monthly_owner',
-        name: 'Trim Business Owner Plan',
-        description: 'Monthly subscription for business owners',
-        duration: 'P1M',
-        price: null, // Price will be fetched by iOS app from StoreKit
-        currency: null,
-        status: 'ACTIVE',
-      },
-    ];
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
     
-    console.log('✅ Returning', products.length, 'product(s)');
+    console.log('✅ Subscription groups found:', groupsResponse.data.data?.length || 0);
+    
+    if (!groupsResponse.data.data || groupsResponse.data.data.length === 0) {
+      console.error('❌ No subscription groups found');
+      console.error('   Please create a subscription group in App Store Connect:');
+      console.error('   1. Go to App Store Connect → Your App → Subscriptions');
+      console.error('   2. Create a Subscription Group');
+      console.error('   3. Add your subscription products to the group');
+      
+      throw new AppError(
+        'No subscription groups found. Please set up subscriptions in App Store Connect.',
+        404
+      );
+    }
+    
+    // Step 4: Get all subscriptions from all groups
+    const allProducts = [];
+    
+    for (const group of groupsResponse.data.data) {
+      console.log(`\n📋 Fetching subscriptions for group: ${group.attributes.name}`);
+      
+      const subscriptionsResponse = await axios.get(
+        `https://api.appstoreconnect.apple.com/v1/subscriptionGroups/${group.id}/subscriptions`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (subscriptionsResponse.data.data) {
+        console.log(`  - Found ${subscriptionsResponse.data.data.length} subscription(s)`);
+        
+        subscriptionsResponse.data.data.forEach(sub => {
+          allProducts.push({
+            productId: sub.attributes.productId,
+            name: sub.attributes.name,
+            groupName: group.attributes.name,
+            state: sub.attributes.state,
+            subscriptionPeriod: sub.attributes.subscriptionPeriod,
+          });
+          
+          console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name}`);
+        });
+      }
+    }
+    
+    console.log(`\n✅ Total products found: ${allProducts.length}`);
     
     return res.status(200).json({
-      status: '1',
-      message: 'Products fetched successfully',
+      success: true,
+      message: 'Products fetched successfully from App Store Connect',
       data: {
-        products: products,
+        products: allProducts,
       },
     });
     
-    // NOTE: App Store Connect API integration (commented out for now)
-    // Uncomment below when app is fully published in App Store Connect
-    /*
-    try {
-      const token = generateAppStoreConnectJWT();
-      console.log('🔐 Generated token (first 50 chars):', token.substring(0, 50) + '...');
-      
-      // Get your app's ID first
-      console.log('📱 Fetching app with Bundle ID:', APPLE_BUNDLE_ID);
-      const appResponse = await axios.get(
-        `https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=${APPLE_BUNDLE_ID}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if (!appResponse.data.data || appResponse.data.data.length === 0) {
-        throw new Error('App not found in App Store Connect');
-      }
-      
-      const appId = appResponse.data.data[0].id;
-      
-      // Get subscription groups
-      const subscriptionGroupsResponse = await axios.get(
-        `https://api.appstoreconnect.apple.com/v1/apps/${appId}/subscriptionGroups`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if (!subscriptionGroupsResponse.data.data || subscriptionGroupsResponse.data.data.length === 0) {
-        // Return fallback products
-        return res.status(200).json({
-          status: '1',
-          message: 'Products fetched successfully (fallback)',
-          data: {
-            products: [
-              {
-                productId: 'trimbiz_monthly_owner',
-                name: 'Trim Business Owner Plan',
-                description: 'Monthly subscription for business owners',
-                duration: 'P1M',
-                price: null,
-                currency: null,
-                status: 'ACTIVE',
-              },
-            ],
-          },
-        });
-      }
-      
-      const subscriptionGroupId = subscriptionGroupsResponse.data.data[0].id;
-      
-      // Get subscriptions in the group
-      const subscriptionsResponse = await axios.get(
-        `https://api.appstoreconnect.apple.com/v1/subscriptionGroups/${subscriptionGroupId}/subscriptions`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      // Get product details for each subscription
-      const products = [];
-      
-      for (const subscription of subscriptionsResponse.data.data) {
-        try {
-          // Get subscription localizations for name and description
-          const localizationsResponse = await axios.get(
-            `https://api.appstoreconnect.apple.com/v1/subscriptions/${subscription.id}/subscriptionLocalizations`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-          
-          // Get pricing information
-          const pricesResponse = await axios.get(
-            `https://api.appstoreconnect.apple.com/v1/subscriptions/${subscription.id}/prices`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-          
-          const localization = localizationsResponse.data.data[0]?.attributes || {};
-          const price = pricesResponse.data.data[0]?.attributes || {};
-          
-          products.push({
-            productId: subscription.attributes.productId,
-            name: localization.name || subscription.attributes.name,
-            description: localization.description || '',
-            duration: subscription.attributes.duration, // P1M, P1Y, etc.
-            price: price.price || null,
-            currency: price.currency || null,
-            status: subscription.attributes.subscriptionStatus,
-          });
-        } catch (error) {
-          console.error(`Error fetching details for subscription ${subscription.id}:`, error.message);
-          // Continue with basic info
-          products.push({
-            productId: subscription.attributes.productId,
-            name: subscription.attributes.name || 'Subscription',
-            description: '',
-            duration: subscription.attributes.duration,
-            price: null,
-            currency: null,
-            status: subscription.attributes.subscriptionStatus,
-          });
-        }
-      }
-      
-      return res.status(200).json({
-        status: '1',
-        message: 'Products fetched successfully',
-        data: {
-          products: products,
-        },
-      });
-    } catch (apiError) {
-      console.error('❌ App Store Connect API error:', apiError.response?.data || apiError.message);
-      
-      // Log detailed error information
-      if (apiError.response?.data?.errors) {
-        const errors = apiError.response.data.errors;
-        errors.forEach(err => {
-          console.error(`  - Status: ${err.status}, Code: ${err.code}`);
-          console.error(`  - Title: ${err.title}`);
-          console.error(`  - Detail: ${err.detail}`);
-        });
-      }
-      
-      // Check if it's an authentication error
-      if (apiError.response?.status === 401) {
-        console.error('🔐 Authentication failed. Please verify:');
-        console.error('  1. APPLE_ISSUER_ID:', APPLE_ISSUER_ID);
-        console.error('  2. APPLE_KEY_ID:', APPLE_KEY_ID);
-        console.error('  3. Private key is properly formatted');
-        console.error('  4. Key ID matches the downloaded key file');
-      }
-      
-      // Fallback: Return hardcoded products if API fails
-      return res.status(200).json({
-        status: '1',
-        message: 'Products fetched successfully (fallback)',
-        data: {
-          products: [
-            {
-              productId: 'trimbiz_monthly_owner',
-              name: 'Trim Business Owner Plan',
-              description: 'Monthly subscription for business owners',
-              duration: 'P1M',
-              price: null,
-              currency: null,
-              status: 'ACTIVE',
-            },
-          ],
-        },
-      });
-    }
-    */
   } catch (error) {
-    console.error('❌ Error in getAppleSubscriptionProducts:', error);
-    return next(new AppError('Failed to fetch Apple subscription products', 500));
+    console.error('\n❌ Error in getAppleSubscriptionProducts:', error.message);
+    
+    // Return detailed error to help debug
+    if (error.response?.status === 401) {
+      return next(new AppError(
+        'Authentication failed with App Store Connect. Please verify your API key credentials.',
+        401
+      ));
+    }
+    
+    if (error.response?.status === 404) {
+      return next(new AppError(
+        error.message || 'Resource not found in App Store Connect',
+        404
+      ));
+    }
+    
+    return next(new AppError(
+      error.message || 'Failed to fetch products from App Store Connect',
+      500
+    ));
   }
 };
+
 
 /**
  * Validate product and get product details
