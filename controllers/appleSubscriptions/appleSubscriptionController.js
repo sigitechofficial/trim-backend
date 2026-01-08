@@ -172,7 +172,35 @@ async function validateReceipt(receiptData, isProduction = true) {
  */
 exports.getAppleSubscriptionProducts = async (req, res, next) => {
   try {
-    // Try to fetch from App Store Connect API
+    console.log('📦 Returning Apple subscription products');
+    
+    // Return hardcoded products (App Store Connect API can be enabled later)
+    // For now, this works perfectly for the subscription flow
+    const products = [
+      {
+        productId: 'trimbiz_monthly_owner',
+        name: 'Trim Business Owner Plan',
+        description: 'Monthly subscription for business owners',
+        duration: 'P1M',
+        price: null, // Price will be fetched by iOS app from StoreKit
+        currency: null,
+        status: 'ACTIVE',
+      },
+    ];
+    
+    console.log('✅ Returning', products.length, 'product(s)');
+    
+    return res.status(200).json({
+      status: '1',
+      message: 'Products fetched successfully',
+      data: {
+        products: products,
+      },
+    });
+    
+    // NOTE: App Store Connect API integration (commented out for now)
+    // Uncomment below when app is fully published in App Store Connect
+    /*
     try {
       const token = generateAppStoreConnectJWT();
       console.log('🔐 Generated token (first 50 chars):', token.substring(0, 50) + '...');
@@ -342,9 +370,10 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
         },
       });
     }
+    */
   } catch (error) {
-    console.error('Error fetching Apple products:', error);
-    next(error);
+    console.error('❌ Error in getAppleSubscriptionProducts:', error);
+    return next(new AppError('Failed to fetch Apple subscription products', 500));
   }
 };
 
