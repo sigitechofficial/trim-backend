@@ -181,14 +181,20 @@ exports.signup = async (req, res, next) => {
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
 
-    const stripeCustomerId = await Stripe.addCustomer(firstName, email)
+    // For Apple signup, firstName/lastName/phoneNum can be null
+    const userFirstName = firstName || ''
+    const userLastName = lastName || ''
+    const userCountryCode = countryCode || ''
+    const userPhoneNum = phoneNum || ''
+
+    const stripeCustomerId = await Stripe.addCustomer(userFirstName || 'Apple User', email)
 
     let userData = await user.create({
-      firstName,
-      lastName,
+      firstName: userFirstName,
+      lastName: userLastName,
       email,
-      countryCode,
-      phoneNum,
+      countryCode: userCountryCode,
+      phoneNum: userPhoneNum,
       status: true,
       signedFrom: signedBy,
       verifiedAt: Date.now(),
@@ -203,7 +209,12 @@ exports.signup = async (req, res, next) => {
     //  to return a response indicating successful social sign-up
     const token = signTocken(userData.id, dvToken)
     redis_Client.hSet(`trim${userData.id}`, dvToken, token)
-    EmailWelcome([userData.email], `${userData.firstName} ${userData.lastName}`)
+    
+    // Only send welcome email if we have a valid name
+    const fullName = `${userData.firstName} ${userData.lastName}`.trim()
+    if (fullName) {
+      EmailWelcome([userData.email], fullName)
+    }
 
     salonProfiles.create({ userid: userData?.id })
 
@@ -213,12 +224,12 @@ exports.signup = async (req, res, next) => {
       message: 'Account created',
       data: {
         userId: `${userData.id}`,
-        image: `${userData.image}`,
-        firstName: `${userData.firstName}`,
-        lastName: `${userData.lastName}`,
+        image: `${userData.image || ''}`,
+        firstName: `${userData.firstName || ''}`,
+        lastName: `${userData.lastName || ''}`,
         email: `${userData.email}`,
         accessToken: token,
-        phoneNum: `${userData.countryCode} ${userData.phoneNum}`,
+        phoneNum: `${userData.countryCode || ''} ${userData.phoneNum || ''}`.trim(),
         otpId: '',
       },
       error: '',
