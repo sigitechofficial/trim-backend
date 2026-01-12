@@ -250,7 +250,7 @@ exports.signup = async (req, res, next) => {
       const token = signTocken(userExist.id, dvToken)
       redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
       return res.status(200).json({
-        status: '2',
+        status: '1',
         message: 'Successful login',
         data: {
           userId: `${userExist.id}`,
