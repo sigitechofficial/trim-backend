@@ -10,7 +10,7 @@ const catchAsync = require('../../middlewares/catchAync');
 router.post('/webhook', catchAsync(appleWebhookController.handleAppleWebhook));
 
 // Protected routes
-router.get('/products', publicProtected, catchAsync(appleSubscriptionController.getAppleSubscriptionProducts));
+router.get('/products', catchAsync(appleSubscriptionController.getAppleSubscriptionProducts));
 router.post('/validate-product', publicProtected, catchAsync(appleSubscriptionController.validateProduct));
 router.post('/create-subscription', publicProtected, catchAsync(appleSubscriptionController.createAppleSubscription));
 router.post('/verify-subscription', publicProtected, catchAsync(appleSubscriptionController.verifyAppleSubscription));
