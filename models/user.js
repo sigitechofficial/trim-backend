@@ -8,27 +8,13 @@ module.exports = (sequelize) => {
     {
       firstName: {
         type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notNull: {
-            msg: 'First name required',
-          },
-          notEmpty: {
-            msg: 'First name cannot be empty',
-          },
-        },
+        allowNull: true,
+        defaultValue: '',
       },
       lastName: {
         type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notNull: {
-            msg: 'Last name required',
-          },
-          notEmpty: {
-            msg: 'Last name cannot be empty',
-          },
-        },
+        allowNull: true,
+        defaultValue: '',
       },
       password: {
         type: DataTypes.STRING,
@@ -68,6 +54,10 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
       stripeCustomerId: {
+        type: DataTypes.STRING(),
+        allowNull: true,
+      },
+      appleOriginalTransactionId: {
         type: DataTypes.STRING(),
         allowNull: true,
       },

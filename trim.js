@@ -41,6 +41,7 @@ const newReportsRoute = require('./routes/salonRoutes/newReportsRoute')
 const performanceRoute = require('./routes/salonRoutes/performanceRoute')
 const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
+const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRoute')
 
 // Load environment variables
 
@@ -49,6 +50,8 @@ const webhookRoute = require('./routes/webhookRoutes/webhooks')
 // Middleware setup
 // Use bodyParser.raw for webhooks to receive raw body (application/json)
 app.use('/webhook', bodyParser.raw({ type: 'application/json' }), webhookRoute)
+// Apple webhook needs raw body parser
+app.use('/apple-subscriptions/webhook', bodyParser.raw({ type: 'application/json' }), appleSubscriptionRoute)
 app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
@@ -70,6 +73,8 @@ app.use('/reports', express.json(), reportsRoute)
 app.use('/performance-dashboard', express.json(), performanceRoute)
 app.use('/payout', express.json(), payoutRoute)
 app.use('/new-reports', express.json(), newReportsRoute)
+// Apple subscription routes (other routes use JSON parser)
+app.use('/apple-subscriptions', express.json(), appleSubscriptionRoute)
 
 
 
