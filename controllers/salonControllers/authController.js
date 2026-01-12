@@ -207,8 +207,9 @@ exports.signup = async (req, res, next) => {
 
     salonProfiles.create({ userid: userData?.id })
 
+    // Apple gets status '1' (go to home), Google/Facebook get status '2'
     return res.status(200).json({
-      status: '2',
+      status: signedBy === 'apple' ? '1' : '2',
       message: 'Account created',
       data: {
         userId: `${userData.id}`,
@@ -249,8 +250,9 @@ exports.signup = async (req, res, next) => {
       // creating accessToken
       const token = signTocken(userExist.id, dvToken)
       redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
+      // Apple gets status '1' (go to home), Google/Facebook get status '2'
       return res.status(200).json({
-        status: '1',
+        status: userExist.signedFrom === 'apple' ? '1' : '2',
         message: 'Successful login',
         data: {
           userId: `${userExist.id}`,
