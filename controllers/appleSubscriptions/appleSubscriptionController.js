@@ -282,32 +282,6 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
           let priceInfo = null;
           
           try {
-            // Fetch subscription localization to get price information
-            const localizationResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/subscriptionLocalizations`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            
-            console.log(`    📍 Localizations found: ${localizationResponse.data.data?.length || 0}`);
-            
-            // Also fetch subscription price schedule
-            const priceScheduleResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}?include=pricePoints`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            
-            console.log(`    💰 Subscription details:`, JSON.stringify(priceScheduleResponse.data.data?.attributes, null, 2));
-            
             // Fetch price points with territories to get actual pricing
             const pricePointsResponse = await axios.get(
               `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/subscriptionPricePoints?include=territory&limit=200`,
@@ -343,6 +317,8 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
                 
                 console.log(`    ✅ Price extracted: ${priceInfo.price} ${priceInfo.currency}`);
               }
+            } else {
+              console.log(`    ⚠️ No price points found for ${sub.attributes.productId}`);
             }
           } catch (priceError) {
             console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.response?.data || priceError.message);
