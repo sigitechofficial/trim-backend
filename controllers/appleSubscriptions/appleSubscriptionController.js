@@ -282,9 +282,9 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
           let priceInfo = null;
           
           try {
-            // Fetch price points with territories to get actual pricing
-            const pricePointsResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/subscriptionPricePoints?include=territory&limit=200`,
+            // Fetch the subscription details with pricing relationships
+            const subscriptionDetailResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}`,
               {
                 headers: {
                   'Authorization': `Bearer ${token}`,
@@ -293,32 +293,62 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
               }
             );
             
-            if (pricePointsResponse.data.data && pricePointsResponse.data.data.length > 0) {
-              console.log(`    💵 Price points found: ${pricePointsResponse.data.data.length}`);
-              
-              // Find USD price (or first available price)
-              const usdPricePoint = pricePointsResponse.data.data.find(pp => {
-                const territory = pricePointsResponse.data.included?.find(
-                  inc => inc.type === 'territories' && inc.id === pp.relationships?.territory?.data?.id
-                );
-                return territory?.attributes?.currency === 'USD';
-              }) || pricePointsResponse.data.data[0];
-              
-              if (usdPricePoint) {
-                const territory = pricePointsResponse.data.included?.find(
-                  inc => inc.type === 'territories' && inc.id === usdPricePoint.relationships?.territory?.data?.id
-                );
-                
-                priceInfo = {
-                  price: usdPricePoint.attributes?.customerPrice || 'N/A',
-                  currency: territory?.attributes?.currency || 'USD',
-                  territoryCode: territory?.id || 'US',
-                };
-                
-                console.log(`    ✅ Price extracted: ${priceInfo.price} ${priceInfo.currency}`);
+            console.log(`    📊 Subscription attributes:`, JSON.stringify(subscriptionDetailResponse.data.data.attributes, null, 2));
+            
+            // Fetch subscription prices (price schedule)
+            const pricesResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/prices?include=subscriptionPricePoint,territory`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
               }
-            } else {
-              console.log(`    ⚠️ No price points found for ${sub.attributes.productId}`);
+            );
+            
+            console.log(`    💰 Prices response data length:`, pricesResponse.data.data?.length || 0);
+            console.log(`    💰 Included items:`, pricesResponse.data.included?.length || 0);
+            
+            if (pricesResponse.data.included && pricesResponse.data.included.length > 0) {
+              // Look for subscription price points in included data
+              const pricePoints = pricesResponse.data.included.filter(item => item.type === 'subscriptionPricePoints');
+              const territories = pricesResponse.data.included.filter(item => item.type === 'territories');
+              
+              console.log(`    💵 Price points found: ${pricePoints.length}, Territories: ${territories.length}`);
+              
+              if (pricePoints.length > 0) {
+                // Find USD price point (or first available)
+                let usdPricePoint = null;
+                let usdTerritory = null;
+                
+                for (const pricePoint of pricePoints) {
+                  const territoryId = pricePoint.relationships?.territory?.data?.id;
+                  const territory = territories.find(t => t.id === territoryId);
+                  
+                  if (territory?.attributes?.currency === 'USD') {
+                    usdPricePoint = pricePoint;
+                    usdTerritory = territory;
+                    break;
+                  }
+                }
+                
+                // Fallback to first price point if no USD found
+                if (!usdPricePoint && pricePoints.length > 0) {
+                  usdPricePoint = pricePoints[0];
+                  const territoryId = usdPricePoint.relationships?.territory?.data?.id;
+                  usdTerritory = territories.find(t => t.id === territoryId);
+                }
+                
+                if (usdPricePoint) {
+                  priceInfo = {
+                    price: usdPricePoint.attributes?.customerPrice || 'N/A',
+                    currency: usdTerritory?.attributes?.currency || 'USD',
+                    territoryCode: usdTerritory?.id || 'US',
+                  };
+                  
+                  console.log(`    ✅ Price extracted: ${priceInfo.price} ${priceInfo.currency}`);
+                }
+              }
             }
           } catch (priceError) {
             console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.response?.data || priceError.message);
