@@ -116,8 +116,9 @@ function generateAppStoreConnectJWT() {
       {
         iss: APPLE_ISSUER_ID,
         iat: now,
-        exp: now + 3600,
+        exp: now + 1200, // Apple recommends max 20 minutes (1200 seconds)
         aud: 'appstoreconnect-v1',
+        bid: APPLE_BUNDLE_ID, // Bundle ID claim for StoreKit APIs
       },
       privateKey,
       {
@@ -579,6 +580,118 @@ exports.verifyAppleSubscription = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * Test Apple API credentials
+ * Verifies that JWT generation and Apple authentication works
+ */
+exports.testAppleCredentials = async (req, res, next) => {
+  try {
+    console.log('\n🧪 Testing Apple API Credentials...');
+    console.log('================================================');
+    
+    // Step 1: Check all env variables
+    console.log('📋 Environment Variables:');
+    console.log('  APPLE_ISSUER_ID:', APPLE_ISSUER_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_KEY_ID:', APPLE_KEY_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_BUNDLE_ID:', APPLE_BUNDLE_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_PRIVATE_KEY:', APPLE_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_SHARED_SECRET:', APPLE_SHARED_SECRET ? '✅ Set' : '❌ Missing');
+    
+    if (!APPLE_ISSUER_ID || !APPLE_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_PRIVATE_KEY) {
+      return res.status(500).json({
+        status: '0',
+        message: 'Missing required Apple credentials in environment variables',
+        data: {
+          hasIssuerId: !!APPLE_ISSUER_ID,
+          hasKeyId: !!APPLE_KEY_ID,
+          hasBundleId: !!APPLE_BUNDLE_ID,
+          hasPrivateKey: !!APPLE_PRIVATE_KEY,
+        },
+      });
+    }
+    
+    // Step 2: Generate JWT
+    console.log('\n🔐 Generating JWT...');
+    const token = generateAppStoreConnectJWT();
+    console.log('✅ JWT generated successfully');
+    console.log('  Token preview:', token.substring(0, 80) + '...');
+    
+    // Step 3: Test with Apple API
+    console.log('\n📡 Testing authentication with Apple API...');
+    try {
+      const response = await axios.get(
+        'https://api.appstoreconnect.apple.com/v1/apps',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+      
+      console.log('✅ Successfully authenticated with Apple!');
+      console.log('  Status:', response.status);
+      console.log('  Apps found:', response.data.data?.length || 0);
+      
+      return res.status(200).json({
+        status: '1',
+        message: 'Apple API credentials are valid and working!',
+        data: {
+          authenticated: true,
+          appsCount: response.data.data?.length || 0,
+          issuer: APPLE_ISSUER_ID,
+          keyId: APPLE_KEY_ID,
+          bundleId: APPLE_BUNDLE_ID,
+        },
+      });
+    } catch (apiError) {
+      console.error('\n❌ Apple API authentication failed:');
+      console.error('  Status:', apiError.response?.status);
+      console.error('  Error:', apiError.response?.data);
+      
+      // Detailed error analysis
+      let errorMessage = 'Authentication failed with Apple';
+      let troubleshooting = [];
+      
+      if (apiError.response?.status === 401) {
+        errorMessage = 'Apple rejected the authentication token (401 Unauthorized)';
+        troubleshooting = [
+          '1. Verify APPLE_ISSUER_ID matches your Team ID in App Store Connect',
+          '2. Verify APPLE_KEY_ID matches the Key ID of your downloaded .p8 file',
+          '3. Ensure the API key is still active in App Store Connect > Users and Access > Keys',
+          '4. Check that the private key content matches the Key ID',
+          '5. Ensure your API key has "App Manager" or "Admin" role',
+          '6. Verify server time is synchronized (check: date -u)',
+        ];
+      }
+      
+      return res.status(500).json({
+        status: '0',
+        message: errorMessage,
+        data: {
+          authenticated: false,
+          httpStatus: apiError.response?.status,
+          appleError: apiError.response?.data,
+          troubleshooting,
+          credentials: {
+            issuerId: APPLE_ISSUER_ID,
+            keyId: APPLE_KEY_ID,
+            bundleId: APPLE_BUNDLE_ID,
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error('\n❌ Test failed:', error.message);
+    return res.status(500).json({
+      status: '0',
+      message: error.message,
+      data: { error: error.toString() },
+    });
   }
 };
 
