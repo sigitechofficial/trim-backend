@@ -282,9 +282,9 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
           let priceInfo = null;
           
           try {
-            // Fetch price points for this subscription
-            const pricesResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/prices?include=territory`,
+            // Fetch subscription localization to get price information
+            const localizationResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/subscriptionLocalizations`,
               {
                 headers: {
                   'Authorization': `Bearer ${token}`,
@@ -293,25 +293,59 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
               }
             );
             
-            // Extract pricing information
-            if (pricesResponse.data.data && pricesResponse.data.data.length > 0) {
-              const prices = pricesResponse.data.data.map(priceItem => {
-                const territory = pricesResponse.data.included?.find(
-                  inc => inc.type === 'territories' && inc.id === priceItem.relationships?.territory?.data?.id
+            console.log(`    📍 Localizations found: ${localizationResponse.data.data?.length || 0}`);
+            
+            // Also fetch subscription price schedule
+            const priceScheduleResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}?include=pricePoints`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            console.log(`    💰 Subscription details:`, JSON.stringify(priceScheduleResponse.data.data?.attributes, null, 2));
+            
+            // Fetch price points with territories to get actual pricing
+            const pricePointsResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/subscriptionPricePoints?include=territory&limit=200`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            if (pricePointsResponse.data.data && pricePointsResponse.data.data.length > 0) {
+              console.log(`    💵 Price points found: ${pricePointsResponse.data.data.length}`);
+              
+              // Find USD price (or first available price)
+              const usdPricePoint = pricePointsResponse.data.data.find(pp => {
+                const territory = pricePointsResponse.data.included?.find(
+                  inc => inc.type === 'territories' && inc.id === pp.relationships?.territory?.data?.id
+                );
+                return territory?.attributes?.currency === 'USD';
+              }) || pricePointsResponse.data.data[0];
+              
+              if (usdPricePoint) {
+                const territory = pricePointsResponse.data.included?.find(
+                  inc => inc.type === 'territories' && inc.id === usdPricePoint.relationships?.territory?.data?.id
                 );
                 
-                return {
-                  price: priceItem.attributes?.customerPrice || 'N/A',
+                priceInfo = {
+                  price: usdPricePoint.attributes?.customerPrice || 'N/A',
                   currency: territory?.attributes?.currency || 'USD',
-                  territory: territory?.attributes?.currency || 'US',
+                  territoryCode: territory?.id || 'US',
                 };
-              });
-              
-              // Use the first price as default (usually USD)
-              priceInfo = prices[0];
+                
+                console.log(`    ✅ Price extracted: ${priceInfo.price} ${priceInfo.currency}`);
+              }
             }
           } catch (priceError) {
-            console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.message);
+            console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.response?.data || priceError.message);
           }
           
           allProducts.push({
