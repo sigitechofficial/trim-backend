@@ -277,17 +277,56 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
       if (subscriptionsResponse.data.data) {
         console.log(`  - Found ${subscriptionsResponse.data.data.length} subscription(s)`);
         
-        subscriptionsResponse.data.data.forEach(sub => {
+        // Fetch prices for each subscription
+        for (const sub of subscriptionsResponse.data.data) {
+          let priceInfo = null;
+          
+          try {
+            // Fetch price points for this subscription
+            const pricesResponse = await axios.get(
+              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/prices?include=territory`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            // Extract pricing information
+            if (pricesResponse.data.data && pricesResponse.data.data.length > 0) {
+              const prices = pricesResponse.data.data.map(priceItem => {
+                const territory = pricesResponse.data.included?.find(
+                  inc => inc.type === 'territories' && inc.id === priceItem.relationships?.territory?.data?.id
+                );
+                
+                return {
+                  price: priceItem.attributes?.customerPrice || 'N/A',
+                  currency: territory?.attributes?.currency || 'USD',
+                  territory: territory?.attributes?.currency || 'US',
+                };
+              });
+              
+              // Use the first price as default (usually USD)
+              priceInfo = prices[0];
+            }
+          } catch (priceError) {
+            console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.message);
+          }
+          
           allProducts.push({
             productId: sub.attributes.productId,
             name: sub.attributes.name,
             groupName: group.attributes.name,
             state: sub.attributes.state,
             subscriptionPeriod: sub.attributes.subscriptionPeriod,
+            price: priceInfo?.price || null,
+            currency: priceInfo?.currency || null,
           });
           
-          console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name}`);
-        });
+          const priceDisplay = priceInfo ? `${priceInfo.price} ${priceInfo.currency}` : 'Price not set';
+          console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name} (${priceDisplay})`);
+        }
       }
     }
     
