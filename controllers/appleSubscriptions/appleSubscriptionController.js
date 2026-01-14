@@ -277,95 +277,17 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
       if (subscriptionsResponse.data.data) {
         console.log(`  - Found ${subscriptionsResponse.data.data.length} subscription(s)`);
         
-        // Fetch prices for each subscription
+        // Add products without fetching prices (faster)
         for (const sub of subscriptionsResponse.data.data) {
-          let priceInfo = null;
-          
-          try {
-            // Fetch the subscription details with pricing relationships
-            const subscriptionDetailResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            
-            console.log(`    📊 Subscription attributes:`, JSON.stringify(subscriptionDetailResponse.data.data.attributes, null, 2));
-            
-            // Fetch subscription prices (price schedule)
-            const pricesResponse = await axios.get(
-              `https://api.appstoreconnect.apple.com/v1/subscriptions/${sub.id}/prices?include=subscriptionPricePoint,territory`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            
-            console.log(`    💰 Prices response data length:`, pricesResponse.data.data?.length || 0);
-            console.log(`    💰 Included items:`, pricesResponse.data.included?.length || 0);
-            
-            if (pricesResponse.data.included && pricesResponse.data.included.length > 0) {
-              // Look for subscription price points in included data
-              const pricePoints = pricesResponse.data.included.filter(item => item.type === 'subscriptionPricePoints');
-              const territories = pricesResponse.data.included.filter(item => item.type === 'territories');
-              
-              console.log(`    💵 Price points found: ${pricePoints.length}, Territories: ${territories.length}`);
-              
-              if (pricePoints.length > 0) {
-                // Find USD price point (or first available)
-                let usdPricePoint = null;
-                let usdTerritory = null;
-                
-                for (const pricePoint of pricePoints) {
-                  const territoryId = pricePoint.relationships?.territory?.data?.id;
-                  const territory = territories.find(t => t.id === territoryId);
-                  
-                  if (territory?.attributes?.currency === 'USD') {
-                    usdPricePoint = pricePoint;
-                    usdTerritory = territory;
-                    break;
-                  }
-                }
-                
-                // Fallback to first price point if no USD found
-                if (!usdPricePoint && pricePoints.length > 0) {
-                  usdPricePoint = pricePoints[0];
-                  const territoryId = usdPricePoint.relationships?.territory?.data?.id;
-                  usdTerritory = territories.find(t => t.id === territoryId);
-                }
-                
-                if (usdPricePoint) {
-                  priceInfo = {
-                    price: usdPricePoint.attributes?.customerPrice || 'N/A',
-                    currency: usdTerritory?.attributes?.currency || 'USD',
-                    territoryCode: usdTerritory?.id || 'US',
-                  };
-                  
-                  console.log(`    ✅ Price extracted: ${priceInfo.price} ${priceInfo.currency}`);
-                }
-              }
-            }
-          } catch (priceError) {
-            console.error(`    ⚠️ Could not fetch prices for ${sub.attributes.productId}:`, priceError.response?.data || priceError.message);
-          }
-          
           allProducts.push({
             productId: sub.attributes.productId,
             name: sub.attributes.name,
             groupName: group.attributes.name,
             state: sub.attributes.state,
             subscriptionPeriod: sub.attributes.subscriptionPeriod,
-            price: priceInfo?.price || null,
-            currency: priceInfo?.currency || null,
           });
           
-          const priceDisplay = priceInfo ? `${priceInfo.price} ${priceInfo.currency}` : 'Price not set';
-          console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name} (${priceDisplay})`);
+          console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name}`);
         }
       }
     }
@@ -418,24 +340,122 @@ exports.validateProduct = async (req, res, next) => {
       throw new AppError('Product ID is required', 400);
     }
     
-    // Validate product exists (you can check against your database or App Store Connect)
-    // For now, we'll just validate the format and return success
+    console.log(`\n🔍 Validating product: ${productId}`);
     
-    // You can add additional validation here:
-    // - Check if product exists in App Store Connect
-    // - Check if product is active
-    // - Check if user is eligible for this product
+    // Generate JWT for App Store Connect API
+    const token = generateAppStoreConnectJWT();
     
+    // Step 1: Get the app
+    const appsResponse = await axios.get(
+      `https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=${APPLE_BUNDLE_ID}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    const app = appsResponse.data.data?.[0];
+    if (!app) {
+      throw new AppError('App not found in App Store Connect', 404);
+    }
+    
+    // Step 2: Get subscription groups
+    const groupsResponse = await axios.get(
+      `https://api.appstoreconnect.apple.com/v1/apps/${app.id}/subscriptionGroups`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    if (!groupsResponse.data.data || groupsResponse.data.data.length === 0) {
+      throw new AppError('No subscription groups found', 404);
+    }
+    
+    // Step 3: Search for the product in all subscription groups
+    let foundProduct = null;
+    let foundGroup = null;
+    
+    for (const group of groupsResponse.data.data) {
+      const subscriptionsResponse = await axios.get(
+        `https://api.appstoreconnect.apple.com/v1/subscriptionGroups/${group.id}/subscriptions`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      const product = subscriptionsResponse.data.data?.find(
+        sub => sub.attributes.productId === productId
+      );
+      
+      if (product) {
+        foundProduct = product;
+        foundGroup = group;
+        break;
+      }
+    }
+    
+    // Step 4: Validate product was found
+    if (!foundProduct) {
+      console.log(`❌ Product not found: ${productId}`);
+      return res.status(200).json({
+        status: '0',
+        message: 'Product not found',
+        data: {
+          productId: productId,
+          valid: false,
+          reason: 'Product does not exist in App Store Connect',
+        },
+      });
+    }
+    
+    // Step 5: Check product state
+    const productState = foundProduct.attributes.state;
+    const isActive = ['READY_TO_SUBMIT', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'APPROVED'].includes(productState);
+    
+    console.log(`✅ Product found: ${foundProduct.attributes.name}`);
+    console.log(`   State: ${productState}`);
+    console.log(`   Available: ${isActive}`);
+    
+    // Step 6: Return validation result
     return res.status(200).json({
       status: '1',
       message: 'Product validated successfully',
       data: {
         productId: productId,
         valid: true,
-        message: 'Product is valid and ready for purchase',
+        available: isActive,
+        product: {
+          name: foundProduct.attributes.name,
+          state: productState,
+          subscriptionPeriod: foundProduct.attributes.subscriptionPeriod,
+          groupName: foundGroup.attributes.name,
+          familySharable: foundProduct.attributes.familySharable,
+        },
+        message: isActive 
+          ? 'Product is available for purchase' 
+          : `Product is not available (state: ${productState})`,
       },
     });
+    
   } catch (error) {
+    console.error('❌ Error validating product:', error.message);
+    
+    if (error.response?.status === 401) {
+      return next(new AppError('Authentication failed with App Store Connect', 401));
+    }
+    
+    if (error.response?.status === 404) {
+      return next(new AppError('Resource not found', 404));
+    }
+    
     next(error);
   }
 };
