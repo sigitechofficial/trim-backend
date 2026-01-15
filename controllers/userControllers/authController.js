@@ -104,12 +104,18 @@ exports.signup = async (req, res, next) => {
     image,
   } = req.body
   // check if user with same eamil and phoneNum exists
+  const whereConditions = [{ email: email }];
+  
+  // Only check phone number if it's provided (not empty)
+  if (phoneNum && phoneNum.trim() !== '') {
+    whereConditions.push({ 
+      [Op.and]: [{ countryCode: countryCode }, { phoneNum: phoneNum }] 
+    });
+  }
+  
   let userExist = await user.findOne({
     where: {
-      [Op.or]: [
-        { email: email },
-        { [Op.and]: [{ countryCode: countryCode }, { phoneNum: phoneNum }] },
-      ],
+      [Op.or]: whereConditions,
       deleted: 0,
     },
     include: [
@@ -118,23 +124,29 @@ exports.signup = async (req, res, next) => {
     ],
   })
 
+  console.log('userExist++++++++++++++++++++++++++++++++', userExist)
   //return res.json(userExist)
   if (userExist) {
-    if (email === userExist.email)
-      return next(
-        new appError(
-          'Users exists,The email you entered is already taken',
-          200,
-        ),
-      )
-    else if (email === userExist.email && signedBy != 'email') {
-      return next(
-        new appError(
-          `This email is linked to a Trim business account and cannot be used for signing up as a customer.`,
-          200,
-        ),
-      )
-    } else if (phoneNum === userExist.phoneNum) {
+    if (email === userExist.email) {
+      // Check if it's a social signup (Apple/Google/Facebook)
+      if (signedBy !== 'email' && userExist.signedFrom !== 'email') {
+        // Allow re-login for social accounts
+        return next(
+          new appError(
+            'Users exists,The email you entered is already taken',
+            200,
+          ),
+        )
+      } else {
+        return next(
+          new appError(
+            'Users exists,The email you entered is already taken',
+            200,
+          ),
+        )
+      }
+    } else if (phoneNum && phoneNum.trim() !== '' && phoneNum === userExist.phoneNum) {
+      // Only show phone number error if phone is actually provided and matches
       return next(
         new appError(
           'Users exists,The Phone Number you entered is already taken',

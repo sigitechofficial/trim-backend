@@ -5,6 +5,9 @@ const appleWebhookController = require('../../controllers/appleSubscriptions/app
 const publicProtected = require('../../middlewares/publicProtected');
 const catchAsync = require('../../middlewares/catchAync');
 
+// Test endpoint (no auth - for debugging API credentials)
+router.get('/test-credentials', catchAsync(appleSubscriptionController.testAppleCredentials));
+
 // Webhook endpoint (no auth required - Apple will call this)
 // Note: This should use raw body parser in main app file
 router.post('/webhook', catchAsync(appleWebhookController.handleAppleWebhook));

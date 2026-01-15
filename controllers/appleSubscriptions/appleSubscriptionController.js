@@ -116,8 +116,9 @@ function generateAppStoreConnectJWT() {
       {
         iss: APPLE_ISSUER_ID,
         iat: now,
-        exp: now + 3600,
+        exp: now + 1200, // Apple recommends max 20 minutes (1200 seconds)
         aud: 'appstoreconnect-v1',
+        bid: APPLE_BUNDLE_ID, // Bundle ID claim for StoreKit APIs
       },
       privateKey,
       {
@@ -276,7 +277,8 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
       if (subscriptionsResponse.data.data) {
         console.log(`  - Found ${subscriptionsResponse.data.data.length} subscription(s)`);
         
-        subscriptionsResponse.data.data.forEach(sub => {
+        // Add products without fetching prices (faster)
+        for (const sub of subscriptionsResponse.data.data) {
           allProducts.push({
             productId: sub.attributes.productId,
             name: sub.attributes.name,
@@ -286,7 +288,7 @@ exports.getAppleSubscriptionProducts = async (req, res, next) => {
           });
           
           console.log(`    ✓ ${sub.attributes.productId} - ${sub.attributes.name}`);
-        });
+        }
       }
     }
     
@@ -338,24 +340,122 @@ exports.validateProduct = async (req, res, next) => {
       throw new AppError('Product ID is required', 400);
     }
     
-    // Validate product exists (you can check against your database or App Store Connect)
-    // For now, we'll just validate the format and return success
+    console.log(`\n🔍 Validating product: ${productId}`);
     
-    // You can add additional validation here:
-    // - Check if product exists in App Store Connect
-    // - Check if product is active
-    // - Check if user is eligible for this product
+    // Generate JWT for App Store Connect API
+    const token = generateAppStoreConnectJWT();
     
+    // Step 1: Get the app
+    const appsResponse = await axios.get(
+      `https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=${APPLE_BUNDLE_ID}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    const app = appsResponse.data.data?.[0];
+    if (!app) {
+      throw new AppError('App not found in App Store Connect', 404);
+    }
+    
+    // Step 2: Get subscription groups
+    const groupsResponse = await axios.get(
+      `https://api.appstoreconnect.apple.com/v1/apps/${app.id}/subscriptionGroups`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    if (!groupsResponse.data.data || groupsResponse.data.data.length === 0) {
+      throw new AppError('No subscription groups found', 404);
+    }
+    
+    // Step 3: Search for the product in all subscription groups
+    let foundProduct = null;
+    let foundGroup = null;
+    
+    for (const group of groupsResponse.data.data) {
+      const subscriptionsResponse = await axios.get(
+        `https://api.appstoreconnect.apple.com/v1/subscriptionGroups/${group.id}/subscriptions`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      const product = subscriptionsResponse.data.data?.find(
+        sub => sub.attributes.productId === productId
+      );
+      
+      if (product) {
+        foundProduct = product;
+        foundGroup = group;
+        break;
+      }
+    }
+    
+    // Step 4: Validate product was found
+    if (!foundProduct) {
+      console.log(`❌ Product not found: ${productId}`);
+      return res.status(200).json({
+        status: '0',
+        message: 'Product not found',
+        data: {
+          productId: productId,
+          valid: false,
+          reason: 'Product does not exist in App Store Connect',
+        },
+      });
+    }
+    
+    // Step 5: Check product state
+    const productState = foundProduct.attributes.state;
+    const isActive = ['READY_TO_SUBMIT', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'APPROVED'].includes(productState);
+    
+    console.log(`✅ Product found: ${foundProduct.attributes.name}`);
+    console.log(`   State: ${productState}`);
+    console.log(`   Available: ${isActive}`);
+    
+    // Step 6: Return validation result
     return res.status(200).json({
       status: '1',
       message: 'Product validated successfully',
       data: {
         productId: productId,
         valid: true,
-        message: 'Product is valid and ready for purchase',
+        available: isActive,
+        product: {
+          name: foundProduct.attributes.name,
+          state: productState,
+          subscriptionPeriod: foundProduct.attributes.subscriptionPeriod,
+          groupName: foundGroup.attributes.name,
+          familySharable: foundProduct.attributes.familySharable,
+        },
+        message: isActive 
+          ? 'Product is available for purchase' 
+          : `Product is not available (state: ${productState})`,
       },
     });
+    
   } catch (error) {
+    console.error('❌ Error validating product:', error.message);
+    
+    if (error.response?.status === 401) {
+      return next(new AppError('Authentication failed with App Store Connect', 401));
+    }
+    
+    if (error.response?.status === 404) {
+      return next(new AppError('Resource not found', 404));
+    }
+    
     next(error);
   }
 };
@@ -579,6 +679,118 @@ exports.verifyAppleSubscription = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * Test Apple API credentials
+ * Verifies that JWT generation and Apple authentication works
+ */
+exports.testAppleCredentials = async (req, res, next) => {
+  try {
+    console.log('\n🧪 Testing Apple API Credentials...');
+    console.log('================================================');
+    
+    // Step 1: Check all env variables
+    console.log('📋 Environment Variables:');
+    console.log('  APPLE_ISSUER_ID:', APPLE_ISSUER_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_KEY_ID:', APPLE_KEY_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_BUNDLE_ID:', APPLE_BUNDLE_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_PRIVATE_KEY:', APPLE_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_SHARED_SECRET:', APPLE_SHARED_SECRET ? '✅ Set' : '❌ Missing');
+    
+    if (!APPLE_ISSUER_ID || !APPLE_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_PRIVATE_KEY) {
+      return res.status(500).json({
+        status: '0',
+        message: 'Missing required Apple credentials in environment variables',
+        data: {
+          hasIssuerId: !!APPLE_ISSUER_ID,
+          hasKeyId: !!APPLE_KEY_ID,
+          hasBundleId: !!APPLE_BUNDLE_ID,
+          hasPrivateKey: !!APPLE_PRIVATE_KEY,
+        },
+      });
+    }
+    
+    // Step 2: Generate JWT
+    console.log('\n🔐 Generating JWT...');
+    const token = generateAppStoreConnectJWT();
+    console.log('✅ JWT generated successfully');
+    console.log('  Token preview:', token.substring(0, 80) + '...');
+    
+    // Step 3: Test with Apple API
+    console.log('\n📡 Testing authentication with Apple API...');
+    try {
+      const response = await axios.get(
+        'https://api.appstoreconnect.apple.com/v1/apps',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+      
+      console.log('✅ Successfully authenticated with Apple!');
+      console.log('  Status:', response.status);
+      console.log('  Apps found:', response.data.data?.length || 0);
+      
+      return res.status(200).json({
+        status: '1',
+        message: 'Apple API credentials are valid and working!',
+        data: {
+          authenticated: true,
+          appsCount: response.data.data?.length || 0,
+          issuer: APPLE_ISSUER_ID,
+          keyId: APPLE_KEY_ID,
+          bundleId: APPLE_BUNDLE_ID,
+        },
+      });
+    } catch (apiError) {
+      console.error('\n❌ Apple API authentication failed:');
+      console.error('  Status:', apiError.response?.status);
+      console.error('  Error:', apiError.response?.data);
+      
+      // Detailed error analysis
+      let errorMessage = 'Authentication failed with Apple';
+      let troubleshooting = [];
+      
+      if (apiError.response?.status === 401) {
+        errorMessage = 'Apple rejected the authentication token (401 Unauthorized)';
+        troubleshooting = [
+          '1. Verify APPLE_ISSUER_ID matches your Team ID in App Store Connect',
+          '2. Verify APPLE_KEY_ID matches the Key ID of your downloaded .p8 file',
+          '3. Ensure the API key is still active in App Store Connect > Users and Access > Keys',
+          '4. Check that the private key content matches the Key ID',
+          '5. Ensure your API key has "App Manager" or "Admin" role',
+          '6. Verify server time is synchronized (check: date -u)',
+        ];
+      }
+      
+      return res.status(500).json({
+        status: '0',
+        message: errorMessage,
+        data: {
+          authenticated: false,
+          httpStatus: apiError.response?.status,
+          appleError: apiError.response?.data,
+          troubleshooting,
+          credentials: {
+            issuerId: APPLE_ISSUER_ID,
+            keyId: APPLE_KEY_ID,
+            bundleId: APPLE_BUNDLE_ID,
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error('\n❌ Test failed:', error.message);
+    return res.status(500).json({
+      status: '0',
+      message: error.message,
+      data: { error: error.toString() },
+    });
   }
 };
 
