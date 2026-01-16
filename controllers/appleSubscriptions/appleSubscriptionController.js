@@ -683,6 +683,217 @@ exports.verifyAppleSubscription = async (req, res, next) => {
 };
 
 /**
+ * Verify Apple IAP Purchase using App Store Server API (Modern Method)
+ * Endpoint: POST /salon/v1/iap/apple/verify
+ * Uses Apple's current App Store Server API, not deprecated verifyReceipt
+ */
+exports.verifyApplePurchase = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const {
+      transactionId,
+      originalTransactionId,
+      productId,
+      priceId,
+      membersCount,
+      subscriptionName,
+      subscriptionPrice,
+      vat,
+    } = req.body;
+
+    console.log('\n🍎 Apple IAP Verification Started (App Store Server API)');
+    console.log('  User ID:', userId);
+    console.log('  Transaction ID:', transactionId);
+    console.log('  Product ID:', productId);
+
+    // Step 1: Validate required fields
+    if (!transactionId || !productId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'Missing required fields',
+        error: 'transactionId and productId are required',
+      });
+    }
+
+    // Step 2: Check for duplicate transaction (Idempotency)
+    console.log('\n🔍 Checking for duplicate transaction...');
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        appleTransactionId: transactionId,
+        subscriptionSource: 'apple',
+      },
+    });
+
+    if (existingSubscription) {
+      console.log('✅ Transaction already processed, returning existing subscription');
+      
+      const expiryDate = existingSubscription.periodEnd 
+        ? new Date(existingSubscription.periodEnd).toISOString().split('T')[0]
+        : null;
+
+      return res.status(200).json({
+        status: '1',
+        message: 'Purchase already verified',
+        data: {
+          subscriptionId: existingSubscription.subscriptionId,
+          expiryDate,
+          price: existingSubscription.amountPaid?.toString() || subscriptionPrice?.toString(),
+        },
+      });
+    }
+
+    // Step 3: Get transaction info from Apple using App Store Server API
+    console.log('\n📱 Fetching transaction from Apple Server API...');
+    const token = generateAppStoreConnectJWT();
+    
+    try {
+      // Use Apple's Get Transaction Info endpoint
+      const transactionUrl = `https://api.storekit.itunes.apple.com/inApps/v1/transactions/${transactionId}`;
+      
+      const transactionResponse = await axios.get(transactionUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      console.log('✅ Transaction fetched from Apple');
+      
+      // The response contains a signedTransaction (JWS)
+      const signedTransaction = transactionResponse.data.signedTransaction;
+      
+      if (!signedTransaction) {
+        throw new Error('No signed transaction in response');
+      }
+
+      // Step 4: Decode JWS to get transaction data
+      // Note: In production, you should verify the JWS signature
+      // For now, we'll decode it (Apple signs it, so it's trusted if from their API)
+      const transactionPayload = JSON.parse(
+        Buffer.from(signedTransaction.split('.')[1], 'base64').toString()
+      );
+
+      console.log('📋 Transaction Details:');
+      console.log('  Product ID:', transactionPayload.productId);
+      console.log('  Original Transaction ID:', transactionPayload.originalTransactionId);
+      console.log('  Purchase Date:', new Date(transactionPayload.purchaseDate).toISOString());
+      console.log('  Expires Date:', transactionPayload.expiresDate ? new Date(transactionPayload.expiresDate).toISOString() : 'N/A');
+
+      // Step 5: Verify product ID matches
+      if (transactionPayload.productId !== productId) {
+        console.error('❌ Product ID mismatch');
+        return res.status(200).json({
+          status: '0',
+          message: 'Product ID mismatch',
+          error: `Transaction product ID (${transactionPayload.productId}) does not match request (${productId})`,
+        });
+      }
+
+      console.log('✅ Transaction verified');
+
+      // Step 6: Calculate subscription dates
+      const purchaseDate = new Date(transactionPayload.purchaseDate);
+      const expiresDate = transactionPayload.expiresDate 
+        ? new Date(transactionPayload.expiresDate)
+        : new Date(purchaseDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days if not provided
+
+      // Add 5 days grace period (same as Stripe)
+      const gracePeriodDays = 5;
+      const expiryDateWithGrace = new Date(expiresDate);
+      expiryDateWithGrace.setDate(expiryDateWithGrace.getDate() + gracePeriodDays);
+
+      console.log('📅 Subscription Dates:');
+      console.log('  Purchase Date:', purchaseDate.toISOString());
+      console.log('  Expires Date:', expiresDate.toISOString());
+      console.log('  Expiry with Grace:', expiryDateWithGrace.toISOString());
+
+      // Step 7: Generate subscription ID
+      const subscriptionId = `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
+
+      // Step 8: Determine environment
+      const environment = transactionPayload.environment || 'Sandbox';
+
+      // Step 9: Create subscription record
+      console.log('\n💾 Creating subscription record...');
+      const newSubscription = await subscriptions.create({
+        subscriptionId: subscriptionId,
+        name: subscriptionName || productId,
+        customerId: userId.toString(),
+        amountPaid: subscriptionPrice || 0,
+        currency: 'USD',
+        priceId: priceId,
+        periodStart: purchaseDate,
+        periodEnd: expiryDateWithGrace,
+        status: 'active',
+        VAT: vat || 0,
+        // Apple-specific fields
+        appleTransactionId: transactionId,
+        appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId,
+        subscriptionSource: 'apple',
+        appleProductId: productId,
+        appleEnvironment: environment,
+      });
+
+      console.log('✅ Subscription created:', newSubscription.subscriptionId);
+
+      // Step 10: Update user record
+      await user.update(
+        { appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId },
+        { where: { id: userId } }
+      );
+
+      // Step 11: Format response
+      const expiryDateFormatted = expiryDateWithGrace.toISOString().split('T')[0];
+
+      console.log('\n✅ Apple IAP Verification Complete');
+      console.log('  Subscription ID:', subscriptionId);
+      console.log('  Expiry Date:', expiryDateFormatted);
+
+      return res.status(200).json({
+        status: '1',
+        message: 'Purchase verified successfully',
+        data: {
+          subscriptionId: subscriptionId,
+          expiryDate: expiryDateFormatted,
+          price: subscriptionPrice?.toString() || '0',
+        },
+      });
+
+    } catch (apiError) {
+      console.error('\n❌ Apple Server API Error:', apiError.response?.data || apiError.message);
+      
+      // Handle specific Apple API errors
+      if (apiError.response?.status === 404) {
+        return res.status(200).json({
+          status: '0',
+          message: 'Transaction not found',
+          error: 'The transaction ID was not found in Apple\'s system. It may be invalid or from a different environment.',
+        });
+      }
+      
+      if (apiError.response?.status === 401) {
+        return res.status(200).json({
+          status: '0',
+          message: 'Authentication failed with Apple',
+          error: 'Unable to authenticate with Apple Server API. Check credentials.',
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    console.error('\n❌ Apple IAP Verification Error:', error);
+    return res.status(500).json({
+      status: '0',
+      message: 'Verification failed',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Test Apple API credentials
  * Verifies that JWT generation and Apple authentication works
  */
