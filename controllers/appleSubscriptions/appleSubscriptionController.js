@@ -820,13 +820,20 @@ exports.verifyApplePurchase = async (req, res, next) => {
       });
 
       console.log('✅ Transaction fetched from Apple');
+      console.log('📦 Raw Response Data:', JSON.stringify(transactionResponse.data, null, 2));
       
       // The response contains a signedTransaction (JWS)
-      const signedTransaction = transactionResponse.data.signedTransaction;
+      // Apple's response structure can be: { signedTransaction: "..." } or just a string
+      const signedTransaction = transactionResponse.data.signedTransaction || transactionResponse.data;
       
-      if (!signedTransaction) {
-        throw new Error('No signed transaction in response');
+      if (!signedTransaction || typeof signedTransaction !== 'string') {
+        console.error('❌ Invalid response structure from Apple');
+        console.error('   Expected: signedTransaction field or JWS string');
+        console.error('   Received:', typeof signedTransaction, signedTransaction);
+        throw new Error(`No valid signed transaction in response. Type: ${typeof signedTransaction}`);
       }
+      
+      console.log('✅ SignedTransaction found (JWS):', signedTransaction.substring(0, 50) + '...');
 
       // Step 4: Decode JWS to get transaction data
       // Note: In production, you should verify the JWS signature
