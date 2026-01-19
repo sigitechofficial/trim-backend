@@ -7,55 +7,66 @@ const AppError = require('../../utils/appError');
 const { user, subscriptions, salonDetail } = require('../../models');
 const { Op } = require('sequelize');
 
-// Apple App Store Connect API credentials
-const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID;
-const APPLE_KEY_ID = process.env.APPLE_KEY_ID;
+// ============================================
+// Apple API Credentials (TWO different keys!)
+// ============================================
+
+// 1️⃣ App Store Connect API - For fetching products, managing apps
+const APPLE_CONNECT_ISSUER_ID = process.env.APPLE_ISSUER_ID;
+const APPLE_CONNECT_KEY_ID = process.env.APPLE_KEY_ID;
 const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
+let APPLE_CONNECT_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
+
+// 2️⃣ In-App Purchase API - For verifying transactions
+const APPLE_IAP_KEY_ID = process.env.APPLE_IAP_KEY_ID; // Different key!
+let APPLE_IAP_PRIVATE_KEY = process.env.APPLE_IAP_PRIVATE_KEY;
+
+// Legacy
 const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
 
-// Get private key from environment or file
-let APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
-
-// If private key file path is provided, read from file
+// If private key file paths are provided, read from files
 if (process.env.APPLE_PRIVATE_KEY_PATH) {
   try {
     const keyPath = path.resolve(process.env.APPLE_PRIVATE_KEY_PATH);
-    APPLE_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
-    console.log('✅ Loaded Apple private key from file');
+    APPLE_CONNECT_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
+    console.log('✅ Loaded App Store Connect private key from file');
   } catch (error) {
-    console.error('❌ Error reading private key file:', error);
-    throw new Error('Failed to read Apple private key file');
+    console.error('❌ Error reading App Store Connect key file:', error);
+    throw new Error('Failed to read Apple App Store Connect key file');
+  }
+}
+
+if (process.env.APPLE_IAP_PRIVATE_KEY_PATH) {
+  try {
+    const keyPath = path.resolve(process.env.APPLE_IAP_PRIVATE_KEY_PATH);
+    APPLE_IAP_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
+    console.log('✅ Loaded IAP private key from file');
+  } catch (error) {
+    console.error('❌ Error reading IAP key file:', error);
+    throw new Error('Failed to read Apple IAP key file');
   }
 }
 
 /**
- * Generate JWT token for App Store Connect API
+ * Helper function to parse and validate Apple private key
  */
-function generateAppStoreConnectJWT() {
-  const now = Math.floor(Date.now() / 1000);
-  
-  if (!APPLE_PRIVATE_KEY) {
-    throw new AppError('APPLE_PRIVATE_KEY is not set in environment variables', 500);
+function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
+  if (!rawPrivateKey) {
+    throw new AppError(`${keyName} private key is not set`, 500);
   }
   
-  console.log('🔑 Starting key parsing...');
+  let rawKey = rawPrivateKey.trim();
   
-  // Step 1: Get raw key and handle quotes
-  let rawKey = APPLE_PRIVATE_KEY.trim();
-  console.log('  - Raw key length:', rawKey.length);
-  console.log('  - Starts with quote:', rawKey.startsWith('"') || rawKey.startsWith("'"));
-  
-  // Remove surrounding quotes if present
+  // Remove surrounding quotes
   if ((rawKey.startsWith('"') && rawKey.endsWith('"')) || 
       (rawKey.startsWith("'") && rawKey.endsWith("'"))) {
     rawKey = rawKey.slice(1, -1).trim();
-    console.log('  - Removed quotes, new length:', rawKey.length);
   }
   
-  // Step 2: Replace escaped newlines with actual newlines
+  // Replace escaped newlines
   rawKey = rawKey.replace(/\\n/g, '\n');
   
-  // Step 3: Extract ONLY the base64 content (remove all markers and whitespace)
+  // Extract base64 content
   let base64Content = rawKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
@@ -65,16 +76,11 @@ function generateAppStoreConnectJWT() {
     .replace(/\n/g, '')
     .trim();
   
-  console.log('  - Base64 content length:', base64Content.length);
-  console.log('  - First 30 chars:', base64Content.substring(0, 30));
-  console.log('  - Last 30 chars:', base64Content.substring(base64Content.length - 30));
-  
-  // Step 4: Validate base64 content
   if (base64Content.length < 100) {
-    throw new AppError(`Private key base64 content is too short (${base64Content.length} chars). Expected ~120+ chars. Check APPLE_PRIVATE_KEY in .env`, 500);
+    throw new AppError(`${keyName} private key too short (${base64Content.length} chars)`, 500);
   }
   
-  // Step 5: Rebuild proper PEM format with 64-char lines
+  // Rebuild PEM format
   const lines = [];
   for (let i = 0; i < base64Content.length; i += 64) {
     lines.push(base64Content.substring(i, i + 64));
@@ -82,65 +88,94 @@ function generateAppStoreConnectJWT() {
   
   const privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----`;
   
-  console.log('  - Rebuilt key with', lines.length, 'lines');
-  console.log('  - Total PEM length:', privateKey.length);
-  
-  // Step 6: VALIDATE the key using Node's crypto module
+  // Validate with crypto module
   try {
-    console.log('  - Validating key with crypto module...');
     const keyObject = crypto.createPrivateKey({
       key: privateKey,
       format: 'pem',
       type: 'pkcs8'
     });
     
-    console.log('  ✅ Key validation passed!');
-    console.log('    - Key type:', keyObject.asymmetricKeyType);
-    console.log('    - Key size:', keyObject.asymmetricKeySize);
-    
     if (keyObject.asymmetricKeyType !== 'ec') {
-      throw new AppError(`Wrong key type! Expected 'ec' (Elliptic Curve), got '${keyObject.asymmetricKeyType}'. Make sure you downloaded the correct .p8 key file from App Store Connect.`, 500);
+      throw new AppError(`Wrong key type! Expected 'ec', got '${keyObject.asymmetricKeyType}'`, 500);
     }
+    
+    console.log(`  ✅ ${keyName} key validated`);
+    return privateKey;
   } catch (cryptoError) {
-    console.error('  ❌ Crypto validation failed:', cryptoError.message);
-    console.error('  - This means the key content is invalid or corrupted');
-    console.error('  - Please download the .p8 file again from App Store Connect');
-    console.error('  - Copy the ENTIRE content including BEGIN/END markers');
-    throw new AppError(`Invalid private key: ${cryptoError.message}. Please re-download from App Store Connect.`, 500);
+    throw new AppError(`Invalid ${keyName} private key: ${cryptoError.message}`, 500);
   }
+}
+
+/**
+ * Generate JWT for App Store Connect API (for fetching products)
+ */
+function generateAppStoreConnectJWT() {
+  const now = Math.floor(Date.now() / 1000);
+  console.log('🔑 Generating App Store Connect JWT...');
   
-  // Step 7: Generate JWT token
+  const privateKey = parseApplePrivateKey(APPLE_CONNECT_PRIVATE_KEY, 'App Store Connect');
+  
   try {
-    console.log('  - Generating JWT token...');
     const token = jwt.sign(
       {
-        iss: APPLE_ISSUER_ID,
+        iss: APPLE_CONNECT_ISSUER_ID,
         iat: now,
-        exp: now + 1200, // Apple recommends max 20 minutes (1200 seconds)
+        exp: now + 1200,
         aud: 'appstoreconnect-v1',
-        bid: APPLE_BUNDLE_ID, // Bundle ID claim for StoreKit APIs
+        bid: APPLE_BUNDLE_ID,
       },
       privateKey,
       {
         algorithm: 'ES256',
         header: {
           alg: 'ES256',
-          kid: APPLE_KEY_ID,
+          kid: APPLE_CONNECT_KEY_ID,
           typ: 'JWT',
         },
       }
     );
     
-    console.log('✅ JWT token generated successfully!');
-    console.log('  - Token length:', token.length);
-    console.log('  - Key ID:', APPLE_KEY_ID);
-    console.log('  - Issuer ID:', APPLE_ISSUER_ID);
-    
+    console.log('  ✅ JWT generated (Key ID:', APPLE_CONNECT_KEY_ID, ')');
     return token;
   } catch (error) {
-    console.error('❌ JWT signing failed:', error.message);
-    console.error('  - This is unexpected since crypto validation passed');
     throw new AppError(`JWT signing failed: ${error.message}`, 500);
+  }
+}
+
+/**
+ * Generate JWT for App Store Server API (for verifying transactions)
+ */
+function generateAppStoreServerJWT() {
+  const now = Math.floor(Date.now() / 1000);
+  console.log('🔑 Generating App Store Server JWT (IAP)...');
+  
+  const privateKey = parseApplePrivateKey(APPLE_IAP_PRIVATE_KEY, 'IAP Server');
+  
+  try {
+    const token = jwt.sign(
+      {
+        iss: APPLE_CONNECT_ISSUER_ID, // Same issuer (Team ID)
+        iat: now,
+        exp: now + 1200,
+        aud: 'appstoreconnect-v1',
+        bid: APPLE_BUNDLE_ID,
+      },
+      privateKey,
+      {
+        algorithm: 'ES256',
+        header: {
+          alg: 'ES256',
+          kid: APPLE_IAP_KEY_ID, // Different Key ID!
+          typ: 'JWT',
+        },
+      }
+    );
+    
+    console.log('  ✅ JWT generated (Key ID:', APPLE_IAP_KEY_ID, ')');
+    return token;
+  } catch (error) {
+    throw new AppError(`IAP JWT signing failed: ${error.message}`, 500);
   }
 }
 
@@ -744,7 +779,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
     // Step 3: Get transaction info from Apple using App Store Server API
     console.log('\n📱 Fetching transaction from Apple Server API...');
-    const token = generateAppStoreConnectJWT();
+    const token = generateAppStoreServerJWT(); // Use IAP key, not Connect key!
     
     try {
       // Use Apple's Get Transaction Info endpoint
@@ -904,21 +939,24 @@ exports.testAppleCredentials = async (req, res, next) => {
     
     // Step 1: Check all env variables
     console.log('📋 Environment Variables:');
-    console.log('  APPLE_ISSUER_ID:', APPLE_ISSUER_ID ? '✅ Set' : '❌ Missing');
-    console.log('  APPLE_KEY_ID:', APPLE_KEY_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_ISSUER_ID:', APPLE_CONNECT_ISSUER_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_KEY_ID (Connect):', APPLE_CONNECT_KEY_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_IAP_KEY_ID:', APPLE_IAP_KEY_ID ? '✅ Set' : '❌ Missing');
     console.log('  APPLE_BUNDLE_ID:', APPLE_BUNDLE_ID ? '✅ Set' : '❌ Missing');
-    console.log('  APPLE_PRIVATE_KEY:', APPLE_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
-    console.log('  APPLE_SHARED_SECRET:', APPLE_SHARED_SECRET ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_PRIVATE_KEY (Connect):', APPLE_CONNECT_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_IAP_PRIVATE_KEY:', APPLE_IAP_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
     
-    if (!APPLE_ISSUER_ID || !APPLE_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_PRIVATE_KEY) {
+    if (!APPLE_CONNECT_ISSUER_ID || !APPLE_CONNECT_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_CONNECT_PRIVATE_KEY) {
       return res.status(500).json({
         status: '0',
         message: 'Missing required Apple credentials in environment variables',
         data: {
-          hasIssuerId: !!APPLE_ISSUER_ID,
-          hasKeyId: !!APPLE_KEY_ID,
+          hasIssuerId: !!APPLE_CONNECT_ISSUER_ID,
+          hasConnectKeyId: !!APPLE_CONNECT_KEY_ID,
+          hasIapKeyId: !!APPLE_IAP_KEY_ID,
           hasBundleId: !!APPLE_BUNDLE_ID,
-          hasPrivateKey: !!APPLE_PRIVATE_KEY,
+          hasConnectPrivateKey: !!APPLE_CONNECT_PRIVATE_KEY,
+          hasIapPrivateKey: !!APPLE_IAP_PRIVATE_KEY,
         },
       });
     }
@@ -953,8 +991,9 @@ exports.testAppleCredentials = async (req, res, next) => {
         data: {
           authenticated: true,
           appsCount: response.data.data?.length || 0,
-          issuer: APPLE_ISSUER_ID,
-          keyId: APPLE_KEY_ID,
+          issuer: APPLE_CONNECT_ISSUER_ID,
+          connectKeyId: APPLE_CONNECT_KEY_ID,
+          iapKeyId: APPLE_IAP_KEY_ID,
           bundleId: APPLE_BUNDLE_ID,
         },
       });
@@ -988,8 +1027,9 @@ exports.testAppleCredentials = async (req, res, next) => {
           appleError: apiError.response?.data,
           troubleshooting,
           credentials: {
-            issuerId: APPLE_ISSUER_ID,
-            keyId: APPLE_KEY_ID,
+            issuerId: APPLE_CONNECT_ISSUER_ID,
+            connectKeyId: APPLE_CONNECT_KEY_ID,
+            iapKeyId: APPLE_IAP_KEY_ID,
             bundleId: APPLE_BUNDLE_ID,
           },
         },
