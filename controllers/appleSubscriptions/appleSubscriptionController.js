@@ -145,6 +145,7 @@ function generateAppStoreConnectJWT() {
 
 /**
  * Generate JWT for App Store Server API (for verifying transactions)
+ * Note: IAP Server API does NOT use 'bid' claim (that's only for App Store Connect API)
  */
 function generateAppStoreServerJWT() {
   const now = Math.floor(Date.now() / 1000);
@@ -155,18 +156,18 @@ function generateAppStoreServerJWT() {
   try {
     const token = jwt.sign(
       {
-        iss: APPLE_CONNECT_ISSUER_ID, // Same issuer (Team ID)
+        iss: APPLE_CONNECT_ISSUER_ID, // Issuer (Team ID)
         iat: now,
-        exp: now + 1200,
+        exp: now + 3600, // 1 hour expiration
         aud: 'appstoreconnect-v1',
-        bid: APPLE_BUNDLE_ID,
+        // Note: NO 'bid' claim for IAP Server API!
       },
       privateKey,
       {
         algorithm: 'ES256',
         header: {
           alg: 'ES256',
-          kid: APPLE_IAP_KEY_ID, // Different Key ID!
+          kid: APPLE_IAP_KEY_ID, // IAP Key ID
           typ: 'JWT',
         },
       }
@@ -782,8 +783,17 @@ exports.verifyApplePurchase = async (req, res, next) => {
     const token = generateAppStoreServerJWT(); // Use IAP key, not Connect key!
     
     try {
-      // Use Apple's Get Transaction Info endpoint
-      const transactionUrl = `https://api.storekit.itunes.apple.com/inApps/v1/transactions/${transactionId}`;
+      // Determine environment: Use sandbox for testing
+      // Production transaction IDs typically start with different patterns
+      const isSandbox = process.env.NODE_ENV !== 'production';
+      const baseUrl = isSandbox 
+        ? 'https://api.storekit-sandbox.itunes.apple.com'
+        : 'https://api.storekit.itunes.apple.com';
+      
+      const transactionUrl = `${baseUrl}/inApps/v1/transactions/${transactionId}`;
+      
+      console.log('  Environment:', isSandbox ? 'Sandbox' : 'Production');
+      console.log('  API URL:', baseUrl);
       
       const transactionResponse = await axios.get(transactionUrl, {
         headers: {
@@ -897,6 +907,8 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
     } catch (apiError) {
       console.error('\n❌ Apple Server API Error:', apiError.response?.data || apiError.message);
+      console.error('  Status:', apiError.response?.status);
+      console.error('  Headers sent:', apiError.config?.headers);
       
       // Handle specific Apple API errors
       if (apiError.response?.status === 404) {
@@ -908,10 +920,15 @@ exports.verifyApplePurchase = async (req, res, next) => {
       }
       
       if (apiError.response?.status === 401) {
+        const errorDetail = apiError.response?.data?.errors?.[0]?.detail || 'Check credentials';
+        console.error('  Apple 401 Detail:', errorDetail);
+        console.error('  IAP Key ID being used:', APPLE_IAP_KEY_ID);
+        console.error('  Issuer ID:', APPLE_CONNECT_ISSUER_ID);
+        
         return res.status(200).json({
           status: '0',
           message: 'Authentication failed with Apple',
-          error: 'Unable to authenticate with Apple Server API. Check credentials.',
+          error: `Unable to authenticate with Apple Server API. ${errorDetail}`,
         });
       }
 
