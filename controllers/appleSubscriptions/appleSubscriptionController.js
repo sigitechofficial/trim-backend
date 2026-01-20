@@ -9,18 +9,19 @@ const { Op } = require('sequelize');
 
 // ============================================
 // Apple In-App Purchase API Credentials
-// Based on Official Apple Documentation 2026
+// TWO DIFFERENT KEYS FOR TWO DIFFERENT APIS
 // ============================================
 
-// Required: In-App Purchase Key (NOT App Store Connect API key!)
-const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID; // Team ID
-const APPLE_IAP_KEY_ID = process.env.APPLE_IAP_KEY_ID; // Key ID from IAP section
-const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID; // App Bundle ID
-let APPLE_IAP_PRIVATE_KEY = process.env.APPLE_IAP_PRIVATE_KEY; // .p8 private key
+const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID; // Team ID (same for both)
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID; // Bundle ID (same for both)
 
-// Optional: For backwards compatibility with product fetching
-const APPLE_KEY_ID = process.env.APPLE_KEY_ID || process.env.APPLE_IAP_KEY_ID;
-let APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY || process.env.APPLE_IAP_PRIVATE_KEY;
+// 1. App Store Connect API Key (for products, metadata)
+const APPLE_KEY_ID = process.env.APPLE_KEY_ID; // e.g., L34V427J4F
+let APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
+
+// 2. In-App Purchase Key (for transaction verification)
+const APPLE_IAP_KEY_ID = process.env.APPLE_IAP_KEY_ID; // e.g., B2KSMYQ3NG
+let APPLE_IAP_PRIVATE_KEY = process.env.APPLE_IAP_PRIVATE_KEY;
 
 // Legacy shared secret
 const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
@@ -112,12 +113,23 @@ function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
  * Generate JWT for App Store Server API (for fetching products)
  * Uses In-App Purchase Key per Apple's official documentation
  */
+/**
+ * Generate JWT for App Store Connect API (for products/metadata)
+ * Uses APPLE_KEY_ID (e.g., L34V427J4F - "trim-api")
+ */
 function generateAppStoreConnectJWT() {
   const now = Math.floor(Date.now() / 1000);
-  console.log('🔑 Generating Apple API JWT for products...');
+  console.log('🔑 Generating App Store Connect JWT (for products)...');
   
-  const privateKey = parseApplePrivateKey(APPLE_PRIVATE_KEY || APPLE_IAP_PRIVATE_KEY, 'Apple IAP');
-  const keyId = APPLE_KEY_ID || APPLE_IAP_KEY_ID;
+  if (!APPLE_KEY_ID) {
+    throw new AppError('APPLE_KEY_ID is required for App Store Connect API', 500);
+  }
+  
+  if (!APPLE_PRIVATE_KEY) {
+    throw new AppError('APPLE_PRIVATE_KEY is required for App Store Connect API', 500);
+  }
+  
+  const privateKey = parseApplePrivateKey(APPLE_PRIVATE_KEY, 'App Store Connect');
   
   try {
     const token = jwt.sign(
@@ -133,13 +145,13 @@ function generateAppStoreConnectJWT() {
         algorithm: 'ES256',
         header: {
           alg: 'ES256',
-          kid: keyId,
+          kid: APPLE_KEY_ID,
           typ: 'JWT',
         },
       }
     );
     
-    console.log('  ✅ JWT generated (Key ID:', keyId, ')');
+    console.log('  ✅ JWT generated (Key ID:', APPLE_KEY_ID, '- App Store Connect API)');
     return token;
   } catch (error) {
     throw new AppError(`JWT signing failed: ${error.message}`, 500);
@@ -151,15 +163,23 @@ function generateAppStoreConnectJWT() {
  * Based on Apple's Official Documentation (2026)
  * Requirements: ES256, In-App Purchase Key, iss, iat, exp, aud, bid
  */
+/**
+ * Generate JWT for App Store Server API (for transaction verification)
+ * Uses APPLE_IAP_KEY_ID (e.g., B2KSMYQ3NG - "In-App Purchase")
+ */
 function generateAppStoreServerJWT() {
   const now = Math.floor(Date.now() / 1000);
-  console.log('🔑 Generating App Store Server JWT (for transaction verification)...');
+  console.log('🔑 Generating App Store Server JWT (for IAP verification)...');
   
-  if (!APPLE_IAP_PRIVATE_KEY) {
-    throw new AppError('IAP Server private key is not set', 500);
+  if (!APPLE_IAP_KEY_ID) {
+    throw new AppError('APPLE_IAP_KEY_ID is required for transaction verification', 500);
   }
   
-  const privateKey = parseApplePrivateKey(APPLE_IAP_PRIVATE_KEY, 'App Store Server');
+  if (!APPLE_IAP_PRIVATE_KEY) {
+    throw new AppError('APPLE_IAP_PRIVATE_KEY is required for transaction verification', 500);
+  }
+  
+  const privateKey = parseApplePrivateKey(APPLE_IAP_PRIVATE_KEY, 'In-App Purchase');
   
   try {
     // Apple's required JWT format for App Store Server API
@@ -176,18 +196,13 @@ function generateAppStoreServerJWT() {
         algorithm: 'ES256', // MUST be ES256 for Apple
         header: {
           alg: 'ES256',
-          kid: APPLE_IAP_KEY_ID, // App Store Connect API Key ID (same as APPLE_KEY_ID)
+          kid: APPLE_IAP_KEY_ID, // In-App Purchase Key ID
           typ: 'JWT',
         },
       }
     );
     
-    console.log('  ✅ JWT generated successfully');
-    console.log('    - Key ID:', APPLE_IAP_KEY_ID, '(App Store Connect API - for IAP verification)');
-    console.log('    - Issuer ID:', APPLE_ISSUER_ID);
-    console.log('    - Bundle ID:', APPLE_BUNDLE_ID);
-    console.log('    - Algorithm: ES256');
-    console.log('    - Audience: appstoreconnect-v1');
+    console.log('  ✅ JWT generated (Key ID:', APPLE_IAP_KEY_ID, '- In-App Purchase Key)');
     
     return token;
   } catch (error) {
@@ -796,7 +811,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
     // Step 3: Get transaction info from Apple using App Store Server API
     console.log('\n📱 Fetching transaction from Apple Server API...');
-    const token = generateAppStoreServerJWT(); // Uses APPLE_IAP_KEY_ID (should be same as APPLE_KEY_ID)
+    const token = generateAppStoreServerJWT(); // Uses APPLE_IAP_KEY_ID (B2KSMYQ3NG)
     
     try {
       // Determine environment: Use sandbox for testing
