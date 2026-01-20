@@ -772,6 +772,8 @@ exports.verifyAppleSubscription = async (req, res, next) => {
  * Verify Apple IAP Purchase using App Store Server API (Modern Method)
  * Endpoint: POST /salon/v1/iap/apple/verify
  * Uses Apple's current App Store Server API, not deprecated verifyReceipt
+ * 
+ * Note: After verification, call POST /choosePlan with subscriptionSource: 'apple' to activate salon
  */
 exports.verifyApplePurchase = async (req, res, next) => {
   try {
@@ -785,6 +787,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
       subscriptionName,
       subscriptionPrice,
       vat,
+      salonDetailId
     } = req.body;
 
     console.log('\n🍎 Apple IAP Verification Started (App Store Server API)');
@@ -928,6 +931,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
         periodEnd: expiryDateWithGrace,
         status: 'active',
         VAT: vat || 0,
+        salonDetailId:salonDetailId,
         // Apple-specific fields
         appleTransactionId: transactionId,
         appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId,
@@ -950,6 +954,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
       console.log('\n✅ Apple IAP Verification Complete');
       console.log('  Subscription ID:', subscriptionId);
       console.log('  Expiry Date:', expiryDateFormatted);
+      console.log('\n💡 Next Step: Call POST /choosePlan to activate salon');
 
       return res.status(200).json({
         status: '1',

@@ -244,62 +244,177 @@ exports.addCard = async (req, res, next) => {
             3.Choose SubsCription Plan 
     ________________________________________
 */
+/*
+  Unified Choose Plan API
+  Supports both Stripe and Apple subscriptions
+  Request body: {
+    subscriptionId: string (required),
+    subscriptionSource: 'stripe' | 'apple' (optional, defaults to 'stripe')
+  }
+*/
 exports.choosePlan = async (req, res, next) => {
-  const userId = req.user.id
-  const { subscriptionId } = req.body
-  let salonData = await salonDetail.findOne({
-    where: { userId },
-    include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
-  })
-  const subscription = await Stripe.subscriptionsRetrieve(subscriptionId)
-  let connectAccount
-  if (!salonData.connectAccountId) {
-    connectAccount = await Stripe.createConnectAccount(salonData.user.email)
-    salonData.connectAccountId = connectAccount?.accountId
-    await salonData.save()
-  }
-  const DT = new Date()
-    ; (salonData.approvedByAdmin = true),
-      (salonData.registrationDate = dateManipulation.stampToDate(
-        subscription.current_period_start,
-      ))
-  
-  // Add 5 days grace period to registration expiry date
-  const expiryDate = new Date(subscription.current_period_end * 1000)
-  expiryDate.setDate(expiryDate.getDate() + 5) // Add 5 grace days
-  const expiryDateWithGrace = Math.floor(expiryDate.getTime() / 1000) // Convert back to Unix timestamp
-  salonData.registrationExpiryDate = dateManipulation.stampToDate(expiryDateWithGrace)
-  
-  salonData.subscriptionPlan = subscription.id
-  await salonData.save()
-  const check = await wallet.findOne({
-    where: {
-      salonDetailId: salonData.id,
-    },
-  })
-  if (!check) {
-    await wallet.create({
-      salonDetailId: salonData.id,
+  try {
+    const userId = req.user.id
+    const { subscriptionId, subscriptionSource = 'stripe' } = req.body
+
+    console.log('\n🎯 Choose Plan API Called')
+    console.log('  User ID:', userId)
+    console.log('  Subscription ID:', subscriptionId)
+    console.log('  Source:', subscriptionSource)
+
+    // Validate input
+    if (!subscriptionId) {
+      return res.json(
+        returnFunction('0', 'Subscription ID is required', {}, '')
+      )
+    }
+
+    // Get salon data
+    let salonData = await salonDetail.findOne({
+      where: { userId },
+      include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
     })
+
+    if (!salonData) {
+      return res.json(
+        returnFunction('0', 'Salon not found for this user', {}, '')
+      )
+    }
+
+    let periodStart
+    let periodEnd
+    let subscriptionPlanId
+    let connectAccount
+
+    // ============================================
+    // Handle based on subscription source
+    // ============================================
+    if (subscriptionSource === 'apple') {
+      console.log('📱 Processing Apple subscription...')
+
+      // Get Apple subscription from database
+      const appleSubscription = await subscriptions.findOne({
+        where: {
+          subscriptionId: subscriptionId,
+          customerId: userId.toString(),
+          subscriptionSource: 'apple',
+        },
+      })
+
+      if (!appleSubscription) {
+        return res.json(
+          returnFunction(
+            '0',
+            'Apple subscription not found. Please verify purchase first.',
+            {},
+            ''
+          )
+        )
+      }
+
+      console.log('  ✅ Apple subscription found')
+      console.log('  Status:', appleSubscription.status)
+      console.log('  Period End:', appleSubscription.periodEnd)
+
+      // Use dates from Apple subscription (grace period already added during verification)
+      periodStart = Math.floor(new Date(appleSubscription.periodStart).getTime() / 1000)
+      periodEnd = Math.floor(new Date(appleSubscription.periodEnd).getTime() / 1000)
+      subscriptionPlanId = appleSubscription.subscriptionId
+
+    } else {
+      console.log('💳 Processing Stripe subscription...')
+
+      // Get Stripe subscription from Stripe API
+      const stripeSubscription = await Stripe.subscriptionsRetrieve(subscriptionId)
+
+      if (!stripeSubscription) {
+        return res.json(
+          returnFunction('0', 'Stripe subscription not found', {}, '')
+        )
+      }
+
+      console.log('  ✅ Stripe subscription found')
+      console.log('  Status:', stripeSubscription.status)
+
+      // Create connect account if needed (Stripe only)
+      if (!salonData.connectAccountId) {
+        console.log('  Creating Stripe Connect account...')
+        connectAccount = await Stripe.createConnectAccount(salonData.user.email)
+        salonData.connectAccountId = connectAccount?.accountId
+        await salonData.save()
+        console.log('  ✅ Connect account created')
+      }
+
+      periodStart = stripeSubscription.current_period_start
+      
+      // Add 5 days grace period for Stripe
+      const expiryDate = new Date(stripeSubscription.current_period_end * 1000)
+      expiryDate.setDate(expiryDate.getDate() + 5)
+      periodEnd = Math.floor(expiryDate.getTime() / 1000)
+      
+      subscriptionPlanId = stripeSubscription.id
+    }
+
+    // ============================================
+    // Common setup for both Stripe and Apple
+    // ============================================
+    console.log('\n🏢 Setting up salon...')
+
+    // Update salon details
+    salonData.approvedByAdmin = true
+    salonData.registrationDate = dateManipulation.stampToDate(periodStart)
+    salonData.registrationExpiryDate = dateManipulation.stampToDate(periodEnd)
+    salonData.subscriptionPlan = subscriptionPlanId
+    await salonData.save()
+
+    console.log('  ✅ Salon details updated')
+    console.log('    - Approved: true')
+    console.log('    - Registration Date:', salonData.registrationDate)
+    console.log('    - Expiry Date:', salonData.registrationExpiryDate)
+
+    // Create wallet if not exists
+    const check = await wallet.findOne({
+      where: {
+        salonDetailId: salonData.id,
+      },
+    })
+    
+    if (!check) {
+      await wallet.create({
+        salonDetailId: salonData.id,
+      })
+      console.log('  ✅ Wallet created')
+    } else {
+      console.log('  ✅ Wallet already exists')
+    }
+
+    // Update salon profile
+    await salonProfiles.update(
+      {
+        hasSubscription: true,
+      },
+      { where: { salonDetailId: salonData.id } }
+    )
+
+    console.log('  ✅ Salon profile updated')
+    console.log('\n✅ Choose Plan Complete!')
+
+    return res.json(
+      returnFunction(
+        '1',
+        'Subscription activated successfully',
+        { 
+          salonData, 
+          onboardingLink: connectAccount?.accountLink?.url,
+          subscriptionSource: subscriptionSource 
+        },
+        '',
+      ),
+    )
+  } catch (error) {
+    console.error('\n❌ Error in choosePlan:', error.message)
+    next(error)
   }
-
-  await salonProfiles.update(
-    {
-      hasSubscription: true,
-    },
-    { where: { salonDetailId: salonData.id } },
-  )
-  // const output = JSON.parse(JSON.stringify(salonData))
-  // subscription.current_period_end
-
-  return res.json(
-    returnFunction(
-      '1',
-      'All Subscription Plans',
-      { salonData, onboardingLink: connectAccount?.accountLink?.url },
-      '',
-    ),
-  )
 }
 /*
             3.Choose SubsCription Plan 
