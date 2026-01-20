@@ -57,6 +57,11 @@ function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
     throw new AppError(`${keyName} private key is not set`, 500);
   }
   
+  console.log(`\n🔑 Parsing ${keyName} Private Key...`);
+  console.log('  - Raw key length:', rawPrivateKey.length);
+  console.log('  - First 50 chars:', rawPrivateKey.substring(0, 50));
+  console.log('  - Last 50 chars:', rawPrivateKey.substring(rawPrivateKey.length - 50));
+  
   let rawKey = rawPrivateKey.trim();
   
   // Remove surrounding quotes
@@ -78,6 +83,9 @@ function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
     .replace(/\n/g, '')
     .trim();
   
+  console.log('  - Base64 content length:', base64Content.length);
+  console.log('  - Base64 preview:', base64Content.substring(0, 50) + '...');
+  
   if (base64Content.length < 100) {
     throw new AppError(`${keyName} private key too short (${base64Content.length} chars)`, 500);
   }
@@ -89,6 +97,8 @@ function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
   }
   
   const privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----`;
+  
+  console.log('  - Rebuilt PEM format (lines):', lines.length);
   
   // Validate with crypto module
   try {
@@ -102,9 +112,18 @@ function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
       throw new AppError(`Wrong key type! Expected 'ec', got '${keyObject.asymmetricKeyType}'`, 500);
     }
     
-    console.log(`  ✅ ${keyName} key validated`);
+    console.log(`  ✅ ${keyName} key validated successfully`);
     return privateKey;
   } catch (cryptoError) {
+    console.error(`\n❌ ${keyName} Key Validation Failed:`);
+    console.error('  Error:', cryptoError.message);
+    console.error('  Generated PEM (first 100 chars):', privateKey.substring(0, 100));
+    console.error('  Generated PEM (last 100 chars):', privateKey.substring(privateKey.length - 100));
+    console.error('\n💡 Troubleshooting:');
+    console.error('  1. Make sure the .env has the CORRECT key content');
+    console.error('  2. Use ONLY the base64 content (no BEGIN/END lines)');
+    console.error('  3. Make sure it\'s the key from the .p8 file for this Key ID');
+    console.error('  4. The key should be ~180 characters long');
     throw new AppError(`Invalid ${keyName} private key: ${cryptoError.message}`, 500);
   }
 }
