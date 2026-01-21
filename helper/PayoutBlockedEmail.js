@@ -192,12 +192,9 @@ module.exports = function (data) {
                                       font-size: 26px;
                                       font-weight: 700;
                                       line-height: 1.3;
-                                      display: flex;
-                                      align-items: center;
                                     "
                                   >
-                                    <span style="font-size: 32px; margin-right: 8px;">⚠️</span>
-                                    Payouts Temporarily Paused
+                                    <span style="font-size: 32px;">⚠️</span> Payouts Temporarily Paused
                                   </h1>
                                 </td>
                               </tr>
