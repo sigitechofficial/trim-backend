@@ -10,7 +10,7 @@ module.exports = function (data) {
   const disabledReason = data.disabledReason || 'Account restrictions'
   const capabilityStatus = data.capabilityStatus || 'inactive'
 
-  const subject = '⚠️ Action Required: Your Payouts Are Temporarily Paused'
+  const subject = 'Payouts Temporarily Paused'
 
   transporter.sendMail(
     {
@@ -41,7 +41,7 @@ module.exports = function (data) {
       body {
         margin: 0;
         padding: 0;
-        font-family: Chivo, sans-serif;
+        font-family: 'Chivo', Arial, sans-serif;
       }
 
       a[x-apple-data-detectors] {
@@ -115,7 +115,7 @@ module.exports = function (data) {
   </head>
   <body
     style="
-      background-color: #fff;
+      background-color: #f5f5f5;
       margin: 0;
       padding: 0;
       -webkit-text-size-adjust: none;
@@ -128,7 +128,7 @@ module.exports = function (data) {
       cellspacing="0"
       class="nl-container"
       role="presentation"
-      style="background-color: #fff; width: 100%"
+      style="background-color: #f5f5f5; width: 100%"
       width="100%"
     >
       <tbody>
@@ -139,7 +139,7 @@ module.exports = function (data) {
               border="0"
               cellpadding="0"
               cellspacing="0"
-              class="row row-2"
+              class="row row-1"
               role="presentation"
               width="100%"
             >
@@ -154,12 +154,13 @@ module.exports = function (data) {
                       class="row-content stack"
                       role="presentation"
                       style="
-                        border-radius: 0;
+                        background-color: #fff;
                         color: #000;
-                        width: 500px;
-                        margin: 0 auto;
+                        width: 600px;
+                        margin: 20px auto;
+                        border-radius: 0;
                       "
-                      width="500"
+                      width="600"
                     >
                       <tbody>
                         <tr>
@@ -168,217 +169,93 @@ module.exports = function (data) {
                             style="
                               font-weight: 400;
                               text-align: left;
-                              padding-bottom: 5px;
-                              padding-top: 5px;
+                              padding: 30px 30px 30px 30px;
                               vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
                             "
                             width="100%"
                           >
-                            <div
-                              class="spacer_block block-1"
-                              style="
-                                height: 10px;
-                                line-height: 80px;
-                                font-size: 1px;
-                              "
-                            >
-                              
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-5"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
-                      style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
-                      "
-                      width="500"
-                    >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
-                            style="
-                              font-weight: 400;
-                              text-align: left;
-                              padding-bottom: 5px;
-                              padding-top: 5px;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
-                            "
-                            width="100%"
-                          >
+                            <!-- Header -->
                             <table
                               border="0"
                               cellpadding="0"
                               cellspacing="0"
-                              class="heading_block block-3"
                               role="presentation"
                               width="100%"
                             >
                               <tr>
-                                <td
-                                  class="pad"
-                                  style="text-align: center; width: 100%; padding: 20px 0;"
-                                >
-                                  <div
+                                <td style="padding-bottom: 20px;">
+                                  <h1
                                     style="
-                                      background-color: #FFC107;
-                                      padding: 20px;
-                                      border-radius: 8px;
-                                      display: inline-block;
-                                      width: 100%;
+                                      margin: 0;
+                                      color: #d32f2f;
+                                      font-family: 'Chivo', Arial, sans-serif;
+                                      font-size: 26px;
+                                      font-weight: 700;
+                                      line-height: 1.3;
+                                      display: flex;
+                                      align-items: center;
                                     "
                                   >
-                                    <h1
-                                      style="
-                                        margin: 0;
-                                        color: #000;
-                                        direction: ltr;
-                                        font-family: Chivo, sans-serif;
-                                        font-size: 24px;
-                                        font-weight: 700;
-                                        letter-spacing: normal;
-                                        text-align: left;
-                                        display: flex;
-                                        align-items: center;
-                                      "
-                                    >
-                                      <span style="font-size: 32px; margin-right: 10px;">⚠️</span>
-                                      Payouts Temporarily Paused
-                                    </h1>
-                                  </div>
+                                    <span style="font-size: 32px; margin-right: 8px;">⚠️</span>
+                                    Payouts Temporarily Paused
+                                  </h1>
                                 </td>
                               </tr>
                             </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
 
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-6"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
-                      style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
-                      "
-                      width="500"
-                    >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
-                            style="
-                              font-weight: 400;
-                              text-align: left;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
-                            "
-                            width="100%"
-                          >
+                            <!-- Content -->
                             <table
                               border="0"
                               cellpadding="0"
                               cellspacing="0"
-                              class="paragraph_block block-1"
                               role="presentation"
                               style="word-break: break-word"
                               width="100%"
                             >
                               <tr>
-                                <td class="">
+                                <td>
                                   <div
                                     style="
                                       color: #333;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 15px;
+                                      font-family: 'Chivo', Arial, sans-serif;
+                                      font-size: 14px;
                                       font-weight: 400;
-                                      letter-spacing: 0px;
                                       line-height: 1.6;
                                       text-align: left;
                                     "
                                   >
-                                    <p style="margin: 0; margin-bottom: 20px;">Dear ${ownerName},</p>
-                                    <p style="margin: 0; margin-bottom: 15px;">
-                                      <strong>Important Notice:</strong> We have detected that <strong>payouts</strong> for <strong>${salonName}</strong> have been temporarily <strong>paused by Stripe</strong>.
+                                    <p style="margin: 0 0 16px 0;">Dear ${ownerName},</p>
+                                    
+                                    <p style="margin: 0 0 16px 0;">
+                                      <strong>Important Notice:</strong> We have detected that payouts for <strong>${salonName}</strong> have been temporarily <strong>paused by Stripe</strong>
                                     </p>
-                                    <p style="margin: 0; margin-bottom: 10px;"><strong>Stripe may have paused this due to:</strong></p>
-                                    <ul style="margin: 0 0 20px 0; padding-left: 25px; line-height: 1.8;">
-                                      <li style="margin-bottom: 5px;">Missing or incomplete account information; or</li>
-                                      <li style="margin-bottom: 5px;">Verification requirements that need to be completed</li>
+                                    
+                                    <p style="margin: 0 0 8px 0;"><strong>Stripe may have paused this due to:</strong></p>
+                                    <ul style="margin: 0 0 16px 0; padding-left: 20px;">
+                                      <li style="margin-bottom: 4px;">Missing or incomplete account information, or</li>
+                                      <li style="margin-bottom: 4px;">Verification requirements that need to be completed</li>
                                     </ul>
-                                    <p style="margin: 0; margin-bottom: 10px;"><strong>What you need to do:</strong></p>
-                                    <ol style="margin: 0 0 20px 0; padding-left: 25px; line-height: 1.8;">
-                                      <li style="margin-bottom: 5px;">Log in to your Stripe Dashboard</li>
-                                      <li style="margin-bottom: 5px;">Check for any pending requirements or notifications</li>
-                                      <li style="margin-bottom: 5px;">Complete any missing information or verification steps</li>
-                                      <li style="margin-bottom: 5px;">Contact Stripe support if you need assistance</li>
+                                    
+                                    <p style="margin: 0 0 8px 0;"><strong>What you need to do:</strong></p>
+                                    <ol style="margin: 0 0 16px 0; padding-left: 20px;">
+                                      <li style="margin-bottom: 4px;">Log in to your Stripe Dashboard</li>
+                                      <li style="margin-bottom: 4px;">Check for any pending requirements or notifications</li>
+                                      <li style="margin-bottom: 4px;">Complete any missing information or verification steps</li>
+                                      <li style="margin-bottom: 4px;">Contact Stripe support if you need assistance</li>
                                     </ol>
-                                    <p style="margin: 0; margin-bottom: 15px;">If you have any further questions, the Stripe team will be able to support.</p>
-                                    <p style="margin: 0; margin-bottom: 15px;">Once you've resolved the issues, <strong>payouts</strong> will be automatically resumed.</p>
-                                    <p style="margin: 0; margin-bottom: 5px;">Many thanks,</p>
-                                    <p style="margin: 0; margin-bottom: 20px;">The team @Trim</p>
-                                    <p style="margin: 0; font-size: 13px; color: #666;">Unsure about how to use Trim, look up our <a href="https://trim.app/faqs" style="color: #007bff; text-decoration: none;">FAQs</a>.</p>
+                                    
+                                    <p style="margin: 0 0 16px 0;">If you have any further questions, the Stripe team will be able to support.</p>
+                                    
+                                    <p style="margin: 0 0 16px 0;">Once you've resolved the issues, payouts will be automatically resumed.</p>
+                                    
+                                    <p style="margin: 0 0 4px 0;">Many thanks,</p>
+                                    <p style="margin: 0 0 20px 0;">The team @Trim</p>
+                                    
+                                    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+                                    
+                                    <p style="margin: 0; font-size: 13px; color: #666;">
+                                      Unsure about how to use Trim, look up our <a href="https://trim.app/faqs" style="color: #1a73e8; text-decoration: none;">FAQs</a>.
+                                    </p>
                                   </div>
                                 </td>
                               </tr>
@@ -401,4 +278,5 @@ module.exports = function (data) {
     },
   )
 }
+
 
