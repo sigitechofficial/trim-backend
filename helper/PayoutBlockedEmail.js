@@ -3,12 +3,15 @@ dotenv.config({ path: '../.env' })
 
 const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
+const { attachments } = require('./attactments')
 
 module.exports = function (data) {
   const salonName = data.salonName || 'Your Salon'
   const ownerName = `${data.firstName} ${data.lastName}`
   const disabledReason = data.disabledReason || 'Account restrictions'
   const capabilityStatus = data.capabilityStatus || 'inactive'
+  
+  const attachment = attachments()
 
   const subject = 'Payouts Temporarily Paused'
 
@@ -17,6 +20,7 @@ module.exports = function (data) {
       from: process.env.EMAIL_USERNAME, // sender address
       to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'], // list of receivers
       subject: subject, // Subject line
+      attachments: attachment.footer, // Footer images (social media icons and logo)
       html: `<!DOCTYPE html>
 <html
   lang="en"
