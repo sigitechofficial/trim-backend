@@ -255,24 +255,35 @@ module.exports = function (data) {
                               <tr>
                                 <td
                                   class="pad"
-                                  style="text-align: center; width: 100%"
+                                  style="text-align: center; width: 100%; padding: 20px 0;"
                                 >
-                                  <h1
+                                  <div
                                     style="
-                                      margin: 0;
-                                      color: #d32f2f;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 30px;
-                                      font-weight: 700;
-                                      letter-spacing: normal;
-                                      text-align: left;
-                                      margin-top: 0;
-                                      margin-bottom: 0;
+                                      background-color: #FFC107;
+                                      padding: 20px;
+                                      border-radius: 8px;
+                                      display: inline-block;
+                                      width: 100%;
                                     "
                                   >
-                                    ⚠️ Payouts Temporarily Paused
-                                  </h1>
+                                    <h1
+                                      style="
+                                        margin: 0;
+                                        color: #000;
+                                        direction: ltr;
+                                        font-family: Chivo, sans-serif;
+                                        font-size: 24px;
+                                        font-weight: 700;
+                                        letter-spacing: normal;
+                                        text-align: left;
+                                        display: flex;
+                                        align-items: center;
+                                      "
+                                    >
+                                      <span style="font-size: 32px; margin-right: 10px;">⚠️</span>
+                                      Payouts Temporarily Paused
+                                    </h1>
+                                  </div>
                                 </td>
                               </tr>
                             </table>
@@ -340,35 +351,37 @@ module.exports = function (data) {
                                 <td class="">
                                   <div
                                     style="
-                                      color: #000;
+                                      color: #333;
                                       direction: ltr;
                                       font-family: Chivo, sans-serif;
-                                      font-size: 16px;
+                                      font-size: 15px;
                                       font-weight: 400;
                                       letter-spacing: 0px;
+                                      line-height: 1.6;
                                       text-align: left;
                                     "
                                   >
-                                    <p style="margin: 0">Dear ${ownerName},</p>
-                                    <p style="margin: 20px 0 0 0">
-                                      <strong>Important Notice:</strong> We have detected that payouts for <strong>${salonName}</strong> have been temporarily paused by Stripe.
+                                    <p style="margin: 0; margin-bottom: 20px;">Dear ${ownerName},</p>
+                                    <p style="margin: 0; margin-bottom: 15px;">
+                                      <strong>Important Notice:</strong> We have detected that <strong>payouts</strong> for <strong>${salonName}</strong> have been temporarily <strong>paused by Stripe</strong>.
                                     </p>
-                                    <p style="margin: 20px 0 0 0">This may be due to:</p>
-                                    <ul style="margin: 10px 0; padding-left: 20px;">
-                                      <li>Missing or incomplete account information</li>
-                                      <li>Verification requirements that need to be completed</li>
-                                      <li>Account restrictions: ${disabledReason}</li>
+                                    <p style="margin: 0; margin-bottom: 10px;"><strong>Stripe may have paused this due to:</strong></p>
+                                    <ul style="margin: 0 0 20px 0; padding-left: 25px; line-height: 1.8;">
+                                      <li style="margin-bottom: 5px;">Missing or incomplete account information; or</li>
+                                      <li style="margin-bottom: 5px;">Verification requirements that need to be completed</li>
                                     </ul>
-                                    <p style="margin: 20px 0 0 0"><strong>What you need to do:</strong></p>
-                                    <ol style="margin: 10px 0; padding-left: 20px;">
-                                      <li>Log in to your Stripe Dashboard</li>
-                                      <li>Check for any pending requirements or notifications</li>
-                                      <li>Complete any missing information or verification steps</li>
-                                      <li>Contact Stripe support if you need assistance</li>
+                                    <p style="margin: 0; margin-bottom: 10px;"><strong>What you need to do:</strong></p>
+                                    <ol style="margin: 0 0 20px 0; padding-left: 25px; line-height: 1.8;">
+                                      <li style="margin-bottom: 5px;">Log in to your Stripe Dashboard</li>
+                                      <li style="margin-bottom: 5px;">Check for any pending requirements or notifications</li>
+                                      <li style="margin-bottom: 5px;">Complete any missing information or verification steps</li>
+                                      <li style="margin-bottom: 5px;">Contact Stripe support if you need assistance</li>
                                     </ol>
-                                    <p style="margin: 20px 0 0 0">Once you've resolved the issues, payouts will be automatically resumed.</p>
-                                    <p style="margin: 20px 0 0 0">If you have any questions, please don't hesitate to contact our support team.</p>
-                                    <p style="margin: 20px 0 0 0">Best regards,<br />The Trim Team</p>
+                                    <p style="margin: 0; margin-bottom: 15px;">If you have any further questions, the Stripe team will be able to support.</p>
+                                    <p style="margin: 0; margin-bottom: 15px;">Once you've resolved the issues, <strong>payouts</strong> will be automatically resumed.</p>
+                                    <p style="margin: 0; margin-bottom: 5px;">Many thanks,</p>
+                                    <p style="margin: 0; margin-bottom: 20px;">The team @Trim</p>
+                                    <p style="margin: 0; font-size: 13px; color: #666;">Unsure about how to use Trim, look up our <a href="https://trim.app/faqs" style="color: #007bff; text-decoration: none;">FAQs</a>.</p>
                                   </div>
                                 </td>
                               </tr>
