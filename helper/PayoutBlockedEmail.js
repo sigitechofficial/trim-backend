@@ -247,12 +247,6 @@ module.exports = function (data) {
                                     
                                     <p style="margin: 0 0 4px 0;">Many thanks,</p>
                                     <p style="margin: 0 0 20px 0;">The team @Trim</p>
-                                    
-                                    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
-                                    
-                                    <p style="margin: 0; font-size: 13px; color: #666;">
-                                      Unsure about how to use Trim, look up our <a href="https://trim.app/faqs" style="color: #1a73e8; text-decoration: none;">FAQs</a>.
-                                    </p>
                                   </div>
                                 </td>
                               </tr>
