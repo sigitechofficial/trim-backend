@@ -271,6 +271,13 @@ module.exports = function (data) {
   </body>
 </html>`,
     },
+    function (error, info) {
+      if (error) {
+        console.log('❌ PayoutBlockedEmail Error:', error)
+      } else {
+        console.log('✅ PayoutBlockedEmail sent successfully:', info.response)
+      }
+    }
   )
 }
 
