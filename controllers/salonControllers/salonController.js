@@ -1763,17 +1763,47 @@ exports.customerSubscription = async (req, res, next) => {
     }
 
     // ============================================
-    // Add metadata (common for both)
+    // Add metadata (fetch from subscriptions table)
     // ============================================
-    if (salonData.metadata) {
-      customerSubscription.metaData = JSON.parse(salonData.metadata);
+    
+    // Fetch the latest subscription record
+    const subscriptionRecord = await subscriptions.findOne({
+      where: { salonDetailId: salonData.id },
+      order: [['createdAt', 'DESC']],
+      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource'],
+    });
+
+    if (subscriptionRecord) {
+      // Extract member count from subscription name
+      const extractMemberCount = (name) => {
+        if (!name) return 1;
+        const nameLower = name.toLowerCase();
+        if (nameLower.includes('one_staff')) return 2;
+        if (nameLower.includes('two_staff')) return 3;
+        if (nameLower.includes('three_staff')) return 4;
+        if (nameLower.includes('four_staff')) return 5;
+        if (nameLower.includes('five_staff')) return 6;
+        return 1;
+      };
+
+      const memberCount = extractMemberCount(subscriptionRecord.name);
+
+      customerSubscription.metaData = {
+        freeTrialDays: salonData.hasObtainedFreeTrial ? 0 : 7,
+        members: memberCount,
+        membersCount: memberCount,
+        paymentMethodId: subscriptionRecord.subscriptionSource === 'apple' ? 'apple_pay' : '',
+        sloanId: salonData.id.toString(),
+        subscriptionName: subscriptionRecord.name || subscriptionRecord.priceId,
+      };
     } else {
+      // Fallback if no subscription found
       customerSubscription.metaData = {
         freeTrialDays: '',
-        members: '',
+        members: 1,
         membersCount: 1,
         paymentMethodId: '',
-        sloanId: '',
+        sloanId: salonData.id.toString(),
         subscriptionName: '',
       };
     }
