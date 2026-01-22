@@ -1125,3 +1125,8 @@ exports.testAppleCredentials = async (req, res, next) => {
   }
 };
 
+// Export helper functions for use in other controllers
+module.exports.generateAppStoreServerJWT = generateAppStoreServerJWT;
+module.exports.generateAppStoreConnectJWT = generateAppStoreConnectJWT;
+module.exports.parseApplePrivateKey = parseApplePrivateKey;
+
