@@ -1788,6 +1788,9 @@ exports.customerSubscription = async (req, res, next) => {
 
       const memberCount = extractMemberCount(subscriptionRecord.name);
 
+      // Update price from subscription record
+      customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
+
       customerSubscription.metaData = {
         freeTrialDays: salonData.hasObtainedFreeTrial ? 0 : 7,
         members: memberCount,
