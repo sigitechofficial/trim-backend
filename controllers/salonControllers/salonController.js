@@ -1691,7 +1691,24 @@ exports.customerSubscription = async (req, res, next) => {
           5: 'revoked',
         };
         
-        const appleStatus = statusMap[lastTransaction.status] || 'unknown';
+        let appleStatus = statusMap[lastTransaction.status] || 'unknown';
+        
+        // Smart status check: Verify against actual expiry date
+        const appleExpiryDate = new Date(transactionInfo.expiresDate);
+        const now = new Date();
+        
+        // If Apple says expired but date hasn't passed, check if it's really expired
+        if (appleStatus === 'expired' && appleExpiryDate > now) {
+          // Still within valid period - check auto-renew status
+          if (renewalInfo.autoRenewStatus === 0) {
+            // User canceled, but still valid until expiry
+            appleStatus = 'canceled'; // Will expire but still active
+          } else {
+            // Should still be active
+            appleStatus = 'active';
+          }
+          console.log('⚠️ Apple status corrected from expired to:', appleStatus);
+        }
         
         // Transform Apple response to match Stripe format
         customerSubscription = {
@@ -1712,6 +1729,7 @@ exports.customerSubscription = async (req, res, next) => {
           environment: transactionInfo.environment,
           originalTransactionId: transactionInfo.originalTransactionId,
           productId: transactionInfo.productId,
+          appleRawStatus: lastTransaction.status, // Keep original for debugging
         };
         
         console.log('✅ Apple subscription retrieved');
