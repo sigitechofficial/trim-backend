@@ -63,16 +63,164 @@ exports.handleAppleWebhook = async (req, res) => {
                         Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : 
                         req.body;
     
-    console.log('📱 Notification Type:', notification.notification_type || notification.notificationType);
     console.log('📱 Full Payload:', JSON.stringify(notification, null, 2));
     
-    // Extract notification data
+    // ============================================
+    // STEP 3: Detect V1 vs V2 Format
+    // ============================================
+    const isV2 = notification.signedPayload || notification.notificationType;
+    
+    if (isV2) {
+      console.log('📱 Detected V2 Notification Format');
+      return await handleV2Webhook(notification, res);
+    } else {
+      console.log('📱 Detected V1 Notification Format');
+      return await handleV1Webhook(notification, res);
+    }
+  } catch (error) {
+    console.error('❌ Error handling Apple webhook:', error);
+    // Always return 200 to Apple to prevent retries
+    return res.status(200).json({ received: true, error: error.message });
+  }
+};
+
+// ============================================
+// V2 Webhook Handler (JWT-based)
+// ============================================
+async function handleV2Webhook(notification, res) {
+  try {
+    const notificationType = notification.notificationType;
+    const subtype = notification.subtype;
+    
+    console.log('📱 Notification Type:', notificationType);
+    console.log('📱 Subtype:', subtype);
+    
+    // Extract transaction info from JWT (simplified - in production you should verify JWT)
+    const transactionJWT = notification.data?.signedTransactionInfo;
+    const renewalJWT = notification.data?.signedRenewalInfo;
+    
+    if (!transactionJWT) {
+      console.warn('⚠️ No transaction info in V2 notification');
+      return res.status(200).json({ received: true });
+    }
+    
+    // Decode JWT (base64 decode the payload part)
+    // JWT format: header.payload.signature
+    const transactionPayload = JSON.parse(
+      Buffer.from(transactionJWT.split('.')[1], 'base64').toString()
+    );
+    
+    console.log('📱 Transaction Info:', transactionPayload);
+    
+    const originalTransactionId = transactionPayload.originalTransactionId;
+    const transactionId = transactionPayload.transactionId;
+    const productId = transactionPayload.productId;
+    const purchaseDate = new Date(transactionPayload.purchaseDate);
+    const expiresDate = new Date(transactionPayload.expiresDate);
+    const environment = notification.data?.environment || 'Sandbox';
+    
+    // Find user by original transaction ID
+    const salonUser = await user.findOne({
+      where: { appleOriginalTransactionId: originalTransactionId },
+    });
+    
+    if (!salonUser) {
+      console.warn(`⚠️ User not found for Apple transaction: ${originalTransactionId}`);
+      return res.status(200).json({ received: true });
+    }
+    
+    const salon = await salonDetail.findOne({
+      where: { userId: salonUser.id },
+    });
+    
+    if (!salon) {
+      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      return res.status(200).json({ received: true });
+    }
+    
+    // Map V2 notification types to actions
+    const transactionData = {
+      original_transaction_id: originalTransactionId,
+      transaction_id: transactionId,
+      product_id: productId,
+      purchase_date_ms: transactionPayload.purchaseDate,
+      expires_date_ms: transactionPayload.expiresDate,
+      price: transactionPayload.price || 0,
+      currency: transactionPayload.currency || 'USD',
+    };
+    
+    // Handle different V2 notification types
+    switch (notificationType) {
+      case 'SUBSCRIBED':
+        if (subtype === 'INITIAL_BUY') {
+          await handleInitialBuy(transactionData, salonUser, salon);
+        }
+        break;
+        
+      case 'DID_RENEW':
+      case 'RENEWAL':
+        await handleRenewal(transactionData, salonUser, salon);
+        break;
+        
+      case 'DID_FAIL_TO_RENEW':
+      case 'EXPIRED':
+        if (subtype === 'BILLING_RETRY' || notificationType === 'DID_FAIL_TO_RENEW') {
+          await handleRenewalFailure(transactionData, salonUser, salon);
+        } else {
+          await handleGracePeriodExpired(transactionData, salonUser, salon);
+        }
+        break;
+        
+      case 'DID_CHANGE_RENEWAL_STATUS':
+        if (subtype === 'AUTO_RENEW_DISABLED') {
+          await handleCancellation(transactionData, salonUser, salon);
+        }
+        break;
+        
+      case 'REFUND':
+        await handleRefund(transactionData, salonUser, salon);
+        break;
+        
+      case 'GRACE_PERIOD_EXPIRED':
+        await handleGracePeriodExpired(transactionData, salonUser, salon);
+        break;
+        
+      case 'PRICE_INCREASE':
+        await handlePriceIncrease(transactionData, salonUser, salon);
+        break;
+        
+      case 'RENEWAL_EXTENDED':
+        await handleRenewalExtended(transactionData, salonUser, salon);
+        break;
+        
+      case 'TEST':
+        console.log('✅ Test notification received');
+        break;
+        
+      default:
+        console.log(`ℹ️ Unhandled V2 notification type: ${notificationType} (${subtype})`);
+    }
+    
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('❌ Error handling V2 webhook:', error);
+    return res.status(200).json({ received: true, error: error.message });
+  }
+}
+
+// ============================================
+// V1 Webhook Handler (Legacy)
+// ============================================
+async function handleV1Webhook(notification, res) {
+  try {
     const notificationType = notification.notification_type;
+    console.log('📱 Notification Type:', notificationType);
+    
     const unifiedReceipt = notification.unified_receipt;
     const latestReceiptInfo = unifiedReceipt?.latest_receipt_info || [];
     
     if (latestReceiptInfo.length === 0) {
-      console.warn('No receipt info in notification');
+      console.warn('⚠️ No receipt info in V1 notification');
       return res.status(200).json({ received: true });
     }
     
@@ -87,7 +235,7 @@ exports.handleAppleWebhook = async (req, res) => {
     });
     
     if (!salonUser) {
-      console.warn(`User not found for Apple transaction: ${originalTransactionId}`);
+      console.warn(`⚠️ User not found for Apple transaction: ${originalTransactionId}`);
       return res.status(200).json({ received: true });
     }
     
@@ -96,11 +244,11 @@ exports.handleAppleWebhook = async (req, res) => {
     });
     
     if (!salon) {
-      console.warn(`Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
       return res.status(200).json({ received: true });
     }
     
-    // Handle different notification types
+    // Handle different V1 notification types
     switch (notificationType) {
       case 'INITIAL_BUY':
         await handleInitialBuy(latestTransaction, salonUser, salon);
@@ -135,16 +283,15 @@ exports.handleAppleWebhook = async (req, res) => {
         break;
         
       default:
-        console.log(`Unhandled notification type: ${notificationType}`);
+        console.log(`ℹ️ Unhandled V1 notification type: ${notificationType}`);
     }
     
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('❌ Error handling Apple webhook:', error);
-    // Always return 200 to Apple to prevent retries
+    console.error('❌ Error handling V1 webhook:', error);
     return res.status(200).json({ received: true, error: error.message });
   }
-};
+}
 
 async function handleInitialBuy(transaction, salonUser, salon) {
   console.log('🆕 Handling INITIAL_BUY');
