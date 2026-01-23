@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const AppError = require('../../utils/appError');
 const { user, subscriptions, salonDetail } = require('../../models');
 const { Op } = require('sequelize');
@@ -8,10 +9,62 @@ const { Op } = require('sequelize');
  */
 exports.handleAppleWebhook = async (req, res) => {
   try {
-    // Apple sends notifications as JSON
-    const notification = req.body;
+    console.log('📱 Apple Webhook Received');
     
-    console.log('📱 Apple Webhook Received:', JSON.stringify(notification, null, 2));
+    // ============================================
+    // STEP 1: Verify Webhook Signature (SECURITY)
+    // ============================================
+    const appleSecret = process.env.APPLE_WEBHOOK_SECRET;
+    
+    if (!appleSecret) {
+      console.error('❌ APPLE_WEBHOOK_SECRET not configured in .env file');
+      return res.status(500).json({ 
+        received: false, 
+        error: 'Webhook secret not configured' 
+      });
+    }
+    
+    // Apple sends signature in x-apple-signature header (V1) or x-apple-signature-v2 (V2)
+    const receivedSignature = req.headers['x-apple-signature'] || req.headers['x-apple-signature-v2'];
+    
+    if (receivedSignature && process.env.NODE_ENV === 'test') {
+      // Get raw body (should be Buffer from bodyParser.raw)
+      const rawBody = req.body;
+      
+      // Calculate expected signature
+      const expectedSignature = crypto
+        .createHmac('sha256', appleSecret)
+        .update(rawBody)
+        .digest('base64');
+      
+      // Verify signature
+      if (receivedSignature !== expectedSignature) {
+        console.error('❌ Invalid webhook signature - possible fake webhook!');
+        console.log('Received:', receivedSignature);
+        console.log('Expected:', expectedSignature);
+        return res.status(401).json({ 
+          received: false, 
+          error: 'Invalid signature' 
+        });
+      }
+      
+      console.log('✅ Webhook signature verified');
+    } else if (process.env.NODE_ENV === 'test') {
+      console.warn('⚠️ No signature provided in production!');
+    } else {
+      console.log('🔓 Skipping signature verification (dev/staging mode)');
+    }
+    
+    // ============================================
+    // STEP 2: Parse Notification
+    // ============================================
+    // Parse JSON if it's a Buffer (from raw body parser)
+    const notification = typeof req.body === 'string' ? JSON.parse(req.body) : 
+                        Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : 
+                        req.body;
+    
+    console.log('📱 Notification Type:', notification.notification_type || notification.notificationType);
+    console.log('📱 Full Payload:', JSON.stringify(notification, null, 2));
     
     // Extract notification data
     const notificationType = notification.notification_type;
