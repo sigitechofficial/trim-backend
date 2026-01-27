@@ -92,15 +92,32 @@ exports.handleAppleWebhook = async (req, res) => {
 // ============================================
 async function handleV2Webhook(notification, res) {
   try {
-    const notificationType = notification.notificationType;
-    const subtype = notification.subtype;
+    // First, decode the signedPayload JWT to get the actual notification data
+    const signedPayload = notification.signedPayload;
+    
+    if (!signedPayload) {
+      console.warn('⚠️ No signedPayload in V2 notification');
+      return res.status(200).json({ received: true });
+    }
+    
+    // Decode the JWT (base64 decode the payload part)
+    // JWT format: header.payload.signature
+    const payloadData = JSON.parse(
+      Buffer.from(signedPayload.split('.')[1], 'base64').toString()
+    );
+    
+    console.log('📱 Decoded Payload:', JSON.stringify(payloadData, null, 2));
+    
+    const notificationType = payloadData.notificationType;
+    const subtype = payloadData.subtype;
+    const data = payloadData.data;
     
     console.log('📱 Notification Type:', notificationType);
     console.log('📱 Subtype:', subtype);
     
     // Extract transaction info from JWT (simplified - in production you should verify JWT)
-    const transactionJWT = notification.data?.signedTransactionInfo;
-    const renewalJWT = notification.data?.signedRenewalInfo;
+    const transactionJWT = data?.signedTransactionInfo;
+    const renewalJWT = data?.signedRenewalInfo;
     
     if (!transactionJWT) {
       console.warn('⚠️ No transaction info in V2 notification');
@@ -120,7 +137,7 @@ async function handleV2Webhook(notification, res) {
     const productId = transactionPayload.productId;
     const purchaseDate = new Date(transactionPayload.purchaseDate);
     const expiresDate = new Date(transactionPayload.expiresDate);
-    const environment = notification.data?.environment || 'Sandbox';
+    const environment = data?.environment || 'Sandbox';
     
     // Find user by original transaction ID
     const salonUser = await user.findOne({
