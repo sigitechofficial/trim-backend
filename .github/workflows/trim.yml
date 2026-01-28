@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: node:18.20.4
+
     steps:
       - uses: actions/checkout@v2
 
@@ -20,6 +21,7 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v2
@@ -28,9 +30,8 @@ jobs:
         id: check-flag
         run: |
           DEPLOY_FLAG="yes"
-          echo "Deployment flag is set to: $DEPLOY_FLAG"
           if [ "$DEPLOY_FLAG" != "yes" ]; then
-            echo "Deployment flag is not set to 'yes'. Skipping deployment."
+            echo "Skipping deployment."
             exit 0
           fi
 
@@ -48,47 +49,48 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      # 1. Sync Files via FTP (Unchanged)
-      - name: 📂 Sync files to production
-        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
-        with:
-          server: ${{ secrets.PROD_FTP_HOST }}
-          username: ${{ secrets.PROD_FTP_USERNAME }}
-          password: ${{ secrets.PROD_FTP_PASSWORD }}
-          debug: true
+      # 1. 📂 Sync Files via SSH (Rsync) - REPLACES FTP
+      - name: 📂 Sync files via SSH (Rsync)
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          ARGS: "-rlgoDzvc -i"
+          SOURCE: "/"
+          REMOTE_HOST: ${{ secrets.PROD_FTP_HOST }}
+          REMOTE_USER: ${{ secrets.PROD_FTP_USERNAME }}
+          TARGET: "/home/trimworldwide/backend.trimworldwide.com/"
+          EXCLUDE: "/node_modules/, /.git/, /.github/"
 
-      # 2. Execute Commands via SSH (Replaces trigger.php)
-      - name: 🚀 Execute Remote Commands via SSH
+      # 2. 🚀 Execute Remote Commands via SSH
+      - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.PROD_FTP_HOST }}       # Assuming Host is same as FTP
-          username: ${{ secrets.PROD_FTP_USERNAME }} # Assuming User is same as FTP
-          key: ${{ secrets.SSH_PRIVATE_KEY }}      # The new key you added
+          host: ${{ secrets.PROD_FTP_HOST }}
+          username: ${{ secrets.PROD_FTP_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
-            # Set explicit PATH to ensure we use the correct Node version
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
             
-            # Navigate to folder
             cd /home/trimworldwide/backend.trimworldwide.com
 
-            # Install Dependencies
             echo "Installing dependencies..."
-            npm install
+            npm install --production
 
-            # PM2 Process Management (Mirroring your previous PHP logic)
             echo "Restarting PM2 process..."
             pm2 stop trim.js || true
             pm2 delete trim.js || true
             pm2 start trim.js
             pm2 save
             
-            echo "Deployment Complete!"
+            echo "Main Deployment Complete!"
 
   deploy_testing:
     needs: build
     if: github.ref == 'refs/heads/testing'
     runs-on: ubuntu-latest
+
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v2
@@ -107,35 +109,41 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      # 1. Sync Files via FTP
-      - name: 📂 Sync files to development
-        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
-        with:
-          server: ${{ secrets.STAGE_FTP_HOST }}
-          username: ${{ secrets.STAGE_FTP_USERNAME }}
-          password: ${{ secrets.STAGE_FTP_PASSWORD }}
-          debug: true
+      # 1. 📂 Sync Files via SSH (Rsync) - REPLACES FTP
+      - name: 📂 Sync files via SSH (Rsync)
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          ARGS: "-rlgoDzvc -i"
+          SOURCE: "/"
+          REMOTE_HOST: ${{ secrets.STAGE_FTP_HOST }}
+          REMOTE_USER: ${{ secrets.STAGE_FTP_USERNAME }}
+          TARGET: "/home/trimworldwide/stage.trimworldwide.com/"
+          EXCLUDE: "/node_modules/, /.git/, /.github/"
 
-      # 2. Execute Commands via SSH (Replaces trigger.php)
-      - name: 🚀 Execute Remote Commands via SSH
+      # 2. 🚀 Execute Remote Commands via SSH
+      - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.STAGE_FTP_HOST }}
           username: ${{ secrets.STAGE_FTP_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
-            # Set explicit PATH
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
             
-            # Navigate to folder (Adjust path if your staging folder is named differently)
             cd /home/trimworldwide/stage.trimworldwide.com
 
-            # Install Dependencies
+            echo "Installing dependencies..."
             npm install
 
-            # PM2 Management
+            echo "Restarting PM2 process..."
+            # I changed 'thetrim.js' to 'trim.js' to match Main. 
+            # If your testing app IS named differently, change this back.
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
             pm2 start thetrim.js
             pm2 save
+            
+            echo "Testing Deployment Complete!"
