@@ -38,13 +38,10 @@ jobs:
       - name: Create .env file dynamically
         run: echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
 
-      # --- FIXED STEP: Uses 'cat' for formatting and saves as .js ---
       - name: Create config folder and files
         run: |
           mkdir -p config
-          cat <<EOF > config/config.js
-          ${{ secrets.CONFIG_JSON_CONTENT }}
-          EOF
+          echo "${{ secrets.CONFIG_JS_CONTENT }}" > config/config.js
 
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
@@ -107,13 +104,10 @@ jobs:
       - name: Create .env file dynamically
         run: echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
 
-      # --- FIXED STEP for Testing as well ---
       - name: Create config folder and files
         run: |
           mkdir -p config
-          cat <<EOF > config/config.js
-          ${{ secrets.CONFIG_JSON_CONTENT }}
-          EOF
+          echo "${{ secrets.CONFIG_JS_CONTENT }}" > config/config.js
 
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
