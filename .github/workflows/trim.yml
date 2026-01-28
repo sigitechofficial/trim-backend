@@ -41,7 +41,7 @@ jobs:
       - name: Create config folder and files
         run: |
           mkdir -p config
-          echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+          echo "${{ secrets.CONFIG_JS_CONTENT }}" > config/config.js
 
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
@@ -107,7 +107,7 @@ jobs:
       - name: Create config folder and files
         run: |
           mkdir -p config
-          echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+          echo "${{ secrets.CONFIG_JS_CONTENT }}" > config/config.js
 
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
