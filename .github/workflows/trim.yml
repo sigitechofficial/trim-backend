@@ -49,7 +49,7 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      # 1. 📂 Sync Files via SSH (Safe Sync - No Delete)
       - name: 📂 Sync files via SSH (Manual)
         run: |
           mkdir -p ~/.ssh
@@ -57,12 +57,10 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.PROD_FTP_HOST }} >> ~/.ssh/known_hosts
 
-          echo "Starting Smart Sync..."
-          # ADDED '-c' flag here
-          # -c : Check file contents (Checksum), ignore timestamp
-          rsync -avzc --delete \
+          echo "Starting Safe Sync..."
+          rsync -avzc \
           --exclude 'node_modules' \
-          --exclude 'Public' \
+          --exclude 'public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
@@ -80,7 +78,9 @@ jobs:
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
+            
             cd /home/trimworldwide/backend.trimworldwide.com
+
             echo "Checking dependencies..."
             npm install --prefer-offline --no-audit
 
@@ -115,7 +115,7 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      # 1. 📂 Sync Files via SSH (Safe Sync - No Delete)
       - name: 📂 Sync files via SSH (Manual)
         run: |
           mkdir -p ~/.ssh
@@ -123,11 +123,10 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.STAGE_FTP_HOST }} >> ~/.ssh/known_hosts
 
-          echo "Starting Smart Sync..."
-          # ADDED '-c' flag here for Testing as well
-          rsync -avzc --delete \
+          echo "Starting Safe Sync..."
+          rsync -avzc \
           --exclude 'node_modules' \
-          --exclude 'Public' \
+          --exclude 'public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
@@ -145,9 +144,12 @@ jobs:
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
+            
             cd /home/trimworldwide/stage.trimworldwide.com
+
             echo "Checking dependencies..."
             npm install --prefer-offline --no-audit
+
             echo "Restarting PM2 process..."
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
