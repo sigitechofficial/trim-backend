@@ -19,7 +19,7 @@ module.exports = function (data) {
       from: process.env.EMAIL_USERNAME, // sender address
       to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'], // list of receivers
       subject: subject, // Subject line
-      attachments: attachment.footer.concat(attachment.trim),
+      attachments: attachment.footer, // Only social media icons (no Trim logo)
       html: `<!DOCTYPE html>
 <html
   lang="en"
@@ -351,13 +351,12 @@ module.exports = function (data) {
                                   >
                                     <p style="margin: 0">Dear ${ownerName},</p>
                                     <p style="margin: 20px 0 0 0">
-                                      <strong>Important Notice:</strong> We have detected that payouts for <strong>${salonName}</strong> have been temporarily paused by Stripe.
+                                      <strong>Important Notice:</strong> We have detected that payouts for <strong>${salonName}</strong> have been temporarily <strong>paused by Stripe</strong>.
                                     </p>
-                                    <p style="margin: 20px 0 0 0">This may be due to:</p>
+                                    <p style="margin: 20px 0 0 0"><strong>Stripe may have paused this due to:</strong></p>
                                     <ul style="margin: 10px 0; padding-left: 20px;">
-                                      <li>Missing or incomplete account information</li>
+                                      <li>Missing or incomplete account information; or</li>
                                       <li>Verification requirements that need to be completed</li>
-                                      <li>Account restrictions: ${disabledReason}</li>
                                     </ul>
                                     <p style="margin: 20px 0 0 0"><strong>What you need to do:</strong></p>
                                     <ol style="margin: 10px 0; padding-left: 20px;">
@@ -366,9 +365,10 @@ module.exports = function (data) {
                                       <li>Complete any missing information or verification steps</li>
                                       <li>Contact Stripe support if you need assistance</li>
                                     </ol>
+                                    <p style="margin: 20px 0 0 0">If you have any further questions, the Stripe team will be able to support.</p>
                                     <p style="margin: 20px 0 0 0">Once you've resolved the issues, payouts will be automatically resumed.</p>
-                                    <p style="margin: 20px 0 0 0">If you have any questions, please don't hesitate to contact our support team.</p>
-                                    <p style="margin: 20px 0 0 0">Best regards,<br />The Trim Team</p>
+                                    <p style="margin: 20px 0 0 0">Many thanks,</p>
+                                    <p style="margin: 0 0 0 0">The team @Trim</p>
                                   </div>
                                 </td>
                               </tr>
@@ -389,6 +389,13 @@ module.exports = function (data) {
   </body>
 </html>`,
     },
+    function (error, info) {
+      if (error) {
+        console.log('❌ PayoutBlockedEmail Error:', error)
+      } else {
+        console.log('✅ PayoutBlockedEmail sent successfully:', info.response)
+      }
+    }
   )
 }
 

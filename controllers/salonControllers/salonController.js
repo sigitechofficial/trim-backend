@@ -244,62 +244,177 @@ exports.addCard = async (req, res, next) => {
             3.Choose SubsCription Plan 
     ________________________________________
 */
+/*
+  Unified Choose Plan API
+  Supports both Stripe and Apple subscriptions
+  Request body: {
+    subscriptionId: string (required),
+    subscriptionSource: 'stripe' | 'apple' (optional, defaults to 'stripe')
+  }
+*/
 exports.choosePlan = async (req, res, next) => {
-  const userId = req.user.id
-  const { subscriptionId } = req.body
-  let salonData = await salonDetail.findOne({
-    where: { userId },
-    include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
-  })
-  const subscription = await Stripe.subscriptionsRetrieve(subscriptionId)
-  let connectAccount
-  if (!salonData.connectAccountId) {
-    connectAccount = await Stripe.createConnectAccount(salonData.user.email)
-    salonData.connectAccountId = connectAccount?.accountId
-    await salonData.save()
-  }
-  const DT = new Date()
-    ; (salonData.approvedByAdmin = true),
-      (salonData.registrationDate = dateManipulation.stampToDate(
-        subscription.current_period_start,
-      ))
-  
-  // Add 5 days grace period to registration expiry date
-  const expiryDate = new Date(subscription.current_period_end * 1000)
-  expiryDate.setDate(expiryDate.getDate() + 5) // Add 5 grace days
-  const expiryDateWithGrace = Math.floor(expiryDate.getTime() / 1000) // Convert back to Unix timestamp
-  salonData.registrationExpiryDate = dateManipulation.stampToDate(expiryDateWithGrace)
-  
-  salonData.subscriptionPlan = subscription.id
-  await salonData.save()
-  const check = await wallet.findOne({
-    where: {
-      salonDetailId: salonData.id,
-    },
-  })
-  if (!check) {
-    await wallet.create({
-      salonDetailId: salonData.id,
+  try {
+    const userId = req.user.id
+    const { subscriptionId, subscriptionSource = 'stripe' } = req.body
+
+    console.log('\n🎯 Choose Plan API Called')
+    console.log('  User ID:', userId)
+    console.log('  Subscription ID:', subscriptionId)
+    console.log('  Source:', subscriptionSource)
+
+    // Validate input
+    if (!subscriptionId) {
+      return res.json(
+        returnFunction('0', 'Subscription ID is required', {}, '')
+      )
+    }
+
+    // Get salon data
+    let salonData = await salonDetail.findOne({
+      where: { userId },
+      include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
     })
+
+    if (!salonData) {
+      return res.json(
+        returnFunction('0', 'Salon not found for this user', {}, '')
+      )
+    }
+
+    let periodStart
+    let periodEnd
+    let subscriptionPlanId
+    let connectAccount
+
+    // ============================================
+    // Handle based on subscription source
+    // ============================================
+    if (subscriptionSource === 'apple') {
+      console.log('📱 Processing Apple subscription...')
+
+      // Get Apple subscription from database
+      const appleSubscription = await subscriptions.findOne({
+        where: {
+          subscriptionId: subscriptionId,
+          customerId: userId.toString(),
+          subscriptionSource: 'apple',
+        },
+      })
+
+      if (!appleSubscription) {
+        return res.json(
+          returnFunction(
+            '0',
+            'Apple subscription not found. Please verify purchase first.',
+            {},
+            ''
+          )
+        )
+      }
+
+      console.log('  ✅ Apple subscription found')
+      console.log('  Status:', appleSubscription.status)
+      console.log('  Period End:', appleSubscription.periodEnd)
+
+      // Use dates from Apple subscription (grace period already added during verification)
+      periodStart = Math.floor(new Date(appleSubscription.periodStart).getTime() / 1000)
+      periodEnd = Math.floor(new Date(appleSubscription.periodEnd).getTime() / 1000)
+      subscriptionPlanId = appleSubscription.subscriptionId
+
+    } else {
+      console.log('💳 Processing Stripe subscription...')
+
+      // Get Stripe subscription from Stripe API
+      const stripeSubscription = await Stripe.subscriptionsRetrieve(subscriptionId)
+
+      if (!stripeSubscription) {
+        return res.json(
+          returnFunction('0', 'Stripe subscription not found', {}, '')
+        )
+      }
+
+      console.log('  ✅ Stripe subscription found')
+      console.log('  Status:', stripeSubscription.status)
+
+      // Create connect account if needed (Stripe only)
+      if (!salonData.connectAccountId) {
+        console.log('  Creating Stripe Connect account...')
+        connectAccount = await Stripe.createConnectAccount(salonData.user.email)
+        salonData.connectAccountId = connectAccount?.accountId
+        await salonData.save()
+        console.log('  ✅ Connect account created')
+      }
+
+      periodStart = stripeSubscription.current_period_start
+      
+      // Add 5 days grace period for Stripe
+      const expiryDate = new Date(stripeSubscription.current_period_end * 1000)
+      expiryDate.setDate(expiryDate.getDate() + 5)
+      periodEnd = Math.floor(expiryDate.getTime() / 1000)
+      
+      subscriptionPlanId = stripeSubscription.id
+    }
+
+    // ============================================
+    // Common setup for both Stripe and Apple
+    // ============================================
+    console.log('\n🏢 Setting up salon...')
+
+    // Update salon details
+    salonData.approvedByAdmin = true
+    salonData.registrationDate = dateManipulation.stampToDate(periodStart)
+    salonData.registrationExpiryDate = dateManipulation.stampToDate(periodEnd)
+    salonData.subscriptionPlan = subscriptionPlanId
+    await salonData.save()
+
+    console.log('  ✅ Salon details updated')
+    console.log('    - Approved: true')
+    console.log('    - Registration Date:', salonData.registrationDate)
+    console.log('    - Expiry Date:', salonData.registrationExpiryDate)
+
+    // Create wallet if not exists
+    const check = await wallet.findOne({
+      where: {
+        salonDetailId: salonData.id,
+      },
+    })
+    
+    if (!check) {
+      await wallet.create({
+        salonDetailId: salonData.id,
+      })
+      console.log('  ✅ Wallet created')
+    } else {
+      console.log('  ✅ Wallet already exists')
+    }
+
+    // Update salon profile
+    await salonProfiles.update(
+      {
+        hasSubscription: true,
+      },
+      { where: { salonDetailId: salonData.id } }
+    )
+
+    console.log('  ✅ Salon profile updated')
+    console.log('\n✅ Choose Plan Complete!')
+
+    return res.json(
+      returnFunction(
+        '1',
+        'Subscription activated successfully',
+        { 
+          salonData, 
+          onboardingLink: connectAccount?.accountLink?.url,
+          subscriptionSource: subscriptionSource 
+        },
+        '',
+      ),
+    )
+  } catch (error) {
+    console.error('\n❌ Error in choosePlan:', error.message)
+    next(error)
   }
-
-  await salonProfiles.update(
-    {
-      hasSubscription: true,
-    },
-    { where: { salonDetailId: salonData.id } },
-  )
-  // const output = JSON.parse(JSON.stringify(salonData))
-  // subscription.current_period_end
-
-  return res.json(
-    returnFunction(
-      '1',
-      'All Subscription Plans',
-      { salonData, onboardingLink: connectAccount?.accountLink?.url },
-      '',
-    ),
-  )
 }
 /*
             3.Choose SubsCription Plan 
@@ -1463,65 +1578,261 @@ exports.deleteCoupon = async (req, res, next) => {
     __________________________
 */
 exports.customerSubscription = async (req, res, next) => {
-  const userId = req.user.id
-  const salonData = await salonDetail.findOne({
-    where: {
-      userId,
-    },
-    attributes: ['id', 'subscriptionPlan', 'registrationExpiryDate', 'registrationDate', 'subscriptionPrice', 'subscriptionLatestPaymentStatus', 'metadata'],
-  })
-  
-  console.log('🚀 ~ customerSubscription ~ salonData:', salonData ? {
-    id: salonData.id,
-    subscriptionPlan: salonData.subscriptionPlan,
-    hasSubscriptionPlan: !!salonData.subscriptionPlan,
-  } : 'salonData is null');
-  
-  if (!salonData) {
-    return res.json(returnFunction('2', 'Salon not found', {}, ''))
-  }
-  
-  if (!salonData.subscriptionPlan || (typeof salonData.subscriptionPlan === 'string' && salonData.subscriptionPlan.trim() === '')) {
-    return res.json(returnFunction('2', 'No subscription plan', {}, ''))
-  }
-  const customerSubscription = await Stripe.getSubscription(
-    salonData.subscriptionPlan,
-  )
+  try {
+    const userId = req.user.id;
+    
+    // Get salon data with subscription info
+    const salonData = await salonDetail.findOne({
+      where: { userId },
+      attributes: [
+        'id',
+        'subscriptionPlan',
+        'registrationExpiryDate',
+        'registrationDate',
+        'subscriptionPrice',
+        'subscriptionLatestPaymentStatus',
+        'metadata',
+      ],
+    });
 
-  if (customerSubscription) {
-    customerSubscription.expire = salonData?.registrationExpiryDate
-    customerSubscription.start = salonData?.registrationDate
-    customerSubscription.price = salonData?.subscriptionPrice
-    customerSubscription.subscriptionLatestPaymentStatus =
-      salonData?.subscriptionLatestPaymentStatus
-    if (salonData.metadata) {
-      customerSubscription.metaData = JSON.parse(salonData.metadata)
+    console.log('🚀 ~ customerSubscription ~ salonData:', salonData ? {
+      id: salonData.id,
+      subscriptionPlan: salonData.subscriptionPlan,
+      hasSubscriptionPlan: !!salonData.subscriptionPlan,
+    } : 'salonData is null');
+
+    if (!salonData) {
+      return res.json(returnFunction('2', 'Salon not found', {}, ''));
+    }
+
+    if (!salonData.subscriptionPlan || 
+        (typeof salonData.subscriptionPlan === 'string' && 
+         salonData.subscriptionPlan.trim() === '')) {
+      return res.json(returnFunction('2', 'No subscription plan', {}, ''));
+    }
+
+    // ============================================
+    // NEW: Detect subscription source (Stripe or Apple)
+    // ============================================
+    
+    // Option 1: Check from request (explicit)
+    let subscriptionSource = req.body.source || req.query.source;
+    
+    // Option 2: Auto-detect from database
+    if (!subscriptionSource) {
+      const latestSubscription = await subscriptions.findOne({
+        where: { salonDetailId: salonData.id },
+        order: [['createdAt', 'DESC']],
+        attributes: ['subscriptionSource', 'subscriptionId', 'appleOriginalTransactionId'],
+      });
+      
+      subscriptionSource = latestSubscription?.subscriptionSource || 'stripe';
+      console.log('🔍 Auto-detected subscription source:', subscriptionSource);
+    }
+
+    let customerSubscription;
+    
+    // ============================================
+    // Route to appropriate payment provider
+    // ============================================
+    
+    if (subscriptionSource === 'apple') {
+      // ===== APPLE IN-APP PURCHASE =====
+      console.log('🍎 Fetching Apple subscription...');
+      
+      // Get user's Apple original transaction ID
+      const userRecord = await user.findByPk(userId, {
+        attributes: ['appleOriginalTransactionId'],
+      });
+      
+      if (!userRecord?.appleOriginalTransactionId) {
+        return res.json(returnFunction('2', 'No Apple subscription found', {}, ''));
+      }
+      
+      // Import Apple IAP functions
+      const { 
+        generateAppStoreServerJWT 
+      } = require('../appleSubscriptions/appleSubscriptionController');
+      
+      const jwt = require('jsonwebtoken');
+      const axios = require('axios');
+      
+      try {
+        // Call Apple API to get subscription status
+        const token = generateAppStoreServerJWT();
+        const baseUrl = process.env.NODE_ENV === 'production'
+          ? 'https://api.storekit.itunes.apple.com'
+          : 'https://api.storekit-sandbox.itunes.apple.com';
+        
+        const response = await axios.get(
+          `${baseUrl}/inApps/v1/subscriptions/${userRecord.appleOriginalTransactionId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
+
+        const subscriptionData = response.data.data[0];
+        const lastTransaction = subscriptionData.lastTransactions[0];
+        
+        // Decode JWTs
+        const transactionInfo = jwt.decode(lastTransaction.signedTransactionInfo);
+        const renewalInfo = jwt.decode(lastTransaction.signedRenewalInfo);
+        
+        // Map status
+        const statusMap = {
+          1: 'active',
+          2: 'expired',
+          3: 'billing_retry',
+          4: 'billing_grace_period',
+          5: 'revoked',
+        };
+        
+        let appleStatus = statusMap[lastTransaction.status] || 'unknown';
+        
+        // Smart status check: Verify against actual expiry date
+        const appleExpiryDate = new Date(transactionInfo.expiresDate);
+        const now = new Date();
+        
+        // If Apple says expired but date hasn't passed, check if it's really expired
+        if (appleStatus === 'expired' && appleExpiryDate > now) {
+          // Still within valid period - check auto-renew status
+          if (renewalInfo.autoRenewStatus === 0) {
+            // User canceled, but still valid until expiry
+            appleStatus = 'canceled'; // Will expire but still active
+          } else {
+            // Should still be active
+            appleStatus = 'active';
+          }
+          console.log('⚠️ Apple status corrected from expired to:', appleStatus);
+        }
+        
+        // Transform Apple response to match Stripe format
+        customerSubscription = {
+          id: transactionInfo.originalTransactionId,
+          status: appleStatus,
+          name: 'Apple Subscription',
+          description: `Apple ${transactionInfo.productId}`,
+          price: salonData.subscriptionPrice || 0,
+          PriceId: transactionInfo.productId,
+          duration: 'month',
+          paymentMethods: 'Apple Pay',
+          expire: salonData.registrationExpiryDate,
+          start: salonData.registrationDate,
+          subscriptionLatestPaymentStatus: salonData.subscriptionLatestPaymentStatus,
+          source: 'apple',
+          subscriptionSource: 'apple',
+          willAutoRenew: renewalInfo.autoRenewStatus === 1,
+          environment: transactionInfo.environment,
+          originalTransactionId: transactionInfo.originalTransactionId,
+          productId: transactionInfo.productId,
+          appleRawStatus: lastTransaction.status, // Keep original for debugging
+        };
+        
+        console.log('✅ Apple subscription retrieved');
+        
+      } catch (appleError) {
+        console.error('❌ Apple API error:', appleError.message);
+        return res.json(
+          returnFunction('2', 'Could not retrieve Apple subscription', {}, appleError.message)
+        );
+      }
+      
     } else {
-      customerSubscription.metaData = {
-        freeTrialDays: '',
-        members: '',
-        membersCount: 1,
-        paymentMethodId: '',
-        sloanId: '',
-        subscriptionName: '',
+      // ===== STRIPE (EXISTING CODE) =====
+      console.log('💳 Fetching Stripe subscription...');
+      
+      customerSubscription = await Stripe.getSubscription(
+        salonData.subscriptionPlan,
+      );
+
+      if (customerSubscription) {
+        customerSubscription.expire = salonData?.registrationExpiryDate;
+        customerSubscription.start = salonData?.registrationDate;
+        customerSubscription.price = salonData?.subscriptionPrice;
+        customerSubscription.subscriptionLatestPaymentStatus =
+          salonData?.subscriptionLatestPaymentStatus;
+        customerSubscription.source = 'stripe';
+        customerSubscription.subscriptionSource = 'stripe';
+      } else {
+        return res.json(returnFunction('2', 'No subscription plan', {}, ''));
       }
     }
-  } else {
-    return res.json(returnFunction('2', 'No subscription plan', {}, ''))
-  }
 
-  const currentDate = new Date()
-  const expiryDate = new Date(salonData.registrationExpiryDate)
+    // ============================================
+    // Add metadata (fetch from subscriptions table)
+    // ============================================
+    
+    // Fetch the latest subscription record
+    const subscriptionRecord = await subscriptions.findOne({
+      where: { salonDetailId: salonData.id },
+      order: [['createdAt', 'DESC']],
+      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource'],
+    });
 
-  if (customerSubscription.status == 'canceled' && expiryDate < currentDate) {
+    if (subscriptionRecord) {
+      // Extract member count from subscription name
+      const extractMemberCount = (name) => {
+        if (!name) return 1;
+        const nameLower = name.toLowerCase();
+        if (nameLower.includes('one_staff')) return 2;
+        if (nameLower.includes('two_staff')) return 3;
+        if (nameLower.includes('three_staff')) return 4;
+        if (nameLower.includes('four_staff')) return 5;
+        if (nameLower.includes('five_staff')) return 6;
+        return 1;
+      };
+
+      const memberCount = extractMemberCount(subscriptionRecord.name);
+
+      // Update price from subscription record
+      customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
+
+      customerSubscription.metaData = {
+        freeTrialDays: salonData.hasObtainedFreeTrial ? 0 : 7,
+        members: memberCount,
+        membersCount: memberCount,
+        paymentMethodId: subscriptionRecord.subscriptionSource === 'apple' ? 'apple_pay' : '',
+        sloanId: salonData.id.toString(),
+        subscriptionName: subscriptionRecord.name || subscriptionRecord.priceId,
+      };
+    } else {
+      // Fallback if no subscription found
+      customerSubscription.metaData = {
+        freeTrialDays: '',
+        members: 1,
+        membersCount: 1,
+        paymentMethodId: '',
+        sloanId: salonData.id.toString(),
+        subscriptionName: '',
+      };
+    }
+
+    // ============================================
+    // Check expiry status (common for both)
+    // ============================================
+    const currentDate = new Date();
+    const expiryDate = new Date(salonData.registrationExpiryDate);
+
+    if (customerSubscription.status == 'canceled' && expiryDate < currentDate) {
+      return res.json(
+        returnFunction('2', 'Subscription expired', { customerSubscription }, ''),
+      );
+    }
+
+    console.log('✅ Subscription retrieved successfully');
+    
     return res.json(
-      returnFunction('2', 'Subscription expired', { customerSubscription }, ''),
-    )
-  }
+      returnFunction('1', 'All subscription plan', { customerSubscription }, ''),
+    );
 
-  return res.json(
-    returnFunction('1', 'All subscription plan', { customerSubscription }, ''),
-  )
+  } catch (error) {
+    console.error('❌ customerSubscription error:', error);
+    return res.json(returnFunction('0', 'Error retrieving subscription', {}, error.message));
+  }
 }
 /*
     Cancel Customer Subscription Plans

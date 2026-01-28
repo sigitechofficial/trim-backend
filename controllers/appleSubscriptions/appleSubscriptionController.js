@@ -7,55 +7,81 @@ const AppError = require('../../utils/appError');
 const { user, subscriptions, salonDetail } = require('../../models');
 const { Op } = require('sequelize');
 
-// Apple App Store Connect API credentials
-const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID;
-const APPLE_KEY_ID = process.env.APPLE_KEY_ID;
-const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
-const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
+// ============================================
+// Apple In-App Purchase API Credentials
+// TWO DIFFERENT KEYS FOR TWO DIFFERENT APIS
+// ============================================
 
-// Get private key from environment or file
+const APPLE_ISSUER_ID = process.env.APPLE_ISSUER_ID; // Team ID (same for both)
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID; // Bundle ID (same for both)
+
+// 1. App Store Connect API Key (for products, metadata)
+const APPLE_KEY_ID = process.env.APPLE_KEY_ID; // e.g., L34V427J4F
 let APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY;
 
+// 2. In-App Purchase Key (for transaction verification)
+const APPLE_IAP_KEY_ID = process.env.APPLE_IAP_KEY_ID; // e.g., B2KSMYQ3NG
+let APPLE_IAP_PRIVATE_KEY = process.env.APPLE_IAP_PRIVATE_KEY;
+
+// Legacy shared secret
+const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
+
+// Helper function to convert Apple price to actual currency amount
+// Apple sends prices in minor units (e.g., PKR 2200 is sent as 2200000)
+// This divides by 1000 to get the actual amount
+function convertApplePrice(applePrice) {
+  const price = parseFloat(applePrice || 0);
+  return price / 1000; // Convert from Apple's minor units to actual currency
+}
+
 // If private key file path is provided, read from file
-if (process.env.APPLE_PRIVATE_KEY_PATH) {
+if (process.env.APPLE_IAP_PRIVATE_KEY_PATH) {
+  try {
+    const keyPath = path.resolve(process.env.APPLE_IAP_PRIVATE_KEY_PATH);
+    APPLE_IAP_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
+    APPLE_PRIVATE_KEY = APPLE_IAP_PRIVATE_KEY; // For backwards compatibility
+    console.log('✅ Loaded In-App Purchase private key from file');
+  } catch (error) {
+    console.error('❌ Error reading IAP key file:', error);
+    throw new Error('Failed to read Apple In-App Purchase key file');
+  }
+} else if (process.env.APPLE_PRIVATE_KEY_PATH) {
   try {
     const keyPath = path.resolve(process.env.APPLE_PRIVATE_KEY_PATH);
     APPLE_PRIVATE_KEY = fs.readFileSync(keyPath, 'utf8');
+    APPLE_IAP_PRIVATE_KEY = APPLE_PRIVATE_KEY; // For backwards compatibility
     console.log('✅ Loaded Apple private key from file');
   } catch (error) {
-    console.error('❌ Error reading private key file:', error);
-    throw new Error('Failed to read Apple private key file');
+    console.error('❌ Error reading Apple key file:', error);
+    throw new Error('Failed to read Apple key file');
   }
 }
 
 /**
- * Generate JWT token for App Store Connect API
+ * Helper function to parse and validate Apple private key
  */
-function generateAppStoreConnectJWT() {
-  const now = Math.floor(Date.now() / 1000);
-  
-  if (!APPLE_PRIVATE_KEY) {
-    throw new AppError('APPLE_PRIVATE_KEY is not set in environment variables', 500);
+function parseApplePrivateKey(rawPrivateKey, keyName = 'Apple') {
+  if (!rawPrivateKey) {
+    throw new AppError(`${keyName} private key is not set`, 500);
   }
   
-  console.log('🔑 Starting key parsing...');
+  console.log(`\n🔑 Parsing ${keyName} Private Key...`);
+  console.log('  - Raw key length:', rawPrivateKey.length);
+  console.log('  - First 50 chars:', rawPrivateKey.substring(0, 50));
+  console.log('  - Last 50 chars:', rawPrivateKey.substring(rawPrivateKey.length - 50));
   
-  // Step 1: Get raw key and handle quotes
-  let rawKey = APPLE_PRIVATE_KEY.trim();
-  console.log('  - Raw key length:', rawKey.length);
-  console.log('  - Starts with quote:', rawKey.startsWith('"') || rawKey.startsWith("'"));
+  let rawKey = rawPrivateKey.trim();
   
-  // Remove surrounding quotes if present
+  // Remove surrounding quotes
   if ((rawKey.startsWith('"') && rawKey.endsWith('"')) || 
       (rawKey.startsWith("'") && rawKey.endsWith("'"))) {
     rawKey = rawKey.slice(1, -1).trim();
-    console.log('  - Removed quotes, new length:', rawKey.length);
   }
   
-  // Step 2: Replace escaped newlines with actual newlines
+  // Replace escaped newlines
   rawKey = rawKey.replace(/\\n/g, '\n');
   
-  // Step 3: Extract ONLY the base64 content (remove all markers and whitespace)
+  // Extract base64 content
   let base64Content = rawKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
@@ -66,15 +92,13 @@ function generateAppStoreConnectJWT() {
     .trim();
   
   console.log('  - Base64 content length:', base64Content.length);
-  console.log('  - First 30 chars:', base64Content.substring(0, 30));
-  console.log('  - Last 30 chars:', base64Content.substring(base64Content.length - 30));
+  console.log('  - Base64 preview:', base64Content.substring(0, 50) + '...');
   
-  // Step 4: Validate base64 content
   if (base64Content.length < 100) {
-    throw new AppError(`Private key base64 content is too short (${base64Content.length} chars). Expected ~120+ chars. Check APPLE_PRIVATE_KEY in .env`, 500);
+    throw new AppError(`${keyName} private key too short (${base64Content.length} chars)`, 500);
   }
   
-  // Step 5: Rebuild proper PEM format with 64-char lines
+  // Rebuild PEM format
   const lines = [];
   for (let i = 0; i < base64Content.length; i += 64) {
     lines.push(base64Content.substring(i, i + 64));
@@ -82,43 +106,66 @@ function generateAppStoreConnectJWT() {
   
   const privateKey = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----`;
   
-  console.log('  - Rebuilt key with', lines.length, 'lines');
-  console.log('  - Total PEM length:', privateKey.length);
+  console.log('  - Rebuilt PEM format (lines):', lines.length);
   
-  // Step 6: VALIDATE the key using Node's crypto module
+  // Validate with crypto module
   try {
-    console.log('  - Validating key with crypto module...');
     const keyObject = crypto.createPrivateKey({
       key: privateKey,
       format: 'pem',
       type: 'pkcs8'
     });
     
-    console.log('  ✅ Key validation passed!');
-    console.log('    - Key type:', keyObject.asymmetricKeyType);
-    console.log('    - Key size:', keyObject.asymmetricKeySize);
-    
     if (keyObject.asymmetricKeyType !== 'ec') {
-      throw new AppError(`Wrong key type! Expected 'ec' (Elliptic Curve), got '${keyObject.asymmetricKeyType}'. Make sure you downloaded the correct .p8 key file from App Store Connect.`, 500);
+      throw new AppError(`Wrong key type! Expected 'ec', got '${keyObject.asymmetricKeyType}'`, 500);
     }
+    
+    console.log(`  ✅ ${keyName} key validated successfully`);
+    return privateKey;
   } catch (cryptoError) {
-    console.error('  ❌ Crypto validation failed:', cryptoError.message);
-    console.error('  - This means the key content is invalid or corrupted');
-    console.error('  - Please download the .p8 file again from App Store Connect');
-    console.error('  - Copy the ENTIRE content including BEGIN/END markers');
-    throw new AppError(`Invalid private key: ${cryptoError.message}. Please re-download from App Store Connect.`, 500);
+    console.error(`\n❌ ${keyName} Key Validation Failed:`);
+    console.error('  Error:', cryptoError.message);
+    console.error('  Generated PEM (first 100 chars):', privateKey.substring(0, 100));
+    console.error('  Generated PEM (last 100 chars):', privateKey.substring(privateKey.length - 100));
+    console.error('\n💡 Troubleshooting:');
+    console.error('  1. Make sure the .env has the CORRECT key content');
+    console.error('  2. Use ONLY the base64 content (no BEGIN/END lines)');
+    console.error('  3. Make sure it\'s the key from the .p8 file for this Key ID');
+    console.error('  4. The key should be ~180 characters long');
+    throw new AppError(`Invalid ${keyName} private key: ${cryptoError.message}`, 500);
+  }
+}
+
+/**
+ * Generate JWT for App Store Server API (for fetching products)
+ * Uses In-App Purchase Key per Apple's official documentation
+ */
+/**
+ * Generate JWT for App Store Connect API (for products/metadata)
+ * Uses APPLE_KEY_ID (e.g., L34V427J4F - "trim-api")
+ */
+function generateAppStoreConnectJWT() {
+  const now = Math.floor(Date.now() / 1000);
+  console.log('🔑 Generating App Store Connect JWT (for products)...');
+  
+  if (!APPLE_KEY_ID) {
+    throw new AppError('APPLE_KEY_ID is required for App Store Connect API', 500);
   }
   
-  // Step 7: Generate JWT token
+  if (!APPLE_PRIVATE_KEY) {
+    throw new AppError('APPLE_PRIVATE_KEY is required for App Store Connect API', 500);
+  }
+  
+  const privateKey = parseApplePrivateKey(APPLE_PRIVATE_KEY, 'App Store Connect');
+  
   try {
-    console.log('  - Generating JWT token...');
     const token = jwt.sign(
       {
         iss: APPLE_ISSUER_ID,
         iat: now,
-        exp: now + 1200, // Apple recommends max 20 minutes (1200 seconds)
+        exp: now + 1200, // 20 minutes
         aud: 'appstoreconnect-v1',
-        bid: APPLE_BUNDLE_ID, // Bundle ID claim for StoreKit APIs
+        bid: APPLE_BUNDLE_ID,
       },
       privateKey,
       {
@@ -131,16 +178,63 @@ function generateAppStoreConnectJWT() {
       }
     );
     
-    console.log('✅ JWT token generated successfully!');
-    console.log('  - Token length:', token.length);
-    console.log('  - Key ID:', APPLE_KEY_ID);
-    console.log('  - Issuer ID:', APPLE_ISSUER_ID);
+    console.log('  ✅ JWT generated (Key ID:', APPLE_KEY_ID, '- App Store Connect API)');
+    return token;
+  } catch (error) {
+    throw new AppError(`JWT signing failed: ${error.message}`, 500);
+  }
+}
+
+/**
+ * Generate JWT for App Store Server API (for verifying transactions)
+ * Based on Apple's Official Documentation (2026)
+ * Requirements: ES256, In-App Purchase Key, iss, iat, exp, aud, bid
+ */
+/**
+ * Generate JWT for App Store Server API (for transaction verification)
+ * Uses APPLE_IAP_KEY_ID (e.g., B2KSMYQ3NG - "In-App Purchase")
+ */
+function generateAppStoreServerJWT() {
+  const now = Math.floor(Date.now() / 1000);
+  console.log('🔑 Generating App Store Server JWT (for IAP verification)...');
+  
+  if (!APPLE_IAP_KEY_ID) {
+    throw new AppError('APPLE_IAP_KEY_ID is required for transaction verification', 500);
+  }
+  
+  if (!APPLE_IAP_PRIVATE_KEY) {
+    throw new AppError('APPLE_IAP_PRIVATE_KEY is required for transaction verification', 500);
+  }
+  
+  const privateKey = parseApplePrivateKey(APPLE_IAP_PRIVATE_KEY, 'In-App Purchase');
+  
+  try {
+    // Apple's required JWT format for App Store Server API
+    const token = jwt.sign(
+      {
+        iss: APPLE_ISSUER_ID, // Issuer ID (Team ID)
+        iat: now, // Issued at
+        exp: now + 1200, // Expiration (20 minutes - Apple's recommendation)
+        aud: 'appstoreconnect-v1', // Audience (required by Apple)
+        bid: APPLE_BUNDLE_ID, // Bundle ID (REQUIRED for transaction endpoints)
+      },
+      privateKey,
+      {
+        algorithm: 'ES256', // MUST be ES256 for Apple
+        header: {
+          alg: 'ES256',
+          kid: APPLE_IAP_KEY_ID, // In-App Purchase Key ID
+          typ: 'JWT',
+        },
+      }
+    );
+    
+    console.log('  ✅ JWT generated (Key ID:', APPLE_IAP_KEY_ID, '- In-App Purchase Key)');
     
     return token;
   } catch (error) {
-    console.error('❌ JWT signing failed:', error.message);
-    console.error('  - This is unexpected since crypto validation passed');
-    throw new AppError(`JWT signing failed: ${error.message}`, 500);
+    console.error('❌ JWT generation failed:', error.message);
+    throw new AppError(`Failed to generate Apple Server API JWT: ${error.message}`, 500);
   }
 }
 
@@ -560,7 +654,7 @@ exports.createAppleSubscription = async (req, res, next) => {
       existingSubscription.periodEnd = expiresDate;
       existingSubscription.appleProductId = productIdFromReceipt;
       existingSubscription.priceId = productIdFromReceipt;
-      existingSubscription.amountPaid = parseFloat(latestTransaction.price || 0);
+      existingSubscription.amountPaid = convertApplePrice(latestTransaction.price);
       existingSubscription.currency = latestTransaction.currency || 'USD';
       existingSubscription.appleEnvironment = receiptResponse.environment || 'Production';
       existingSubscription.VAT = parseFloat(metadata?.VAT || '0');
@@ -582,7 +676,7 @@ exports.createAppleSubscription = async (req, res, next) => {
         priceId: productIdFromReceipt,
         customerId: salonUser.id.toString(),
         name: metadata?.subscriptionName || 'Apple Subscription',
-        amountPaid: parseFloat(latestTransaction.price || 0),
+        amountPaid: convertApplePrice(latestTransaction.price),
         currency: latestTransaction.currency || 'USD',
         appleEnvironment: receiptResponse.environment || 'Production',
         VAT: parseFloat(metadata?.VAT || '0'),
@@ -683,6 +777,263 @@ exports.verifyAppleSubscription = async (req, res, next) => {
 };
 
 /**
+ * Verify Apple IAP Purchase using App Store Server API (Modern Method)
+ * Endpoint: POST /salon/v1/iap/apple/verify
+ * Uses Apple's current App Store Server API, not deprecated verifyReceipt
+ * 
+ * Note: After verification, call POST /choosePlan with subscriptionSource: 'apple' to activate salon
+ */
+exports.verifyApplePurchase = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const {
+      transactionId,
+      originalTransactionId,
+      productId,
+      priceId,
+      membersCount,
+      subscriptionName,
+      subscriptionPrice,
+      vat,
+      salonDetailId
+    } = req.body;
+
+    console.log('\n🍎 Apple IAP Verification Started (App Store Server API)');
+    console.log('  User ID:', userId);
+    console.log('  Transaction ID:', transactionId);
+    console.log('  Product ID:', productId);
+
+    // Step 1: Validate required fields
+    if (!transactionId || !productId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'Missing required fields',
+        error: 'transactionId and productId are required',
+      });
+    }
+
+    // Step 2: Check for duplicate transaction (Idempotency)
+    console.log('\n🔍 Checking for duplicate transaction...');
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        appleTransactionId: transactionId,
+        subscriptionSource: 'apple',
+      },
+    });
+
+    if (existingSubscription) {
+      console.log('✅ Transaction already processed, returning existing subscription');
+      
+      const expiryDate = existingSubscription.periodEnd 
+        ? new Date(existingSubscription.periodEnd).toISOString().split('T')[0]
+        : null;
+
+      return res.status(200).json({
+        status: '1',
+        message: 'Purchase already verified',
+        data: {
+          subscriptionId: existingSubscription.subscriptionId,
+          expiryDate,
+          price: existingSubscription.amountPaid?.toString() || subscriptionPrice?.toString(),
+        },
+      });
+    }
+
+    // Step 3: Get transaction info from Apple using App Store Server API
+    console.log('\n📱 Fetching transaction from Apple Server API...');
+    const token = generateAppStoreServerJWT(); // Uses APPLE_IAP_KEY_ID (B2KSMYQ3NG)
+    
+    try {
+      // Determine environment: Use sandbox for testing
+      // Production transaction IDs typically start with different patterns
+      const isSandbox = process.env.NODE_ENV !== 'production';
+      const baseUrl = isSandbox 
+        ? 'https://api.storekit-sandbox.itunes.apple.com'
+        : 'https://api.storekit.itunes.apple.com';
+      
+      const transactionUrl = `${baseUrl}/inApps/v1/transactions/${transactionId}`;
+      
+      console.log('  Environment:', isSandbox ? 'Sandbox' : 'Production');
+      console.log('  API URL:', baseUrl);
+      
+      const transactionResponse = await axios.get(transactionUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      console.log('✅ Transaction fetched from Apple');
+      
+      // Apple returns signedTransactionInfo (not signedTransaction!)
+      const signedTransaction = transactionResponse.data.signedTransactionInfo || 
+                                transactionResponse.data.signedTransaction;
+      
+      if (!signedTransaction || typeof signedTransaction !== 'string') {
+        console.error('❌ Invalid response structure from Apple');
+        console.error('   Response keys:', Object.keys(transactionResponse.data));
+        throw new Error(`No valid signed transaction in response. Keys: ${Object.keys(transactionResponse.data).join(', ')}`);
+      }
+      
+      console.log('✅ SignedTransactionInfo found (JWS)');
+      console.log('  - JWS Preview:', signedTransaction.substring(0, 50) + '...');
+
+      // Step 4: Decode JWS to get transaction data
+      // Note: In production, you should verify the JWS signature
+      // For now, we'll decode it (Apple signs it, so it's trusted if from their API)
+      const transactionPayload = JSON.parse(
+        Buffer.from(signedTransaction.split('.')[1], 'base64').toString()
+      );
+
+      console.log('📋 Transaction Details:');
+      console.log('  Product ID:', transactionPayload.productId);
+      console.log('  Original Transaction ID:', transactionPayload.originalTransactionId);
+      console.log('  Purchase Date:', new Date(transactionPayload.purchaseDate).toISOString());
+      console.log('  Expires Date:', transactionPayload.expiresDate ? new Date(transactionPayload.expiresDate).toISOString() : 'N/A');
+
+      // Step 5: Verify product ID matches
+      if (transactionPayload.productId !== productId) {
+        console.error('❌ Product ID mismatch');
+        return res.status(200).json({
+          status: '0',
+          message: 'Product ID mismatch',
+          error: `Transaction product ID (${transactionPayload.productId}) does not match request (${productId})`,
+        });
+      }
+
+      console.log('✅ Transaction verified');
+
+      // Step 6: Calculate subscription dates
+      const purchaseDate = new Date(transactionPayload.purchaseDate);
+      let expiresDate = transactionPayload.expiresDate 
+        ? new Date(transactionPayload.expiresDate)
+        : new Date(purchaseDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days if not provided
+
+      // Check if salon exists and if they've used free trial
+      const userSalon = await salonDetail.findOne({
+        where: { userId: userId }
+      });
+
+      // FREE TRIAL LOGIC - Add 3 days if first time
+      const FREE_TRIAL_DAYS = 3;
+      const hasUsedFreeTrial = userSalon?.hasObtainedFreeTrial === 1 || userSalon?.hasObtainedFreeTrial === true;
+
+      if (!hasUsedFreeTrial) {
+        console.log(`🎁 Adding ${FREE_TRIAL_DAYS} days free trial`);
+        expiresDate.setDate(expiresDate.getDate() + FREE_TRIAL_DAYS);
+      }
+
+      console.log('📅 Subscription Dates:');
+      console.log('  Purchase Date:', purchaseDate.toISOString());
+      console.log('  Expires Date (original):', transactionPayload.expiresDate ? new Date(transactionPayload.expiresDate).toISOString() : 'N/A');
+      if (!hasUsedFreeTrial) {
+        console.log(`  🎁 Free Trial: +${FREE_TRIAL_DAYS} days`);
+      }
+      console.log('  Final Expiry Date:', expiresDate.toISOString());
+
+      // Step 7: Generate subscription ID
+      const subscriptionId = `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
+
+      // Step 8: Determine environment
+      const environment = transactionPayload.environment || 'Sandbox';
+
+      // Step 9: Create subscription record
+      console.log('\n💾 Creating subscription record...');
+      const newSubscription = await subscriptions.create({
+        subscriptionId: subscriptionId,
+        name: subscriptionName || productId,
+        customerId: userId.toString(),
+        amountPaid: subscriptionPrice || 0,
+        currency: 'USD',
+        priceId: priceId,
+        periodStart: purchaseDate,
+        periodEnd: expiresDate,
+        status: 'active',
+        VAT: vat || 0,
+        salonDetailId:salonDetailId,
+        // Apple-specific fields
+        appleTransactionId: transactionId,
+        appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId,
+        subscriptionSource: 'apple',
+        appleProductId: productId,
+        appleEnvironment: environment,
+      });
+
+      console.log('✅ Subscription created:', newSubscription.subscriptionId);
+
+      // Step 10: Update user record
+      await user.update(
+        { appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId },
+        { where: { id: userId } }
+      );
+
+      // Step 11: Format response
+      const expiryDateFormatted = expiresDate.toISOString().split('T')[0];
+
+      console.log('\n✅ Apple IAP Verification Complete');
+      console.log('  Subscription ID:', subscriptionId);
+      console.log('  Expiry Date:', expiryDateFormatted);
+      if (!hasUsedFreeTrial) {
+        console.log(`  🎁 Free Trial: ${FREE_TRIAL_DAYS} days added`);
+      }
+      console.log('\n💡 Next Step: Call POST /choosePlan to activate salon');
+
+      return res.status(200).json({
+        status: '1',
+        message: 'Purchase verified successfully',
+        data: {
+          subscriptionId: subscriptionId,
+          expiryDate: expiryDateFormatted,
+          price: subscriptionPrice?.toString() || '0',
+        },
+      });
+
+    } catch (apiError) {
+      console.error('\n❌ Apple Server API Error:', apiError.response?.data || apiError.message);
+      console.error('  Status:', apiError.response?.status);
+      console.error('  Full Apple Response:', JSON.stringify(apiError.response?.data, null, 2));
+      console.error('  Headers sent:', apiError.config?.headers);
+      
+      // Handle specific Apple API errors
+      if (apiError.response?.status === 404) {
+        return res.status(200).json({
+          status: '0',
+          message: 'Transaction not found',
+          error: 'The transaction ID was not found in Apple\'s system. It may be invalid or from a different environment.',
+        });
+      }
+      
+      if (apiError.response?.status === 401) {
+        const errorDetail = apiError.response?.data?.errors?.[0]?.detail || 'Check credentials';
+        const errorCode = apiError.response?.data?.errors?.[0]?.code || 'UNKNOWN';
+        console.error('  Apple Error Code:', errorCode);
+        console.error('  Apple 401 Detail:', errorDetail);
+        console.error('  IAP Key ID being used:', APPLE_IAP_KEY_ID);
+        console.error('  Issuer ID:', APPLE_CONNECT_ISSUER_ID);
+        console.error('  Bundle ID:', APPLE_BUNDLE_ID);
+        
+        return res.status(200).json({
+          status: '0',
+          message: 'Authentication failed with Apple',
+          error: `${errorCode}: ${errorDetail}. Verify your API key has access to App Store Server APIs.`,
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    console.error('\n❌ Apple IAP Verification Error:', error);
+    return res.status(500).json({
+      status: '0',
+      message: 'Verification failed',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Test Apple API credentials
  * Verifies that JWT generation and Apple authentication works
  */
@@ -694,20 +1045,21 @@ exports.testAppleCredentials = async (req, res, next) => {
     // Step 1: Check all env variables
     console.log('📋 Environment Variables:');
     console.log('  APPLE_ISSUER_ID:', APPLE_ISSUER_ID ? '✅ Set' : '❌ Missing');
-    console.log('  APPLE_KEY_ID:', APPLE_KEY_ID ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_IAP_KEY_ID:', APPLE_IAP_KEY_ID ? '✅ Set' : '❌ Missing');
     console.log('  APPLE_BUNDLE_ID:', APPLE_BUNDLE_ID ? '✅ Set' : '❌ Missing');
-    console.log('  APPLE_PRIVATE_KEY:', APPLE_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
+    console.log('  APPLE_IAP_PRIVATE_KEY:', APPLE_IAP_PRIVATE_KEY ? '✅ Set' : '❌ Missing');
     console.log('  APPLE_SHARED_SECRET:', APPLE_SHARED_SECRET ? '✅ Set' : '❌ Missing');
     
-    if (!APPLE_ISSUER_ID || !APPLE_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_PRIVATE_KEY) {
+    if (!APPLE_ISSUER_ID || !APPLE_IAP_KEY_ID || !APPLE_BUNDLE_ID || !APPLE_IAP_PRIVATE_KEY) {
       return res.status(500).json({
         status: '0',
-        message: 'Missing required Apple credentials in environment variables',
+        message: 'Missing required Apple In-App Purchase credentials. Use In-App Purchase key, NOT App Store Connect API key!',
         data: {
           hasIssuerId: !!APPLE_ISSUER_ID,
-          hasKeyId: !!APPLE_KEY_ID,
+          hasIapKeyId: !!APPLE_IAP_KEY_ID,
           hasBundleId: !!APPLE_BUNDLE_ID,
-          hasPrivateKey: !!APPLE_PRIVATE_KEY,
+          hasIapPrivateKey: !!APPLE_IAP_PRIVATE_KEY,
+          note: 'Keys must be from: App Store Connect > Users and Access > Integrations > In-App Purchase',
         },
       });
     }
@@ -738,13 +1090,14 @@ exports.testAppleCredentials = async (req, res, next) => {
       
       return res.status(200).json({
         status: '1',
-        message: 'Apple API credentials are valid and working!',
+        message: 'Apple In-App Purchase credentials are valid and working!',
         data: {
           authenticated: true,
           appsCount: response.data.data?.length || 0,
           issuer: APPLE_ISSUER_ID,
-          keyId: APPLE_KEY_ID,
+          iapKeyId: APPLE_IAP_KEY_ID,
           bundleId: APPLE_BUNDLE_ID,
+          keyType: 'In-App Purchase',
         },
       });
     } catch (apiError) {
@@ -778,8 +1131,9 @@ exports.testAppleCredentials = async (req, res, next) => {
           troubleshooting,
           credentials: {
             issuerId: APPLE_ISSUER_ID,
-            keyId: APPLE_KEY_ID,
+            iapKeyId: APPLE_IAP_KEY_ID,
             bundleId: APPLE_BUNDLE_ID,
+            note: 'Must use In-App Purchase key from App Store Connect > Integrations > In-App Purchase',
           },
         },
       });
@@ -793,4 +1147,9 @@ exports.testAppleCredentials = async (req, res, next) => {
     });
   }
 };
+
+// Export helper functions for use in other controllers
+module.exports.generateAppStoreServerJWT = generateAppStoreServerJWT;
+module.exports.generateAppStoreConnectJWT = generateAppStoreConnectJWT;
+module.exports.parseApplePrivateKey = parseApplePrivateKey;
 

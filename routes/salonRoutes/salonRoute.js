@@ -10,6 +10,7 @@ const {
 } = require('../../models')
 const salonController = require('../../controllers/salonControllers/salonController')
 const customerController = require('../../controllers/userControllers/customerController')
+const appleSubscriptionController = require('../../controllers/appleSubscriptions/appleSubscriptionController')
 const {
   fetchFAQs,
 } = require('../../controllers/adminController/adminController')
@@ -55,6 +56,8 @@ router.post('/registration', catchAsync(salonController.addSalonDetail))
 router.get('/subscriptionPlans', catchAsync(salonController.SubscriptionPlans))
 router.post('/AddCard', catchAsync(salonController.addCard))
 router.post('/choosePlan', catchAsync(salonController.choosePlan))
+// Apple In-App Purchase verification (Modern App Store Server API)
+router.post('/iap/apple/verify', catchAsync(appleSubscriptionController.verifyApplePurchase))
 router.post('/salonTiming', catchAsync(salonController.salonTiming))
 //get Salon Timing
 router.get('/getSalonTiming', catchAsync(salonController.getSalonTiming))

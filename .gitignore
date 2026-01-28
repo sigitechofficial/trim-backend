@@ -1,43 +1,59 @@
 # Ignore env
 .env
+
 # Ignore htaccess
 .htaccess
+
 # Ignore node artifacts
 node_modules/
 dist/
 config/
+
 # Ignore eslint/prettier
 .eslintrc.json
 .prettierrc
+
 # Ignore public folder
 Public/
+
 # Ignore firebase
 firebase.json
+
 # Ignore json/yml
 *.json
 *.yml
 # *.php
+
 # Ignore Java classes
 *.class
+
 # Ignore Python bytecode
 *.py[cod]
+
 # Ignore logs
 *.log
+
 # Ignore package files
 *.jar
+
 # Ignore Maven
 target/
+
 # Ignore JetBrains IDE
 .idea/
+
 # Ignore test reports
 TEST*.xml
+
 # Ignore OS files
 .DS_Store
 Thumbs.db
+
 # Ignore Applications
 *.app
 *.exe
 *.war
+
 # Ignore media files
 *.mp4
 *.tiff
