@@ -49,20 +49,23 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Manual Rsync - Most Reliable)
+      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
       - name: 📂 Sync files via SSH (Manual)
         run: |
-          # Setup SSH Key
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          
-          # Add Server to Known Hosts
           ssh-keyscan -H ${{ secrets.PROD_FTP_HOST }} >> ~/.ssh/known_hosts
 
-          # Run Rsync (Using hardcoded username 'trimworldwide')
-          echo "Starting Rsync Upload..."
-          rsync -avz --delete --exclude 'node_modules' --exclude '.git' --exclude '.github' \
+          echo "Starting Smart Sync..."
+          # ADDED '-c' flag here
+          # -c : Check file contents (Checksum), ignore timestamp
+          rsync -avzc --delete \
+          --exclude 'node_modules' \
+          --exclude 'public' \
+          --exclude '.git' \
+          --exclude '.github' \
+          --exclude 'uploads' \
           -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           ./ trimworldwide@${{ secrets.PROD_FTP_HOST }}:/home/trimworldwide/backend.trimworldwide.com/
 
@@ -71,17 +74,15 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.PROD_FTP_HOST }}
-          username: trimworldwide           # Hardcoded to ensure correct SSH user
+          username: trimworldwide
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
-            
             cd /home/trimworldwide/backend.trimworldwide.com
-
-            echo "Installing dependencies..."
-            npm install --production
+            echo "Checking dependencies..."
+            npm install --prefer-offline --no-audit
 
             echo "Restarting PM2 process..."
             pm2 stop trim.js || true
@@ -114,20 +115,22 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Manual Rsync - Most Reliable)
+      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
       - name: 📂 Sync files via SSH (Manual)
         run: |
-          # Setup SSH Key
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          
-          # Add Server to Known Hosts
           ssh-keyscan -H ${{ secrets.STAGE_FTP_HOST }} >> ~/.ssh/known_hosts
 
-          # Run Rsync (Using hardcoded username 'trimworldwide')
-          echo "Starting Rsync Upload..."
-          rsync -avz --delete --exclude 'node_modules' --exclude '.git' --exclude '.github' \
+          echo "Starting Smart Sync..."
+          # ADDED '-c' flag here for Testing as well
+          rsync -avzc --delete \
+          --exclude 'node_modules' \
+          --exclude 'public' \
+          --exclude '.git' \
+          --exclude '.github' \
+          --exclude 'uploads' \
           -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           ./ trimworldwide@${{ secrets.STAGE_FTP_HOST }}:/home/trimworldwide/stage.trimworldwide.com/
 
@@ -136,18 +139,15 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.STAGE_FTP_HOST }}
-          username: trimworldwide           # Hardcoded to ensure correct SSH user
+          username: trimworldwide
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
-            
             cd /home/trimworldwide/stage.trimworldwide.com
-
-            echo "Installing dependencies..."
-            npm install
-
+            echo "Checking dependencies..."
+            npm install --prefer-offline --no-audit
             echo "Restarting PM2 process..."
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
