@@ -68,7 +68,6 @@ jobs:
           host: ${{ secrets.PROD_FTP_HOST }}
           username: ${{ secrets.PROD_FTP_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
@@ -128,7 +127,6 @@ jobs:
           host: ${{ secrets.STAGE_FTP_HOST }}
           username: ${{ secrets.STAGE_FTP_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
@@ -148,4 +146,3 @@ jobs:
             
             echo "Testing Deployment Complete!"
 
-            
