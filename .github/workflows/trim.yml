@@ -49,25 +49,31 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Rsync) - REPLACES FTP
-      - name: 📂 Sync files via SSH (Rsync)
-        uses: easingthemes/ssh-deploy@main
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          ARGS: "-rlgoDzvc -i"
-          SOURCE: "/"
-          REMOTE_HOST: ${{ secrets.PROD_FTP_HOST }}
-          REMOTE_USER: ${{ secrets.PROD_FTP_USERNAME }}
-          TARGET: "/home/trimworldwide/backend.trimworldwide.com/"
-          EXCLUDE: "/node_modules/, /.git/, /.github/"
+      # 1. 📂 Sync Files via SSH (Manual Rsync - Most Reliable)
+      - name: 📂 Sync files via SSH (Manual)
+        run: |
+          # Setup SSH Key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add Server to Known Hosts
+          ssh-keyscan -H ${{ secrets.PROD_FTP_HOST }} >> ~/.ssh/known_hosts
+
+          # Run Rsync (Using hardcoded username 'trimworldwide')
+          echo "Starting Rsync Upload..."
+          rsync -avz --delete --exclude 'node_modules' --exclude '.git' --exclude '.github' \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          ./ trimworldwide@${{ secrets.PROD_FTP_HOST }}:/home/trimworldwide/backend.trimworldwide.com/
 
       # 2. 🚀 Execute Remote Commands via SSH
       - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.PROD_FTP_HOST }}
-          username: ${{ secrets.PROD_FTP_USERNAME }}
+          username: trimworldwide           # Hardcoded to ensure correct SSH user
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
@@ -108,25 +114,31 @@ jobs:
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Rsync) - REPLACES FTP
-      - name: 📂 Sync files via SSH (Rsync)
-        uses: easingthemes/ssh-deploy@main
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          ARGS: "-rlgoDzvc -i"
-          SOURCE: "/"
-          REMOTE_HOST: ${{ secrets.STAGE_FTP_HOST }}
-          REMOTE_USER: ${{ secrets.STAGE_FTP_USERNAME }}
-          TARGET: "/home/trimworldwide/stage.trimworldwide.com/"
-          EXCLUDE: "/node_modules/, /.git/, /.github/"
+      # 1. 📂 Sync Files via SSH (Manual Rsync - Most Reliable)
+      - name: 📂 Sync files via SSH (Manual)
+        run: |
+          # Setup SSH Key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add Server to Known Hosts
+          ssh-keyscan -H ${{ secrets.STAGE_FTP_HOST }} >> ~/.ssh/known_hosts
+
+          # Run Rsync (Using hardcoded username 'trimworldwide')
+          echo "Starting Rsync Upload..."
+          rsync -avz --delete --exclude 'node_modules' --exclude '.git' --exclude '.github' \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          ./ trimworldwide@${{ secrets.STAGE_FTP_HOST }}:/home/trimworldwide/stage.trimworldwide.com/
 
       # 2. 🚀 Execute Remote Commands via SSH
       - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.STAGE_FTP_HOST }}
-          username: ${{ secrets.STAGE_FTP_USERNAME }}
+          username: trimworldwide           # Hardcoded to ensure correct SSH user
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
@@ -137,12 +149,9 @@ jobs:
             npm install
 
             echo "Restarting PM2 process..."
-            # I changed 'thetrim.js' to 'trim.js' to match Main. 
-            # If your testing app IS named differently, change this back.
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
             pm2 start thetrim.js
             pm2 save
             
             echo "Testing Deployment Complete!"
-
