@@ -62,7 +62,7 @@ jobs:
           # -c : Check file contents (Checksum), ignore timestamp
           rsync -avzc --delete \
           --exclude 'node_modules' \
-          --exclude 'public' \
+          --exclude 'Public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
@@ -127,7 +127,7 @@ jobs:
           # ADDED '-c' flag here for Testing as well
           rsync -avzc --delete \
           --exclude 'node_modules' \
-          --exclude 'public' \
+          --exclude 'Public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
