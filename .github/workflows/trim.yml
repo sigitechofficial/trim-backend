@@ -29,49 +29,63 @@ jobs:
       - name: Check deployment flag
         id: check-flag
         run: |
-          DEPLOY_FLAG="yes" # Set the flag here. Change to "yes" to enable deployment.
-          echo "Deployment flag is set to: $DEPLOY_FLAG"
+          DEPLOY_FLAG="yes"
           if [ "$DEPLOY_FLAG" != "yes" ]; then
-            echo "Deployment flag is not set to 'yes'. Skipping deployment."
+            echo "Skipping deployment."
             exit 0
           fi
-
       - name: Create .env file dynamically
-        run: |
-          echo "Creating .env file..."
-          echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
+        run: echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
 
       - name: Create config folder and files
         run: |
-          echo "Creating config folder..."
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
-
       - name: Create .htaccess file
-        run: |
-          echo "Creating .htaccess_prod file..."
-          echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
+        run: echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
 
       - name: Creating firebase.json file
-        run: |
-          echo "Creating firebase.json..."
-          echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
+        run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      - name: 📂 Sync files to production
-        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
+      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      - name: 📂 Sync files via SSH (Manual)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PROD_FTP_HOST }} >> ~/.ssh/known_hosts
+          echo "Starting Smart Sync..."
+          # ADDED '-c' flag here
+          # -c : Check file contents (Checksum), ignore timestamp
+          rsync -avzc --delete \
+          --exclude 'node_modules' \
+          --exclude 'Public' \
+          --exclude '.git' \
+          --exclude '.github' \
+          --exclude 'uploads' \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          ./ trimworldwide@${{ secrets.PROD_FTP_HOST }}:/home/trimworldwide/backend.trimworldwide.com/
+      # 2. 🚀 Execute Remote Commands via SSH
+      - name: 🚀 Execute Remote Commands
+        uses: appleboy/ssh-action@master
         with:
-          server: ${{ secrets.PROD_FTP_HOST }}
-          username: ${{ secrets.PROD_FTP_USERNAME }}
-          password: ${{ secrets.PROD_FTP_PASSWORD }}
-          debug: true
-
-      - name: Trigger npm install on server
-        run: |
-          echo "Triggering npm install via PHP script..."
-          curl -X GET "https://backend.trimworldwide.com/trigger.php"
-        env:
-          HOME: /home/trimworldwide
-
+          host: ${{ secrets.PROD_FTP_HOST }}
+          username: trimworldwide
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
+            export HOME=/home/trimworldwide
+            cd /home/trimworldwide/backend.trimworldwide.com
+            echo "Checking dependencies..."
+            npm install --prefer-offline --no-audit
+            echo "Restarting PM2 process..."
+            pm2 stop trim.js || true
+            pm2 delete trim.js || true
+            pm2 start trim.js
+            pm2 save
+            
+            echo "Main Deployment Complete!"
   deploy_testing:
     needs: build
     if: github.ref == 'refs/heads/testing'
@@ -82,42 +96,53 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Create .env file dynamically
-        run: |
-          echo "Creating .env file..."
-          echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
+        run: echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
 
       - name: Create config folder and files
         run: |
-          echo "Creating config folder..."
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
-
       - name: Create .htaccess file
-        run: |
-          echo "Creating .htaccess_stage file..."
-          echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
+        run: echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
 
       - name: Creating firebase.json file
-        run: |
-          echo "Creating firebase.json..."
-          echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
+        run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      - name: 📂 Sync files to development
-        uses: SamKirkland/FTP-Deploy-Action@v4.2.0
+      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      - name: 📂 Sync files via SSH (Manual)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.STAGE_FTP_HOST }} >> ~/.ssh/known_hosts
+          echo "Starting Smart Sync..."
+          # ADDED '-c' flag here for Testing as well
+          rsync -avzc --delete \
+          --exclude 'node_modules' \
+          --exclude 'Public' \
+          --exclude '.git' \
+          --exclude '.github' \
+          --exclude 'uploads' \
+          -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          ./ trimworldwide@${{ secrets.STAGE_FTP_HOST }}:/home/trimworldwide/stage.trimworldwide.com/
+      # 2. 🚀 Execute Remote Commands via SSH
+      - name: 🚀 Execute Remote Commands
+        uses: appleboy/ssh-action@master
         with:
-          server: ${{ secrets.STAGE_FTP_HOST }}
-          username: ${{ secrets.STAGE_FTP_USERNAME }}
-          password: ${{ secrets.STAGE_FTP_PASSWORD }}
-          debug: true
-
-      - name: Trigger npm install on server
-        run: |
-          echo "Triggering npm install and pm2 start via PHP script..."
-          curl -X GET "https://stage.trimworldwide.com/trigger.php"
-        env:
-          HOME: /home/trimworldwide
-
-
-
-
-          
+          host: ${{ secrets.STAGE_FTP_HOST }}
+          username: trimworldwide
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
+            export HOME=/home/trimworldwide
+            cd /home/trimworldwide/stage.trimworldwide.com
+            echo "Checking dependencies..."
+            npm install --prefer-offline --no-audit
+            echo "Restarting PM2 process..."
+            pm2 stop thetrim.js || true
+            pm2 delete thetrim.js || true
+            pm2 start thetrim.js
+            pm2 save
+            
+            echo "Testing Deployment Complete!"
