@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: node:18.20.4
-
     steps:
       - uses: actions/checkout@v2
 
@@ -21,7 +20,6 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v2
@@ -29,7 +27,7 @@ jobs:
       - name: Check deployment flag
         id: check-flag
         run: |
-          DEPLOY_FLAG="yes" # Set the flag here. Change to "yes" to enable deployment.
+          DEPLOY_FLAG="yes"
           echo "Deployment flag is set to: $DEPLOY_FLAG"
           if [ "$DEPLOY_FLAG" != "yes" ]; then
             echo "Deployment flag is not set to 'yes'. Skipping deployment."
@@ -37,26 +35,20 @@ jobs:
           fi
 
       - name: Create .env file dynamically
-        run: |
-          echo "Creating .env file..."
-          echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
+        run: echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
 
       - name: Create config folder and files
         run: |
-          echo "Creating config folder..."
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
 
       - name: Create .htaccess file
-        run: |
-          echo "Creating .htaccess_prod file..."
-          echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
+        run: echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
 
       - name: Creating firebase.json file
-        run: |
-          echo "Creating firebase.json..."
-          echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
+        run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
+      # 1. Sync Files via FTP (Unchanged)
       - name: 📂 Sync files to production
         uses: SamKirkland/FTP-Deploy-Action@v4.2.0
         with:
@@ -65,43 +57,58 @@ jobs:
           password: ${{ secrets.PROD_FTP_PASSWORD }}
           debug: true
 
-      - name: Trigger npm install on server
-        run: |
-          echo "Triggering npm install via PHP script..."
-          curl -X GET "https://backend.trimworldwide.com/trigger.php"
-        env:
-          HOME: /home/trimworldwide
+      # 2. Execute Commands via SSH (Replaces trigger.php)
+      - name: 🚀 Execute Remote Commands via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_FTP_HOST }}       # Assuming Host is same as FTP
+          username: ${{ secrets.PROD_FTP_USERNAME }} # Assuming User is same as FTP
+          key: ${{ secrets.SSH_PRIVATE_KEY }}      # The new key you added
+          port: 22
+          script: |
+            # Set explicit PATH to ensure we use the correct Node version
+            export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
+            export HOME=/home/trimworldwide
+            
+            # Navigate to folder
+            cd /home/trimworldwide/backend.trimworldwide.com
+
+            # Install Dependencies
+            echo "Installing dependencies..."
+            npm install
+
+            # PM2 Process Management (Mirroring your previous PHP logic)
+            echo "Restarting PM2 process..."
+            pm2 stop trim.js || true
+            pm2 delete trim.js || true
+            pm2 start trim.js
+            pm2 save
+            
+            echo "Deployment Complete!"
 
   deploy_testing:
     needs: build
     if: github.ref == 'refs/heads/testing'
     runs-on: ubuntu-latest
-
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v2
 
       - name: Create .env file dynamically
-        run: |
-          echo "Creating .env file..."
-          echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
+        run: echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
 
       - name: Create config folder and files
         run: |
-          echo "Creating config folder..."
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
 
       - name: Create .htaccess file
-        run: |
-          echo "Creating .htaccess_stage file..."
-          echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
+        run: echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
 
       - name: Creating firebase.json file
-        run: |
-          echo "Creating firebase.json..."
-          echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
+        run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
+      # 1. Sync Files via FTP
       - name: 📂 Sync files to development
         uses: SamKirkland/FTP-Deploy-Action@v4.2.0
         with:
@@ -110,14 +117,27 @@ jobs:
           password: ${{ secrets.STAGE_FTP_PASSWORD }}
           debug: true
 
-      - name: Trigger npm install on server
-        run: |
-          echo "Triggering npm install and pm2 start via PHP script..."
-          curl -X GET "https://stage.trimworldwide.com/trigger.php"
-        env:
-          HOME: /home/trimworldwide
+      # 2. Execute Commands via SSH (Replaces trigger.php)
+      - name: 🚀 Execute Remote Commands via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGE_FTP_HOST }}
+          username: ${{ secrets.STAGE_FTP_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            # Set explicit PATH
+            export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
+            export HOME=/home/trimworldwide
+            
+            # Navigate to folder (Adjust path if your staging folder is named differently)
+            cd /home/trimworldwide/stage.trimworldwide.com
 
+            # Install Dependencies
+            npm install
 
-
-
-          
+            # PM2 Management
+            pm2 stop thetrim.js || true
+            pm2 delete thetrim.js || true
+            pm2 start thetrim.js
+            pm2 save
