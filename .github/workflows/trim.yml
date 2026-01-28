@@ -34,6 +34,7 @@ jobs:
             echo "Skipping deployment."
             exit 0
           fi
+
       - name: Create .env file dynamically
         run: echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
 
@@ -41,30 +42,31 @@ jobs:
         run: |
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_PROD }}" > .htaccess
 
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_PROD }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      # 1. 📂 Sync Files via SSH (Safe Sync - No Delete)
       - name: 📂 Sync files via SSH (Manual)
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.PROD_FTP_HOST }} >> ~/.ssh/known_hosts
-          echo "Starting Smart Sync..."
-          # ADDED '-c' flag here
-          # -c : Check file contents (Checksum), ignore timestamp
-          rsync -avzc --delete \
+
+          echo "Starting Safe Sync..."
+          rsync -avzc \
           --exclude 'node_modules' \
-          --exclude 'Public' \
+          --exclude 'public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
           -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           ./ trimworldwide@${{ secrets.PROD_FTP_HOST }}:/home/trimworldwide/backend.trimworldwide.com/
+
       # 2. 🚀 Execute Remote Commands via SSH
       - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
@@ -76,9 +78,12 @@ jobs:
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
+            
             cd /home/trimworldwide/backend.trimworldwide.com
+
             echo "Checking dependencies..."
             npm install --prefer-offline --no-audit
+
             echo "Restarting PM2 process..."
             pm2 stop trim.js || true
             pm2 delete trim.js || true
@@ -86,6 +91,7 @@ jobs:
             pm2 save
             
             echo "Main Deployment Complete!"
+
   deploy_testing:
     needs: build
     if: github.ref == 'refs/heads/testing'
@@ -102,29 +108,31 @@ jobs:
         run: |
           mkdir -p config
           echo "${{ secrets.CONFIG_JSON_CONTENT }}" > config/config.json
+
       - name: Create .htaccess file
         run: echo "${{ secrets.HTACCESS_CONTENT_STAGE }}" > .htaccess
 
       - name: Creating firebase.json file
         run: echo "${{ secrets.FIREBASE_CONTENT_STAGE }}" > firebase.json
 
-      # 1. 📂 Sync Files via SSH (Optimized with Checksum)
+      # 1. 📂 Sync Files via SSH (Safe Sync - No Delete)
       - name: 📂 Sync files via SSH (Manual)
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.STAGE_FTP_HOST }} >> ~/.ssh/known_hosts
-          echo "Starting Smart Sync..."
-          # ADDED '-c' flag here for Testing as well
-          rsync -avzc --delete \
+
+          echo "Starting Safe Sync..."
+          rsync -avzc \
           --exclude 'node_modules' \
-          --exclude 'Public' \
+          --exclude 'public' \
           --exclude '.git' \
           --exclude '.github' \
           --exclude 'uploads' \
           -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           ./ trimworldwide@${{ secrets.STAGE_FTP_HOST }}:/home/trimworldwide/stage.trimworldwide.com/
+
       # 2. 🚀 Execute Remote Commands via SSH
       - name: 🚀 Execute Remote Commands
         uses: appleboy/ssh-action@master
@@ -136,9 +144,12 @@ jobs:
           script: |
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
             export HOME=/home/trimworldwide
+            
             cd /home/trimworldwide/stage.trimworldwide.com
+
             echo "Checking dependencies..."
             npm install --prefer-offline --no-audit
+
             echo "Restarting PM2 process..."
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
