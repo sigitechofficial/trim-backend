@@ -26,6 +26,14 @@ let APPLE_IAP_PRIVATE_KEY = process.env.APPLE_IAP_PRIVATE_KEY;
 // Legacy shared secret
 const APPLE_SHARED_SECRET = process.env.APPLE_SHARED_SECRET;
 
+// Helper function to convert Apple price to actual currency amount
+// Apple sends prices in minor units (e.g., PKR 2200 is sent as 2200000)
+// This divides by 1000 to get the actual amount
+function convertApplePrice(applePrice) {
+  const price = parseFloat(applePrice || 0);
+  return price / 1000; // Convert from Apple's minor units to actual currency
+}
+
 // If private key file path is provided, read from file
 if (process.env.APPLE_IAP_PRIVATE_KEY_PATH) {
   try {
@@ -646,7 +654,7 @@ exports.createAppleSubscription = async (req, res, next) => {
       existingSubscription.periodEnd = expiresDate;
       existingSubscription.appleProductId = productIdFromReceipt;
       existingSubscription.priceId = productIdFromReceipt;
-      existingSubscription.amountPaid = parseFloat(latestTransaction.price || 0);
+      existingSubscription.amountPaid = convertApplePrice(latestTransaction.price);
       existingSubscription.currency = latestTransaction.currency || 'USD';
       existingSubscription.appleEnvironment = receiptResponse.environment || 'Production';
       existingSubscription.VAT = parseFloat(metadata?.VAT || '0');
@@ -668,7 +676,7 @@ exports.createAppleSubscription = async (req, res, next) => {
         priceId: productIdFromReceipt,
         customerId: salonUser.id.toString(),
         name: metadata?.subscriptionName || 'Apple Subscription',
-        amountPaid: parseFloat(latestTransaction.price || 0),
+        amountPaid: convertApplePrice(latestTransaction.price),
         currency: latestTransaction.currency || 'USD',
         appleEnvironment: receiptResponse.environment || 'Production',
         VAT: parseFloat(metadata?.VAT || '0'),
@@ -898,19 +906,31 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
       // Step 6: Calculate subscription dates
       const purchaseDate = new Date(transactionPayload.purchaseDate);
-      const expiresDate = transactionPayload.expiresDate 
+      let expiresDate = transactionPayload.expiresDate 
         ? new Date(transactionPayload.expiresDate)
         : new Date(purchaseDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days if not provided
 
-      // Add 5 days grace period (same as Stripe)
-      const gracePeriodDays = 5;
-      const expiryDateWithGrace = new Date(expiresDate);
-      expiryDateWithGrace.setDate(expiryDateWithGrace.getDate() + gracePeriodDays);
+      // Check if salon exists and if they've used free trial
+      const userSalon = await salonDetail.findOne({
+        where: { userId: userId }
+      });
+
+      // FREE TRIAL LOGIC - Add 3 days if first time
+      const FREE_TRIAL_DAYS = 3;
+      const hasUsedFreeTrial = userSalon?.hasObtainedFreeTrial === 1 || userSalon?.hasObtainedFreeTrial === true;
+
+      if (!hasUsedFreeTrial) {
+        console.log(`🎁 Adding ${FREE_TRIAL_DAYS} days free trial`);
+        expiresDate.setDate(expiresDate.getDate() + FREE_TRIAL_DAYS);
+      }
 
       console.log('📅 Subscription Dates:');
       console.log('  Purchase Date:', purchaseDate.toISOString());
-      console.log('  Expires Date:', expiresDate.toISOString());
-      console.log('  Expiry with Grace:', expiryDateWithGrace.toISOString());
+      console.log('  Expires Date (original):', transactionPayload.expiresDate ? new Date(transactionPayload.expiresDate).toISOString() : 'N/A');
+      if (!hasUsedFreeTrial) {
+        console.log(`  🎁 Free Trial: +${FREE_TRIAL_DAYS} days`);
+      }
+      console.log('  Final Expiry Date:', expiresDate.toISOString());
 
       // Step 7: Generate subscription ID
       const subscriptionId = `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
@@ -928,7 +948,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
         currency: 'USD',
         priceId: priceId,
         periodStart: purchaseDate,
-        periodEnd: expiryDateWithGrace,
+        periodEnd: expiresDate,
         status: 'active',
         VAT: vat || 0,
         salonDetailId:salonDetailId,
@@ -949,11 +969,14 @@ exports.verifyApplePurchase = async (req, res, next) => {
       );
 
       // Step 11: Format response
-      const expiryDateFormatted = expiryDateWithGrace.toISOString().split('T')[0];
+      const expiryDateFormatted = expiresDate.toISOString().split('T')[0];
 
       console.log('\n✅ Apple IAP Verification Complete');
       console.log('  Subscription ID:', subscriptionId);
       console.log('  Expiry Date:', expiryDateFormatted);
+      if (!hasUsedFreeTrial) {
+        console.log(`  🎁 Free Trial: ${FREE_TRIAL_DAYS} days added`);
+      }
       console.log('\n💡 Next Step: Call POST /choosePlan to activate salon');
 
       return res.status(200).json({

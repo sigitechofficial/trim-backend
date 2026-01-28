@@ -174,6 +174,8 @@ async function handleV2Webhook(notification, res) {
       case 'SUBSCRIBED':
         if (subtype === 'INITIAL_BUY') {
           await handleInitialBuy(transactionData, salonUser, salon);
+        } else if (subtype === 'RESUBSCRIBE') {
+          await handleRenewal(transactionData, salonUser, salon);
         }
         break;
         
@@ -194,6 +196,8 @@ async function handleV2Webhook(notification, res) {
       case 'DID_CHANGE_RENEWAL_STATUS':
         if (subtype === 'AUTO_RENEW_DISABLED') {
           await handleCancellation(transactionData, salonUser, salon);
+        } else if (subtype === 'AUTO_RENEW_ENABLED') {
+          await handleRenewal(transactionData, salonUser, salon);
         }
         break;
         
@@ -211,6 +215,22 @@ async function handleV2Webhook(notification, res) {
         
       case 'RENEWAL_EXTENDED':
         await handleRenewalExtended(transactionData, salonUser, salon);
+        break;
+        
+      case 'OFFER_REDEEMED':
+        console.log('🎁 Handling OFFER_REDEEMED (promotional offer)');
+        await handleRenewal(transactionData, salonUser, salon);
+        break;
+        
+      case 'REVOKE':
+        console.log('❌ Handling REVOKE (subscription revoked)');
+        await handleRefund(transactionData, salonUser, salon);
+        break;
+        
+      case 'DID_CHANGE_RENEWAL_PREF':
+        if (renewalJWT) {
+          await handleRenewalPreferenceChange(transactionData, renewalJWT, subtype, salonUser, salon);
+        }
         break;
         
       case 'TEST':
@@ -313,10 +333,49 @@ async function handleV1Webhook(notification, res) {
   }
 }
 
+// Helper function to convert Apple price to actual currency amount
+// Apple sends prices in minor units (e.g., PKR 2200 is sent as 2200000)
+// This divides by 1000 to get the actual amount
+function convertApplePrice(applePrice) {
+  const price = parseFloat(applePrice || 0);
+  return price / 1000; // Convert from Apple's minor units to actual currency
+}
+
+// Helper function to get subscription name based on product ID
+function getSubscriptionName(productId) {
+  if (!productId) return 'Apple Subscription';
+  
+  // Map product IDs to their reference names from App Store Connect
+  const productMapping = {
+    'trimbiz_monthly_owner': 'Owner only',
+    'trimbiz_owner_one_staff': 'Owner + 1 staff member',
+    'trimbiz_owner_two_staff': 'Owner + 2 staff member',
+    'trimbiz_owner_three_staff': 'Owner + 3 staff member',
+    'trimbiz_owner_four_staff': 'Owner + 4 staff member',
+    'trimbiz_owner_five_staff': 'Owner + 5 staff member',
+    'trimbiz_owner_unlimited_staff': 'Owner + unlimited staff member',
+  };
+  
+  // Return the mapped name, or default if not found
+  return productMapping[productId] || 'Apple Subscription';
+}
+
 async function handleInitialBuy(transaction, salonUser, salon) {
   console.log('🆕 Handling INITIAL_BUY');
   const purchaseDate = new Date(parseInt(transaction.purchase_date_ms));
-  const expiresDate = new Date(parseInt(transaction.expires_date_ms));
+  let expiresDate = new Date(parseInt(transaction.expires_date_ms));
+  
+  // FREE TRIAL LOGIC - Add 3 days if user hasn't used free trial yet
+  const FREE_TRIAL_DAYS = 3;
+  const hasUsedFreeTrial = salon.hasObtainedFreeTrial === 1 || salon.hasObtainedFreeTrial === true;
+  
+  if (!hasUsedFreeTrial) {
+    console.log(`🎁 Adding ${FREE_TRIAL_DAYS} days free trial for salon ${salon.id}`);
+    expiresDate.setDate(expiresDate.getDate() + FREE_TRIAL_DAYS);
+  }
+  
+  // Get subscription name based on product ID
+  const subscriptionName = getSubscriptionName(transaction.product_id);
   
   const [subscription, created] = await subscriptions.findOrCreate({
     where: {
@@ -336,8 +395,8 @@ async function handleInitialBuy(transaction, salonUser, salon) {
       periodEnd: expiresDate,
       priceId: transaction.product_id,
       customerId: salonUser.id.toString(),
-      name: 'Apple Subscription',
-      amountPaid: parseFloat(transaction.price || 0),
+      name: subscriptionName,
+      amountPaid: convertApplePrice(transaction.price),
       currency: transaction.currency || 'USD',
       appleEnvironment: 'Production',
     },
@@ -348,6 +407,7 @@ async function handleInitialBuy(transaction, salonUser, salon) {
     subscription.periodStart = purchaseDate;
     subscription.periodEnd = expiresDate;
     subscription.appleTransactionId = transaction.transaction_id;
+    subscription.name = subscriptionName;
     await subscription.save();
   }
   
@@ -360,12 +420,19 @@ async function handleInitialBuy(transaction, salonUser, salon) {
   await salon.save();
   
   console.log(`✅ Initial purchase processed for salon ${salon.id}`);
+  console.log(`   Subscription: ${subscriptionName}`);
+  if (!hasUsedFreeTrial) {
+    console.log(`🎁 Free trial granted: ${FREE_TRIAL_DAYS} days added`);
+  }
 }
 
 async function handleRenewal(transaction, salonUser, salon) {
   console.log('🔄 Handling DID_RENEW');
   const purchaseDate = new Date(parseInt(transaction.purchase_date_ms));
   const expiresDate = new Date(parseInt(transaction.expires_date_ms));
+  
+  // Get subscription name based on product ID
+  const subscriptionName = getSubscriptionName(transaction.product_id);
   
   const subscription = await subscriptions.findOne({
     where: {
@@ -381,6 +448,11 @@ async function handleRenewal(transaction, salonUser, salon) {
     subscription.periodEnd = expiresDate;
     subscription.appleTransactionId = transaction.transaction_id;
     subscription.subscriptionId = transaction.transaction_id;
+    subscription.appleProductId = transaction.product_id;
+    subscription.priceId = transaction.product_id;
+    subscription.name = subscriptionName;
+    subscription.amountPaid = convertApplePrice(transaction.price);
+    subscription.currency = transaction.currency || 'USD';
     await subscription.save();
   } else {
     // Create new subscription record for renewal
@@ -397,8 +469,8 @@ async function handleRenewal(transaction, salonUser, salon) {
       periodEnd: expiresDate,
       priceId: transaction.product_id,
       customerId: salonUser.id.toString(),
-      name: 'Apple Subscription',
-      amountPaid: parseFloat(transaction.price || 0),
+      name: subscriptionName,
+      amountPaid: convertApplePrice(transaction.price),
       currency: transaction.currency || 'USD',
       appleEnvironment: 'Production',
     });
@@ -408,9 +480,11 @@ async function handleRenewal(transaction, salonUser, salon) {
   salon.registrationExpiryDate = expiresDate;
   salon.registrationDate = purchaseDate;
   salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
+  salon.approvedByAdmin=true
   await salon.save();
   
   console.log(`✅ Renewal processed for salon ${salon.id}`);
+  console.log(`   Subscription: ${subscriptionName}`);
 }
 
 async function handleRenewalFailure(transaction, salonUser, salon) {
@@ -450,6 +524,7 @@ async function handleCancellation(transaction, salonUser, salon) {
   }
   
   salon.subscriptionLatestPaymentStatus = 'canceled';
+  salon.approvedByAdmin = false;
   await salon.save();
   
   console.log(`🚫 Cancellation processed for salon ${salon.id}`);
@@ -486,14 +561,8 @@ async function handleGracePeriodExpired(transaction, salonUser, salon) {
     },
     order: [['createdAt', 'DESC']],
   });
-  
-  if (subscription) {
-    subscription.status = 'expired';
-    await subscription.save();
-  }
-  
-  salon.approvedByAdmin = false;
-  salon.subscriptionLatestPaymentStatus = 'expired';
+
+  salon.hasObtainedFreeTrial = 0;
   await salon.save();
   
   console.log(`⏰ Grace period expired for salon ${salon.id}`);
@@ -539,5 +608,60 @@ async function handleRenewalExtended(transaction, salonUser, salon) {
   await salon.save();
   
   console.log(`⏳ Renewal extended for salon ${salon.id}`);
+}
+
+async function handleRenewalPreferenceChange(transaction, renewalJWT, subtype, salonUser, salon) {
+  console.log(`📝 Handling DID_CHANGE_RENEWAL_PREF (${subtype})`);
+  
+  try {
+    // Decode renewal info to get future subscription details
+    const renewalPayload = JSON.parse(
+      Buffer.from(renewalJWT.split('.')[1], 'base64').toString()
+    );
+    
+    const currentProductId = transaction.product_id;
+    const futureProductId = renewalPayload.autoRenewProductId;
+    const currentPrice = convertApplePrice(transaction.price);
+    const futurePrice = convertApplePrice(renewalPayload.renewalPrice);
+    const currency = renewalPayload.currency || transaction.currency || 'USD';
+    
+    console.log(`  Current product: ${currentProductId} (${currentPrice} ${transaction.currency})`);
+    console.log(`  Future product: ${futureProductId} (${futurePrice} ${currency})`);
+    console.log(`  Change type: ${subtype}`);
+    
+    // Find the subscription
+    const subscription = await subscriptions.findOne({
+      where: {
+        appleOriginalTransactionId: transaction.original_transaction_id,
+        subscriptionSource: 'apple',
+      },
+      order: [['createdAt', 'DESC']],
+    });
+    
+    if (subscription) {
+      // Update subscription with NEW product information for next renewal
+      subscription.appleProductId = futureProductId;
+      subscription.priceId = futureProductId;
+      subscription.amountPaid = futurePrice;
+      subscription.currency = currency;
+      
+      // Update subscription name based on product ID
+      const subscriptionName = getSubscriptionName(futureProductId);
+      subscription.name = subscriptionName;
+      
+      await subscription.save();
+      
+      console.log(`✅ Subscription updated for salon ${salon.id}`);
+      console.log(`   Product: ${currentProductId} → ${futureProductId}`);
+      console.log(`   Price: ${currentPrice} → ${futurePrice} ${currency}`);
+      console.log(`   Name: ${subscriptionName}`);
+      console.log(`   Changes will apply on next renewal`);
+    } else {
+      console.warn(`⚠️ Subscription not found for original transaction: ${transaction.original_transaction_id}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling renewal preference change:', error);
+  }
 }
 
