@@ -64,7 +64,7 @@ jobs:
           host: ${{ secrets.PROD_FTP_HOST }}       # Assuming Host is same as FTP
           username: ${{ secrets.PROD_FTP_USERNAME }} # Assuming User is same as FTP
           key: ${{ secrets.SSH_PRIVATE_KEY }}      # The new key you added
-          port: 22
+          port: 21
           script: |
             # Set explicit PATH to ensure we use the correct Node version
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
@@ -124,7 +124,7 @@ jobs:
           host: ${{ secrets.STAGE_FTP_HOST }}
           username: ${{ secrets.STAGE_FTP_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
+          port: 21
           script: |
             # Set explicit PATH
             export PATH=/home/trimworldwide/.nvm/versions/node/v18.20.4/bin:$PATH
