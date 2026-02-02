@@ -21,6 +21,7 @@ const {
   paymentPolicy,
   reschedulePolicy,
   noShowPolicy,
+  subscriptions,
 } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
@@ -49,6 +50,25 @@ let returnFunction = (status, message, data, error) => {
     error: `${error}`,
   }
 }
+
+//! Helper Function: Get team size from Apple product ID
+const getTeamSizeFromAppleProduct = (productId) => {
+  if (!productId) return null;
+  
+  // Map Apple product IDs to team sizes (owner + staff members)
+  const productTeamSizeMapping = {
+    'trimbiz_monthly_owner': 1,                      // Owner only
+    'trimbiz_owner_one_staff': 2,                    // Owner + 1 staff
+    'trimbiz_owner_two_staff': 3,                    // Owner + 2 staff
+    'trimbiz_owner_three_staff': 4,                  // Owner + 3 staff
+    'trimbiz_owner_four_staff': 5,                   // Owner + 4 staff
+    'trimbiz_owner_five_staff': 6,                   // Owner + 5 staff
+    'trimbiz_owner_unlimited_staff': "unlimited",            // Owner + unlimited staff
+  };
+  
+  return productTeamSizeMapping[productId] || null;
+}
+
 /*
             1. All Employees of Salon
     ________________________________________
@@ -63,6 +83,31 @@ exports.fetchEmployees = async (req, res, next) => {
     attributes: ['id', 'teamSize'],
   })
   const salonDetailId = salonDetails.id
+  
+  // Check for active Apple subscription
+  let membersAllowed = salonDetails?.teamSize || 0;
+  
+  const appleSubscription = await subscriptions.findOne({
+    where: {
+      customerId: userId.toString(),
+      status: 'active',
+    },
+    order: [['createdAt', 'DESC']],
+    attributes: ['appleProductId', 'status', 'periodEnd'],
+  });
+
+  // If Apple subscription exists and is active, use team size from Apple product
+  if (appleSubscription && appleSubscription.appleProductId) {
+    const appleTeamSize = getTeamSizeFromAppleProduct(appleSubscription.appleProductId);
+    if (appleTeamSize !== null) {
+      membersAllowed = appleTeamSize;
+      console.log(`✅ Using Apple subscription team size: ${appleTeamSize} (Product: ${appleSubscription.appleProductId})`);
+    }
+  } else {
+    // Fallback to Stripe subscription team size from salonDetails
+    console.log(`✅ Using Stripe subscription team size: ${membersAllowed}`);
+  }
+  
   const condition = { salonDetailId, deleted: false, isExternalEmployee: false }
   if (req?.params?.type == 'external') condition.isExternalEmployee = true
 
@@ -98,7 +143,7 @@ exports.fetchEmployees = async (req, res, next) => {
     returnFunction(
       '1',
       'All Employees of Salon',
-      { AllEmployess, membersAllowed: salonDetails?.teamSize, activeMembers },
+      { AllEmployess, membersAllowed, activeMembers },
       '',
     ),
   )
