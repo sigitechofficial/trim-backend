@@ -2184,8 +2184,14 @@ exports.checkOutBooking = async (req, res, next) => {
     bookingData.subTotal = bookingData.total;
     await bookingData.save();
 
+    // Increment actualCapturedAmount, but SET tip (don't increment it)
     await booking.increment(
-      { actualCapturedAmount: parseFloat(req.body.amount), tip: tip },
+      { actualCapturedAmount: parseFloat(req.body.amount) },
+      { where: { id: bookingId } }
+    );
+    
+    await booking.update(
+      { tip: (bookingData.tip || 0) + tip },
       { where: { id: bookingId } }
     );
 
