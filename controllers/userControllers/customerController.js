@@ -2233,6 +2233,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'finalPayment',
       'subTotal',
       'paymentMethod',
+      'stripeCardId',
       'feedback',
       'salonReply',
       'vatAmount',
@@ -2402,6 +2403,28 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
     }
   }
 
+  // Fetch card details if payment method is card
+  let cardDetails = null
+  if (output.paymentMethod === 'card' && output.stripeCardId && output.salonDetail?.connectAccountId) {
+    try {
+      const cardInfo = await Stripe.retrievePaymentMethod(
+        output.stripeCardId,
+        output.salonDetail.connectAccountId
+      )
+      if (cardInfo && cardInfo.last4) {
+        cardDetails = {
+          last4: cardInfo.last4,
+          brand: cardInfo.brand || null,
+          expMonth: cardInfo.exp_month || null,
+          expYear: cardInfo.exp_year || null,
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to retrieve card details for booking ${id}:`, error.message)
+      // Continue without card details if retrieval fails
+    }
+  }
+
   return res.status(200).json(
     response({
       data: { 
@@ -2409,6 +2432,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
         policies, 
         currencyUnit: CURRENCY_UNIT,
         subscriptionExpire,
+        cardDetails,
       },
     }),
   )
