@@ -315,11 +315,74 @@ exports.choosePlan = async (req, res, next) => {
       console.log('  ✅ Apple subscription found')
       console.log('  Status:', appleSubscription.status)
       console.log('  Period End:', appleSubscription.periodEnd)
+      console.log('  Product ID:', appleSubscription.appleProductId)
 
       // Use dates from Apple subscription (grace period already added during verification)
       periodStart = Math.floor(new Date(appleSubscription.periodStart).getTime() / 1000)
       periodEnd = Math.floor(new Date(appleSubscription.periodEnd).getTime() / 1000)
       subscriptionPlanId = appleSubscription.subscriptionId
+
+      // ✅ Extract and update plan metadata from product ID
+      if (appleSubscription.appleProductId) {
+        // Helper function to get subscription name from product ID
+        const getSubscriptionName = (productId) => {
+          const productMapping = {
+            'trimbiz_monthly_owner': 'Owner',
+            'trimbiz_owner_one_staff': 'Owner + 1 staff member',
+            'trimbiz_owner_two_staff': 'Owner + 2 staff member',
+            'trimbiz_owner_three_staff': 'Owner + 3 staff member',
+            'trimbiz_owner_four_staff': 'Owner + 4 staff member',
+            'trimbiz_owner_five_staff': 'Owner + 5 staff member',
+            'trimbiz_owner_unlimited_staff': 'Owner + unlimited staff member',
+          };
+          return productMapping[productId] || 'Apple Subscription';
+        };
+
+        // Helper function to get team size from product ID
+        const getTeamSizeFromAppleProduct = (productId) => {
+          const productTeamSizeMapping = {
+            'trimbiz_monthly_owner': 1,
+            'trimbiz_owner_one_staff': 2,
+            'trimbiz_owner_two_staff': 3,
+            'trimbiz_owner_three_staff': 4,
+            'trimbiz_owner_four_staff': 5,
+            'trimbiz_owner_five_staff': 6,
+            'trimbiz_owner_unlimited_staff': 999,
+          };
+          return productTeamSizeMapping[productId] || null;
+        };
+
+        const productId = appleSubscription.appleProductId;
+        const subscriptionName = getSubscriptionName(productId);
+        const teamSize = getTeamSizeFromAppleProduct(productId);
+        const membersCount = teamSize ? (teamSize - 1) : null; // Subtract 1 for owner
+
+        console.log('  📦 Plan Details:');
+        console.log('    - Product ID:', productId);
+        console.log('    - Subscription Name:', subscriptionName);
+        console.log('    - Team Size:', teamSize);
+        console.log('    - Members Count:', membersCount);
+
+        // Update salon metadata with plan details
+        const currentMetadata = salonData.metadata || {};
+        salonData.metadata = {
+          ...currentMetadata,
+          subscriptionName: subscriptionName,
+          membersCount: membersCount?.toString() || '',
+        };
+        
+        // Update team size
+        if (teamSize !== null) {
+          salonData.teamSize = teamSize;
+        }
+        
+        // Update subscription price if available
+        if (appleSubscription.amountPaid) {
+          salonData.subscriptionPrice = parseFloat(appleSubscription.amountPaid);
+        }
+
+        console.log('  ✅ Plan metadata updated');
+      }
 
     } else {
       console.log('💳 Processing Stripe subscription...')
