@@ -2145,7 +2145,8 @@ exports.checkOutBooking = async (req, res, next) => {
   let amount = parseFloat(req.body.amount) + tip;
   const targetAmount = req.body.targetAmount;
   amount=amount-bookingData.tip
-  const salonEarning = amount + parseFloat(bookingData.actualCapturedAmount);
+  // Fixed: salonEarning should only include service amount, not tip (tip goes to tipAmount via distributeTip)
+  const salonEarning = parseFloat(req.body.amount) + parseFloat(bookingData.actualCapturedAmount);
 
   // Prepare customer name
   const customerName = bookingData.user 
@@ -2287,8 +2288,14 @@ exports.checkoutCash = async (req, res, next) => {
   await bookingData.save()
   const capturedPayment = parseFloat(req.body.amount)
   await booking.increment(
-    { actualCapturedAmount: capturedPayment, tip: tip },
+    { actualCapturedAmount: capturedPayment },
     { where: { id: bookingId } },
+  )
+  
+  // Fixed: Use update instead of increment for tip to avoid doubling
+  await booking.update(
+    { tip: (bookingData.tip || 0) + (tip || 0) },
+    { where: { id: bookingId } }
   )
   //EMAIL --//TODO
   Communication.cash(bookingId, tip || 0, amount)
@@ -2390,7 +2397,13 @@ exports.checkOutMinimalPayment = async (req, res, next) => {
 
     // Update actual captured amount and tip
     await booking.increment(
-      { actualCapturedAmount: amount, tip: tipAmount },
+      { actualCapturedAmount: amount },
+      { where: { id: bookingId } }
+    );
+    
+    // Fixed: Use update instead of increment for tip to avoid doubling
+    await booking.update(
+      { tip: (bookingData.tip || 0) + tipAmount },
       { where: { id: bookingId } }
     );
 
