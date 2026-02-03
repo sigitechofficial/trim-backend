@@ -293,9 +293,14 @@ exports.choosePlan = async (req, res, next) => {
       console.log('📱 Processing Apple subscription...')
 
       // Get Apple subscription from database
+      // Search by multiple fields: subscriptionId, appleTransactionId, or appleOriginalTransactionId
       const appleSubscription = await subscriptions.findOne({
         where: {
-          subscriptionId: subscriptionId,
+          [Op.or]: [
+            { subscriptionId: subscriptionId },
+            { appleTransactionId: subscriptionId },
+            { appleOriginalTransactionId: subscriptionId }
+          ],
           customerId: userId.toString(),
           subscriptionSource: 'apple',
         },

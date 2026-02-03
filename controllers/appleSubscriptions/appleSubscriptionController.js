@@ -916,7 +916,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
       });
 
       // FREE TRIAL LOGIC - Add 3 days if first time
-      const FREE_TRIAL_DAYS = 3;
+      const FREE_TRIAL_DAYS = 5;
       const hasUsedFreeTrial = userSalon?.hasObtainedFreeTrial === 1 || userSalon?.hasObtainedFreeTrial === true;
 
       if (!hasUsedFreeTrial) {

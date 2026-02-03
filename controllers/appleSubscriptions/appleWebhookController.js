@@ -385,7 +385,8 @@ async function handleInitialBuy(transaction, salonUser, salon) {
     defaults: {
       userId: salonUser.id,
       salonDetailId: salon.id,
-      subscriptionId: transaction.transaction_id,
+      // ✅ FIXED: Use backend-generated subscriptionId instead of Apple transaction ID
+      subscriptionId: `sub_apple_${Date.now()}_${transaction.transaction_id.slice(-8)}`,
       appleTransactionId: transaction.transaction_id,
       appleOriginalTransactionId: transaction.original_transaction_id,
       appleProductId: transaction.product_id,
@@ -447,7 +448,8 @@ async function handleRenewal(transaction, salonUser, salon) {
     subscription.periodStart = purchaseDate;
     subscription.periodEnd = expiresDate;
     subscription.appleTransactionId = transaction.transaction_id;
-    subscription.subscriptionId = transaction.transaction_id;
+    // ✅ FIXED: Don't overwrite subscriptionId - keep the backend-generated ID
+    // subscription.subscriptionId = transaction.transaction_id; // REMOVED
     subscription.appleProductId = transaction.product_id;
     subscription.priceId = transaction.product_id;
     subscription.name = subscriptionName;
@@ -459,7 +461,8 @@ async function handleRenewal(transaction, salonUser, salon) {
     await subscriptions.create({
       userId: salonUser.id,
       salonDetailId: salon.id,
-      subscriptionId: transaction.transaction_id,
+      // ✅ FIXED: Use backend-generated subscriptionId instead of Apple transaction ID
+      subscriptionId: `sub_apple_${Date.now()}_${transaction.transaction_id.slice(-8)}`,
       appleTransactionId: transaction.transaction_id,
       appleOriginalTransactionId: transaction.original_transaction_id,
       appleProductId: transaction.product_id,
