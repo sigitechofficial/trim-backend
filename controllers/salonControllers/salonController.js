@@ -467,12 +467,55 @@ exports.choosePlan = async (req, res, next) => {
     console.log('  ✅ Salon profile updated')
     console.log('\n✅ Choose Plan Complete!')
 
+    // Convert salonData to plain object to avoid serialization errors
+    // This prevents "Too many properties to enumerate" error
+    let salonDataPlain = null
+    try {
+      if (salonData) {
+        // Use Sequelize's toJSON() method to get plain object
+        salonDataPlain = salonData.toJSON ? salonData.toJSON() : JSON.parse(JSON.stringify(salonData))
+        
+        // Clean up metadata if it's too complex
+        if (salonDataPlain.metadata) {
+          // If metadata is a string, try to parse it
+          if (typeof salonDataPlain.metadata === 'string') {
+            try {
+              salonDataPlain.metadata = JSON.parse(salonDataPlain.metadata)
+            } catch (e) {
+              // If parsing fails, set to empty object
+              salonDataPlain.metadata = {}
+            }
+          }
+          
+          // If metadata is an object, limit to essential fields only
+          if (typeof salonDataPlain.metadata === 'object' && salonDataPlain.metadata !== null) {
+            const essentialMetadata = {
+              subscriptionName: salonDataPlain.metadata.subscriptionName || null,
+              membersCount: salonDataPlain.metadata.membersCount || null,
+            }
+            salonDataPlain.metadata = essentialMetadata
+          }
+        }
+      }
+    } catch (serializationError) {
+      console.error('⚠️ Error serializing salonData:', serializationError.message)
+      // Return only essential fields if full serialization fails
+      salonDataPlain = {
+        id: salonData?.id,
+        salonName: salonData?.salonName,
+        approvedByAdmin: salonData?.approvedByAdmin,
+        registrationDate: salonData?.registrationDate,
+        registrationExpiryDate: salonData?.registrationExpiryDate,
+        subscriptionPlan: salonData?.subscriptionPlan,
+      }
+    }
+
     return res.json(
       returnFunction(
         '1',
         'Subscription activated successfully',
         { 
-          salonData, 
+          salonData: salonDataPlain, 
           onboardingLink: connectAccount?.accountLink?.url,
           subscriptionSource: subscriptionSource 
         },
