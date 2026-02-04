@@ -360,6 +360,158 @@ function getSubscriptionName(productId) {
   return productMapping[productId] || 'Apple Subscription';
 }
 
+// Helper function to get team size (total members including owner) from product ID
+function getTeamSizeFromAppleProduct(productId) {
+  if (!productId) return null;
+  
+  const productTeamSizeMapping = {
+    'trimbiz_monthly_owner': 1,                    // Owner only
+    'trimbiz_owner_one_staff': 2,                   // Owner + 1 staff = 2 total
+    'trimbiz_owner_two_staff': 3,                   // Owner + 2 staff = 3 total
+    'trimbiz_owner_three_staff': 4,                 // Owner + 3 staff = 4 total
+    'trimbiz_owner_four_staff': 5,                  // Owner + 4 staff = 5 total
+    'trimbiz_owner_five_staff': 6,                  // Owner + 5 staff = 6 total
+    'trimbiz_owner_unlimited_staff': 999,           // Unlimited
+  };
+  
+  return productTeamSizeMapping[productId] || null;
+}
+
+// Helper function to get staff member count (excluding owner) from product ID
+function getStaffMemberCountFromProduct(productId) {
+  const teamSize = getTeamSizeFromAppleProduct(productId);
+  if (teamSize === null) return null;
+  if (teamSize === 999) return 999; // Unlimited
+  return teamSize - 1; // Subtract 1 for owner
+}
+
+/**
+ * Handle subscription plan changes and block excess employees
+ * @param {Object} salon - Salon detail instance
+ * @param {string} oldProductId - Previous product ID
+ * @param {string} newProductId - New product ID
+ */
+async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
+  try {
+    const { employee } = require('../../models');
+    const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
+    
+    // Get old and new member counts
+    const oldTeamSize = getTeamSizeFromAppleProduct(oldProductId) || 0;
+    const newTeamSize = getTeamSizeFromAppleProduct(newProductId) || 0;
+    const oldStaffCount = oldTeamSize > 0 ? oldTeamSize - 1 : 0;
+    const newStaffCount = newTeamSize > 0 ? newTeamSize - 1 : 0;
+    
+    console.log(`📊 Subscription Plan Change:`);
+    console.log(`   Old: ${oldProductId} (${oldTeamSize} total, ${oldStaffCount} staff)`);
+    console.log(`   New: ${newProductId} (${newTeamSize} total, ${newStaffCount} staff)`);
+    
+    // Only proceed if this is a downgrade (new limit is less than old)
+    if (newTeamSize >= oldTeamSize || newTeamSize === 999) {
+      console.log(`   ✅ Upgrade or same level - no action needed`);
+      return;
+    }
+    
+    // Get all active employees (excluding owner) for this salon
+    const allEmployees = await employee.findAll({
+      where: {
+        salonDetailId: salon.id,
+        isOwner: false,
+        deleted: false,
+      },
+      include: [{
+        model: user,
+        attributes: ['id', 'status'],
+      }],
+      order: [['createdAt', 'DESC']], // Most recently added first
+    });
+    
+    // Count currently active employees
+    const activeEmployees = allEmployees.filter(emp => 
+      emp.status === true && emp.user?.status !== false
+    );
+    
+    const activeCount = activeEmployees.length;
+    console.log(`   Current active staff: ${activeCount}`);
+    console.log(`   New limit: ${newStaffCount} staff`);
+    
+    // Calculate how many employees need to be blocked
+    const excessCount = activeCount - newStaffCount;
+    
+    if (excessCount <= 0) {
+      console.log(`   ✅ No excess employees - all can remain active`);
+      return;
+    }
+    
+    console.log(`   ⚠️ Need to block ${excessCount} employee(s)`);
+    
+    // Block the most recently added employees (they're already sorted by createdAt DESC)
+    const employeesToBlock = activeEmployees.slice(0, excessCount);
+    
+    for (const emp of employeesToBlock) {
+      try {
+        const userId = emp.userId || emp.user?.id;
+        
+        if (!userId) {
+          console.warn(`   ⚠️ Employee ${emp.id} has no userId, skipping`);
+          continue;
+        }
+        
+        // Block the employee
+        await employee.update(
+          { status: false },
+          { where: { id: emp.id } }
+        );
+        
+        // Block the user account
+        await user.update(
+          { status: false },
+          { where: { id: userId } }
+        );
+        
+        // Send socket event to notify employee
+        await blockEmployees(false, {
+          id: userId,
+          employeeId: emp.id,
+          isExternalEmployee: emp.isExternalEmployee || false,
+        });
+        
+        console.log(`   🚫 Blocked employee ${emp.id} (user ${userId})`);
+      } catch (error) {
+        console.error(`   ❌ Error blocking employee ${emp.id}:`, error.message);
+      }
+    }
+    
+    // Update salon metadata with new member count
+    let currentMetadata = {};
+    try {
+      const rawMetadata = salon.getDataValue ? salon.getDataValue('metadata') : salon.metadata;
+      if (rawMetadata) {
+        if (typeof rawMetadata === 'string') {
+          currentMetadata = JSON.parse(rawMetadata);
+        } else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+          currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+        }
+      }
+    } catch (e) {
+      currentMetadata = {};
+    }
+    
+    currentMetadata.membersCount = newStaffCount.toString();
+    currentMetadata.subscriptionName = getSubscriptionName(newProductId);
+    
+    salon.metadata = currentMetadata;
+    salon.teamSize = newTeamSize;
+    await salon.save();
+    
+    console.log(`   ✅ Blocked ${employeesToBlock.length} employee(s) and updated salon metadata`);
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription plan change:', error);
+    throw error;
+  }
+}
+
 async function handleInitialBuy(transaction, salonUser, salon) {
   console.log('🆕 Handling INITIAL_BUY');
   const purchaseDate = new Date(parseInt(transaction.purchase_date_ms));
@@ -418,6 +570,30 @@ async function handleInitialBuy(transaction, salonUser, salon) {
   salon.registrationDate = purchaseDate;
   salon.hasObtainedFreeTrial = 1;
   salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
+  
+  // ✅ Update salon metadata with member count
+  const staffCount = getStaffMemberCountFromProduct(transaction.product_id);
+  if (staffCount !== null) {
+    let currentMetadata = {};
+    try {
+      const rawMetadata = salon.getDataValue ? salon.getDataValue('metadata') : salon.metadata;
+      if (rawMetadata) {
+        if (typeof rawMetadata === 'string') {
+          currentMetadata = JSON.parse(rawMetadata);
+        } else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+          currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+        }
+      }
+    } catch (e) {
+      currentMetadata = {};
+    }
+    
+    currentMetadata.membersCount = staffCount.toString();
+    currentMetadata.subscriptionName = subscriptionName;
+    salon.metadata = currentMetadata;
+    salon.teamSize = getTeamSizeFromAppleProduct(transaction.product_id);
+  }
+  
   await salon.save();
   
   console.log(`✅ Initial purchase processed for salon ${salon.id}`);
@@ -442,6 +618,12 @@ async function handleRenewal(transaction, salonUser, salon) {
     },
     order: [['createdAt', 'DESC']],
   });
+  
+  // ✅ Check if product ID changed (plan upgrade/downgrade on renewal)
+  if (subscription && subscription.appleProductId !== transaction.product_id) {
+    console.log(`  🔄 Subscription plan changed on renewal: ${subscription.appleProductId} → ${transaction.product_id}`);
+    await handleSubscriptionPlanChange(salon, subscription.appleProductId, transaction.product_id);
+  }
   
   if (subscription) {
     subscription.status = 'active';
@@ -483,7 +665,31 @@ async function handleRenewal(transaction, salonUser, salon) {
   salon.registrationExpiryDate = expiresDate;
   salon.registrationDate = purchaseDate;
   salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
-  salon.approvedByAdmin=true
+  salon.approvedByAdmin = true;
+  
+  // ✅ Update salon metadata with member count
+  const staffCount = getStaffMemberCountFromProduct(transaction.product_id);
+  if (staffCount !== null) {
+    let currentMetadata = {};
+    try {
+      const rawMetadata = salon.getDataValue ? salon.getDataValue('metadata') : salon.metadata;
+      if (rawMetadata) {
+        if (typeof rawMetadata === 'string') {
+          currentMetadata = JSON.parse(rawMetadata);
+        } else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+          currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+        }
+      }
+    } catch (e) {
+      currentMetadata = {};
+    }
+    
+    currentMetadata.membersCount = staffCount.toString();
+    currentMetadata.subscriptionName = subscriptionName;
+    salon.metadata = currentMetadata;
+    salon.teamSize = getTeamSizeFromAppleProduct(transaction.product_id);
+  }
+  
   await salon.save();
   
   console.log(`✅ Renewal processed for salon ${salon.id}`);
@@ -642,6 +848,12 @@ async function handleRenewalPreferenceChange(transaction, renewalJWT, subtype, s
     });
     
     if (subscription) {
+      // ✅ Handle subscription plan change (upgrade/downgrade) - apply immediately
+      if (currentProductId !== futureProductId) {
+        console.log(`  🔄 Subscription plan changing: ${currentProductId} → ${futureProductId}`);
+        await handleSubscriptionPlanChange(salon, currentProductId, futureProductId);
+      }
+      
       // Update subscription with NEW product information for next renewal
       subscription.appleProductId = futureProductId;
       subscription.priceId = futureProductId;
