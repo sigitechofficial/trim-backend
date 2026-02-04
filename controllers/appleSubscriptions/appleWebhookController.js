@@ -393,7 +393,11 @@ function getStaffMemberCountFromProduct(productId) {
  */
 async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
   try {
-    const { employee } = require('../../models');
+    // Import models - ensure both employee and user are available
+    // user is imported at top level, but let's also get it here to be safe
+    const { employee, user: userModel } = require('../../models');
+    // Use userModel to ensure we have the right reference
+    const userToUpdate = userModel || user; // Fallback to top-level import if needed
     const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
     
     // Get old and new member counts
@@ -448,26 +452,87 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
     // Block the most recently added employees (they're already sorted by createdAt DESC)
     const employeesToBlock = activeEmployees.slice(0, excessCount);
     
+    const blockedEmployeesList = [];
+    
     for (const emp of employeesToBlock) {
       try {
         const userId = emp.userId || emp.user?.id;
+        const employeeName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'Unknown';
         
         if (!userId) {
           console.warn(`   ⚠️ Employee ${emp.id} has no userId, skipping`);
           continue;
         }
         
-        // Block the employee
-        await employee.update(
+        // CRITICAL: Block BOTH employee and user status
+        // Step 1: Update employee status in employee table
+        const employeeUpdateResult = await employee.update(
           { status: false },
           { where: { id: emp.id } }
         );
         
-        // Block the user account
-        await user.update(
+        if (employeeUpdateResult[0] === 0) {
+          console.error(`   ❌ FAILED to update employee ${emp.id} status in employee table`);
+        } else {
+          console.log(`   ✅ Employee ${emp.id} status set to false in employee table`);
+        }
+        
+        // Step 2: Update user status in user table - CRITICAL
+        const userUpdateResult = await userToUpdate.update(
           { status: false },
           { where: { id: userId } }
         );
+        
+        if (userUpdateResult[0] === 0) {
+          console.error(`   ❌ FAILED to update user ${userId} status in user table`);
+          // Retry with findByPk and save
+          try {
+            const userRecord = await userToUpdate.findByPk(userId);
+            if (userRecord) {
+              userRecord.status = false;
+              await userRecord.save();
+              console.log(`   ✅ User ${userId} status updated via save() method (retry)`);
+            }
+          } catch (retryError) {
+            console.error(`   ❌ Retry also failed for user ${userId}:`, retryError.message);
+          }
+        } else {
+          console.log(`   ✅ User ${userId} status set to false in user table`);
+        }
+        
+        // Step 3: Verify both updates succeeded
+        const verifyEmployee = await employee.findByPk(emp.id, { attributes: ['id', 'status'] });
+        const verifyUser = await userToUpdate.findByPk(userId, { attributes: ['id', 'status'] });
+        
+        const employeeBlocked = verifyEmployee && verifyEmployee.status === false;
+        const userBlocked = verifyUser && verifyUser.status === false;
+        
+        if (!employeeBlocked) {
+          console.error(`   ❌ CRITICAL: Employee ${emp.id} status is still ${verifyEmployee?.status}, NOT blocked!`);
+        }
+        if (!userBlocked) {
+          console.error(`   ❌ CRITICAL: User ${userId} status is still ${verifyUser?.status}, NOT blocked!`);
+          // Final attempt - direct database update
+          try {
+            await userToUpdate.update(
+              { status: false },
+              { 
+                where: { id: userId },
+                returning: true,
+                individualHooks: false
+              }
+            );
+            console.log(`   🔄 Final attempt: User ${userId} status update`);
+          } catch (finalError) {
+            console.error(`   ❌ Final update attempt failed:`, finalError.message);
+          }
+        }
+        
+        if (employeeBlocked && userBlocked) {
+          console.log(`   ✅ SUCCESS: Both employee ${emp.id} and user ${userId} are blocked`);
+        } else {
+          console.error(`   ⚠️ WARNING: Blocking incomplete - Employee: ${employeeBlocked}, User: ${userBlocked}`);
+        }
         
         // Send socket event to notify employee
         await blockEmployees(false, {
@@ -476,7 +541,18 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
           isExternalEmployee: emp.isExternalEmployee || false,
         });
         
-        console.log(`   🚫 Blocked employee ${emp.id} (user ${userId})`);
+        blockedEmployeesList.push({
+          employeeId: emp.id,
+          userId: userId,
+          name: employeeName,
+          position: emp.position || 'N/A',
+          createdAt: emp.createdAt,
+          employeeStatus: verifyEmployee?.status,
+          userStatus: verifyUser?.status,
+        });
+        
+        console.log(`   🚫 Blocked employee ${emp.id} (user ${userId}) - ${employeeName}`);
+        console.log(`      Employee status: ${verifyEmployee?.status}, User status: ${verifyUser?.status}`);
       } catch (error) {
         console.error(`   ❌ Error blocking employee ${emp.id}:`, error.message);
       }
@@ -505,6 +581,10 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
     await salon.save();
     
     console.log(`   ✅ Blocked ${employeesToBlock.length} employee(s) and updated salon metadata`);
+    console.log(`   📋 Blocked Employees List:`);
+    blockedEmployeesList.forEach((emp, index) => {
+      console.log(`      ${index + 1}. ${emp.name} (Employee ID: ${emp.employeeId}, User ID: ${emp.userId})`);
+    });
     
   } catch (error) {
     console.error('❌ Error handling subscription plan change:', error);
@@ -610,6 +690,7 @@ async function handleRenewal(transaction, salonUser, salon) {
   
   // Get subscription name based on product ID
   const subscriptionName = getSubscriptionName(transaction.product_id);
+  const newProductId = transaction.product_id;
   
   const subscription = await subscriptions.findOne({
     where: {
@@ -619,10 +700,95 @@ async function handleRenewal(transaction, salonUser, salon) {
     order: [['createdAt', 'DESC']],
   });
   
-  // ✅ Check if product ID changed (plan upgrade/downgrade on renewal)
-  if (subscription && subscription.appleProductId !== transaction.product_id) {
-    console.log(`  🔄 Subscription plan changed on renewal: ${subscription.appleProductId} → ${transaction.product_id}`);
-    await handleSubscriptionPlanChange(salon, subscription.appleProductId, transaction.product_id);
+  // ✅ ENHANCED: Detect subscription plan change by comparing with:
+  // 1. Subscription record's product ID (if exists)
+  // 2. Salon's current metadata subscription name
+  // 3. Salon's current team size
+  
+  let oldProductId = null;
+  let planChanged = false;
+  
+  // Method 1: Check subscription record
+  if (subscription && subscription.appleProductId && subscription.appleProductId !== newProductId) {
+    oldProductId = subscription.appleProductId;
+    planChanged = true;
+    console.log(`  🔄 Plan change detected from subscription record: ${oldProductId} → ${newProductId}`);
+  }
+  
+  // Method 2: Check salon's current metadata/subscription name (fallback if subscription record doesn't have product ID)
+  if (!planChanged) {
+    try {
+      const rawMetadata = salon.getDataValue ? salon.getDataValue('metadata') : salon.metadata;
+      let currentMetadata = {};
+      
+      if (rawMetadata) {
+        if (typeof rawMetadata === 'string') {
+          currentMetadata = JSON.parse(rawMetadata);
+        } else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+          currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+        }
+      }
+      
+      const currentSubscriptionName = currentMetadata.subscriptionName;
+      const newSubscriptionName = subscriptionName;
+      
+      // If subscription names are different, it's a plan change
+      if (currentSubscriptionName && currentSubscriptionName !== newSubscriptionName) {
+        // Try to find the old product ID from the subscription name
+        // Reverse lookup: subscription name -> product ID
+        const productIdMap = {
+          'Owner Only': 'trimbiz_monthly_owner',
+          'Owner + 1 Staff': 'trimbiz_owner_one_staff',
+          'Owner + 2 Staff': 'trimbiz_owner_two_staff',
+          'Owner + 3 Staff': 'trimbiz_owner_three_staff',
+          'Owner + 4 Staff': 'trimbiz_owner_four_staff',
+          'Owner + 5 Staff': 'trimbiz_owner_five_staff',
+          'Owner + Unlimited Staff': 'trimbiz_owner_unlimited_staff',
+        };
+        
+        oldProductId = productIdMap[currentSubscriptionName] || null;
+        
+        if (oldProductId && oldProductId !== newProductId) {
+          planChanged = true;
+          console.log(`  🔄 Plan change detected from salon metadata: ${oldProductId} → ${newProductId}`);
+        }
+      }
+      
+      // Method 3: Compare team sizes as additional check
+      const currentTeamSize = salon.teamSize || getTeamSizeFromAppleProduct(oldProductId);
+      const newTeamSize = getTeamSizeFromAppleProduct(newProductId);
+      
+      if (currentTeamSize && newTeamSize && currentTeamSize !== newTeamSize) {
+        if (!oldProductId) {
+          // Try to find old product ID from team size
+          const teamSizeToProductMap = {
+            1: 'trimbiz_monthly_owner',
+            2: 'trimbiz_owner_one_staff',
+            3: 'trimbiz_owner_two_staff',
+            4: 'trimbiz_owner_three_staff',
+            5: 'trimbiz_owner_four_staff',
+            6: 'trimbiz_owner_five_staff',
+            999: 'trimbiz_owner_unlimited_staff',
+          };
+          oldProductId = teamSizeToProductMap[currentTeamSize] || null;
+        }
+        
+        if (oldProductId && oldProductId !== newProductId) {
+          planChanged = true;
+          console.log(`  🔄 Plan change detected from team size comparison: ${oldProductId} (team size: ${currentTeamSize}) → ${newProductId} (team size: ${newTeamSize})`);
+        }
+      }
+    } catch (error) {
+      console.error('  ⚠️ Error checking salon metadata for plan change:', error.message);
+    }
+  }
+  
+  // If plan changed, handle the subscription plan change (block employees if downgrade)
+  if (planChanged && oldProductId && oldProductId !== newProductId) {
+    console.log(`  📊 Processing subscription plan change: ${oldProductId} → ${newProductId}`);
+    await handleSubscriptionPlanChange(salon, oldProductId, newProductId);
+    // Reload salon to get the latest data after plan change (metadata, teamSize updated)
+    await salon.reload();
   }
   
   if (subscription) {
