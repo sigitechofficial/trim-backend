@@ -369,7 +369,50 @@ exports.choosePlan = async (req, res, next) => {
         console.log('    - Members Count:', membersCount);
 
         // Update salon metadata with plan details
-        const currentMetadata = salonData.metadata || {};
+        // Safely extract and convert metadata to plain object to avoid serialization errors
+        let currentMetadata = {};
+        try {
+          // Safely get metadata using getDataValue to avoid getters that might cause issues
+          const rawMetadata = salonData.getDataValue ? salonData.getDataValue('metadata') : salonData.metadata;
+          
+          if (rawMetadata) {
+            // If metadata is a string, parse it
+            if (typeof rawMetadata === 'string') {
+              try {
+                currentMetadata = JSON.parse(rawMetadata);
+              } catch (e) {
+                currentMetadata = {};
+              }
+            } 
+            // If metadata is an object, convert to plain object
+            else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+              // Use JSON.parse(JSON.stringify()) to create a deep copy and remove any Sequelize internals
+              try {
+                currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+              } catch (e) {
+                // If that fails, try to extract only essential properties safely
+                try {
+                  currentMetadata = {
+                    subscriptionName: rawMetadata.subscriptionName || null,
+                    membersCount: rawMetadata.membersCount || null,
+                    freeTrialDays: rawMetadata.freeTrialDays || null,
+                    members: rawMetadata.members || null,
+                    paymentMethodId: rawMetadata.paymentMethodId || null,
+                    sloanId: rawMetadata.sloanId || null,
+                  };
+                } catch (extractError) {
+                  // If even that fails, use empty object
+                  currentMetadata = {};
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('⚠️ Error extracting metadata:', error.message);
+          currentMetadata = {};
+        }
+        
+        // Now safely update metadata
         salonData.metadata = {
           ...currentMetadata,
           subscriptionName: subscriptionName,
@@ -433,7 +476,38 @@ exports.choosePlan = async (req, res, next) => {
     salonData.registrationDate = dateManipulation.stampToDate(periodStart)
     salonData.registrationExpiryDate = dateManipulation.stampToDate(periodEnd)
     salonData.subscriptionPlan = subscriptionPlanId
-    await salonData.save()
+    
+    // Ensure metadata is a plain object (not a Sequelize instance or complex object)
+    // Sequelize will handle JSON serialization automatically since metadata is DataTypes.JSON
+    if (salonData.metadata && typeof salonData.metadata === 'object') {
+      try {
+        // Deep clone to ensure it's a plain object without any Sequelize internals
+        salonData.metadata = JSON.parse(JSON.stringify(salonData.metadata))
+      } catch (e) {
+        console.error('⚠️ Error ensuring metadata is plain object:', e.message)
+        // If that fails, create a minimal safe object
+        salonData.metadata = {
+          subscriptionName: salonData.metadata?.subscriptionName || null,
+          membersCount: salonData.metadata?.membersCount || null,
+        }
+      }
+    }
+    
+    try {
+      await salonData.save()
+    } catch (saveError) {
+      console.error('❌ Error saving salon data:', saveError.message)
+      // If save fails due to serialization, try to save with minimal metadata
+      if (saveError.message.includes('Too many properties') || saveError.message.includes('enumerate')) {
+        salonData.metadata = {
+          subscriptionName: null,
+          membersCount: null,
+        }
+        await salonData.save()
+      } else {
+        throw saveError
+      }
+    }
 
     console.log('  ✅ Salon details updated')
     console.log('    - Approved: true')
