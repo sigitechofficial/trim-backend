@@ -401,20 +401,39 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
     const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
     
     // Get old and new member counts
-    const oldTeamSize = getTeamSizeFromAppleProduct(oldProductId) || 0;
-    const newTeamSize = getTeamSizeFromAppleProduct(newProductId) || 0;
+    let oldTeamSize = getTeamSizeFromAppleProduct(oldProductId);
+    let newTeamSize = getTeamSizeFromAppleProduct(newProductId);
+    
+    // ✅ FALLBACK: If we can't determine from product IDs, use salon's current teamSize
+    if (!oldTeamSize && salon.teamSize) {
+      oldTeamSize = salon.teamSize;
+      console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
+    }
+    
+    if (!newTeamSize) {
+      console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
+      return;
+    }
+    
+    // Ensure we have valid numbers
+    oldTeamSize = oldTeamSize || 0;
+    newTeamSize = newTeamSize || 0;
     const oldStaffCount = oldTeamSize > 0 ? oldTeamSize - 1 : 0;
     const newStaffCount = newTeamSize > 0 ? newTeamSize - 1 : 0;
     
     console.log(`📊 Subscription Plan Change:`);
     console.log(`   Old: ${oldProductId} (${oldTeamSize} total, ${oldStaffCount} staff)`);
     console.log(`   New: ${newProductId} (${newTeamSize} total, ${newStaffCount} staff)`);
+    console.log(`   Salon current teamSize: ${salon.teamSize || 'not set'}`);
     
     // Only proceed if this is a downgrade (new limit is less than old)
     if (newTeamSize >= oldTeamSize || newTeamSize === 999) {
       console.log(`   ✅ Upgrade or same level - no action needed`);
+      console.log(`   📊 Comparison: newTeamSize (${newTeamSize}) >= oldTeamSize (${oldTeamSize})`);
       return;
     }
+    
+    console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
     
     // Get all active employees (excluding owner) for this salon
     const allEmployees = await employee.findAll({
@@ -425,19 +444,33 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
       },
       include: [{
         model: user,
-        attributes: ['id', 'status'],
+        attributes: ['id', 'firstName', 'lastName', 'status'],
+        required: false, // LEFT JOIN - include employees even if user is missing
       }],
       order: [['createdAt', 'DESC']], // Most recently added first
     });
     
-    // Count currently active employees
+    console.log(`   📋 Total employees found (excluding owner): ${allEmployees.length}`);
+    
+    // Log all employees for debugging
+    if (allEmployees.length > 0) {
+      console.log(`   📋 Employee details:`);
+      allEmployees.forEach((emp, idx) => {
+        const empStatus = emp.status ? 'active' : 'blocked';
+        const userStatus = emp.user?.status !== false ? 'active' : 'blocked';
+        const userName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'No user';
+        console.log(`      ${idx + 1}. Employee ID: ${emp.id}, User ID: ${emp.userId || emp.user?.id || 'N/A'}, Name: ${userName}, Employee Status: ${empStatus}, User Status: ${userStatus}`);
+      });
+    }
+    
+    // Count currently active employees (both employee.status AND user.status must be true/not false)
     const activeEmployees = allEmployees.filter(emp => 
       emp.status === true && emp.user?.status !== false
     );
     
     const activeCount = activeEmployees.length;
-    console.log(`   Current active staff: ${activeCount}`);
-    console.log(`   New limit: ${newStaffCount} staff`);
+    console.log(`   ✅ Current active staff: ${activeCount}`);
+    console.log(`   📊 New limit: ${newStaffCount} staff`);
     
     // Calculate how many employees need to be blocked
     const excessCount = activeCount - newStaffCount;
@@ -466,72 +499,138 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
         
         // CRITICAL: Block BOTH employee and user status
         // Step 1: Update employee status in employee table
-        const employeeUpdateResult = await employee.update(
-          { status: false },
-          { where: { id: emp.id } }
-        );
-        
-        if (employeeUpdateResult[0] === 0) {
-          console.error(`   ❌ FAILED to update employee ${emp.id} status in employee table`);
-        } else {
-          console.log(`   ✅ Employee ${emp.id} status set to false in employee table`);
+        // Use findByPk + save() method for more reliable updates
+        let employeeUpdateSuccess = false;
+        try {
+          const employeeRecord = await employee.findByPk(emp.id);
+          if (employeeRecord) {
+            employeeRecord.status = false;
+            await employeeRecord.save();
+            employeeUpdateSuccess = true;
+            console.log(`   ✅ Employee ${emp.id} status set to false in employee table (via save())`);
+          } else {
+            console.error(`   ❌ Employee ${emp.id} not found in database`);
+          }
+        } catch (employeeError) {
+          console.error(`   ❌ Error updating employee ${emp.id} via save():`, employeeError.message);
+          // Fallback to update() method
+          try {
+            const employeeUpdateResult = await employee.update(
+              { status: false },
+              { where: { id: emp.id } }
+            );
+            if (employeeUpdateResult[0] > 0) {
+              employeeUpdateSuccess = true;
+              console.log(`   ✅ Employee ${emp.id} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update employee ${emp.id} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
         }
         
         // Step 2: Update user status in user table - CRITICAL
-        const userUpdateResult = await userToUpdate.update(
-          { status: false },
-          { where: { id: userId } }
-        );
-        
-        if (userUpdateResult[0] === 0) {
-          console.error(`   ❌ FAILED to update user ${userId} status in user table`);
-          // Retry with findByPk and save
-          try {
-            const userRecord = await userToUpdate.findByPk(userId);
-            if (userRecord) {
-              userRecord.status = false;
-              await userRecord.save();
-              console.log(`   ✅ User ${userId} status updated via save() method (retry)`);
-            }
-          } catch (retryError) {
-            console.error(`   ❌ Retry also failed for user ${userId}:`, retryError.message);
+        // Use findByPk + save() method for more reliable updates
+        let userUpdateSuccess = false;
+        try {
+          const userRecord = await userToUpdate.findByPk(userId);
+          if (userRecord) {
+            userRecord.status = false;
+            await userRecord.save();
+            userUpdateSuccess = true;
+            console.log(`   ✅ User ${userId} status set to false in user table (via save())`);
+          } else {
+            console.error(`   ❌ User ${userId} not found in database`);
           }
-        } else {
-          console.log(`   ✅ User ${userId} status set to false in user table`);
+        } catch (userError) {
+          console.error(`   ❌ Error updating user ${userId} via save():`, userError.message);
+          // Fallback to update() method
+          try {
+            const userUpdateResult = await userToUpdate.update(
+              { status: false },
+              { where: { id: userId } }
+            );
+            if (userUpdateResult[0] > 0) {
+              userUpdateSuccess = true;
+              console.log(`   ✅ User ${userId} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update user ${userId} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
         }
         
-        // Step 3: Verify both updates succeeded
-        const verifyEmployee = await employee.findByPk(emp.id, { attributes: ['id', 'status'] });
-        const verifyUser = await userToUpdate.findByPk(userId, { attributes: ['id', 'status'] });
+        // Step 3: Verify both updates succeeded by checking database
+        // Wait a moment for database to sync
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        const employeeBlocked = verifyEmployee && verifyEmployee.status === false;
-        const userBlocked = verifyUser && verifyUser.status === false;
+        const verifyEmployee = await employee.findByPk(emp.id, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        const verifyUser = await userToUpdate.findByPk(userId, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        
+        const employeeStatus = verifyEmployee?.getDataValue ? verifyEmployee.getDataValue('status') : verifyEmployee?.status;
+        const userStatus = verifyUser?.getDataValue ? verifyUser.getDataValue('status') : verifyUser?.status;
+        
+        const employeeBlocked = employeeStatus === false;
+        const userBlocked = userStatus === false;
+        
+        console.log(`   🔍 Verification Results:`);
+        console.log(`      Employee ${emp.id}: status = ${employeeStatus} (expected: false, success: ${employeeBlocked})`);
+        console.log(`      User ${userId}: status = ${userStatus} (expected: false, success: ${userBlocked})`);
         
         if (!employeeBlocked) {
-          console.error(`   ❌ CRITICAL: Employee ${emp.id} status is still ${verifyEmployee?.status}, NOT blocked!`);
+          console.error(`   ❌ CRITICAL: Employee ${emp.id} status is still ${employeeStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
+          try {
+            await employee.update(
+              { status: false },
+              { 
+                where: { id: emp.id },
+                individualHooks: false,
+                hooks: false
+              }
+            );
+            console.log(`   🔄 Final force update attempt for employee ${emp.id}`);
+            // Verify again
+            const recheck = await employee.findByPk(emp.id, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check employee ${emp.id} status: ${recheck?.status}`);
+          } catch (finalError) {
+            console.error(`   ❌ Final employee update attempt failed:`, finalError.message);
+          }
         }
+        
         if (!userBlocked) {
-          console.error(`   ❌ CRITICAL: User ${userId} status is still ${verifyUser?.status}, NOT blocked!`);
-          // Final attempt - direct database update
+          console.error(`   ❌ CRITICAL: User ${userId} status is still ${userStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
           try {
             await userToUpdate.update(
               { status: false },
               { 
                 where: { id: userId },
-                returning: true,
-                individualHooks: false
+                individualHooks: false,
+                hooks: false
               }
             );
-            console.log(`   🔄 Final attempt: User ${userId} status update`);
+            console.log(`   🔄 Final force update attempt for user ${userId}`);
+            // Verify again
+            const recheck = await userToUpdate.findByPk(userId, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check user ${userId} status: ${recheck?.status}`);
           } catch (finalError) {
-            console.error(`   ❌ Final update attempt failed:`, finalError.message);
+            console.error(`   ❌ Final user update attempt failed:`, finalError.message);
           }
         }
         
         if (employeeBlocked && userBlocked) {
           console.log(`   ✅ SUCCESS: Both employee ${emp.id} and user ${userId} are blocked`);
         } else {
-          console.error(`   ⚠️ WARNING: Blocking incomplete - Employee: ${employeeBlocked}, User: ${userBlocked}`);
+          console.error(`   ⚠️ WARNING: Blocking incomplete - Employee blocked: ${employeeBlocked}, User blocked: ${userBlocked}`);
         }
         
         // Send socket event to notify employee
@@ -994,17 +1093,7 @@ async function handleRenewalPreferenceChange(transaction, renewalJWT, subtype, s
       Buffer.from(renewalJWT.split('.')[1], 'base64').toString()
     );
     
-    const currentProductId = transaction.product_id;
-    const futureProductId = renewalPayload.autoRenewProductId;
-    const currentPrice = convertApplePrice(transaction.price);
-    const futurePrice = convertApplePrice(renewalPayload.renewalPrice);
-    const currency = renewalPayload.currency || transaction.currency || 'USD';
-    
-    console.log(`  Current product: ${currentProductId} (${currentPrice} ${transaction.currency})`);
-    console.log(`  Future product: ${futureProductId} (${futurePrice} ${currency})`);
-    console.log(`  Change type: ${subtype}`);
-    
-    // Find the subscription
+    // Find the subscription FIRST to get the ACTUAL current product ID
     const subscription = await subscriptions.findOne({
       where: {
         appleOriginalTransactionId: transaction.original_transaction_id,
@@ -1013,11 +1102,58 @@ async function handleRenewalPreferenceChange(transaction, renewalJWT, subtype, s
       order: [['createdAt', 'DESC']],
     });
     
+    // ✅ IMPORTANT: Determine the ACTUAL current product ID from multiple sources
+    // Priority: 1) Subscription record, 2) Salon metadata, 3) Transaction product_id
+    let currentProductId = subscription?.appleProductId || transaction.product_id;
+    
+    // Also check salon metadata for current subscription name to reverse-lookup product ID
+    try {
+      const rawMetadata = salon.getDataValue ? salon.getDataValue('metadata') : salon.metadata;
+      let currentMetadata = {};
+      
+      if (rawMetadata) {
+        if (typeof rawMetadata === 'string') {
+          currentMetadata = JSON.parse(rawMetadata);
+        } else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+          currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+        }
+      }
+      
+      const currentSubscriptionName = currentMetadata.subscriptionName;
+      if (currentSubscriptionName && !currentProductId) {
+        // Reverse lookup: subscription name -> product ID
+        const productIdMap = {
+          'Owner Only': 'trimbiz_monthly_owner',
+          'Owner + 1 Staff': 'trimbiz_owner_one_staff',
+          'Owner + 2 Staff': 'trimbiz_owner_two_staff',
+          'Owner + 3 Staff': 'trimbiz_owner_three_staff',
+          'Owner + 4 Staff': 'trimbiz_owner_four_staff',
+          'Owner + 5 Staff': 'trimbiz_owner_five_staff',
+          'Owner + Unlimited Staff': 'trimbiz_owner_unlimited_staff',
+        };
+        currentProductId = productIdMap[currentSubscriptionName] || currentProductId;
+      }
+    } catch (e) {
+      console.warn('  ⚠️ Error reading salon metadata for current product:', e.message);
+    }
+    
+    const futureProductId = renewalPayload.autoRenewProductId;
+    const currentPrice = convertApplePrice(transaction.price);
+    const futurePrice = convertApplePrice(renewalPayload.renewalPrice);
+    const currency = renewalPayload.currency || transaction.currency || 'USD';
+    
+    console.log(`  Current product (from DB): ${currentProductId} (${currentPrice} ${transaction.currency})`);
+    console.log(`  Future product: ${futureProductId} (${futurePrice} ${currency})`);
+    console.log(`  Change type: ${subtype}`);
+    
     if (subscription) {
       // ✅ Handle subscription plan change (upgrade/downgrade) - apply immediately
-      if (currentProductId !== futureProductId) {
+      // Only process if we have both product IDs and they're different
+      if (currentProductId && futureProductId && currentProductId !== futureProductId) {
         console.log(`  🔄 Subscription plan changing: ${currentProductId} → ${futureProductId}`);
         await handleSubscriptionPlanChange(salon, currentProductId, futureProductId);
+      } else if (!currentProductId || !futureProductId) {
+        console.warn(`  ⚠️ Cannot process plan change - missing product IDs. Current: ${currentProductId}, Future: ${futureProductId}`);
       }
       
       // Update subscription with NEW product information for next renewal
