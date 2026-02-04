@@ -904,7 +904,19 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
       console.log('✅ Transaction verified');
 
-      // Step 6: Calculate subscription dates
+      // Step 6: Get originalTransactionId from payload or request
+      const finalOriginalTransactionId = originalTransactionId || transactionPayload.originalTransactionId;
+      
+      // Step 7: Check if originalTransactionId already exists
+      console.log('\n🔍 Checking for existing subscription by originalTransactionId...');
+      const existingSubscriptionByOriginalId = await subscriptions.findOne({
+        where: {
+          appleOriginalTransactionId: finalOriginalTransactionId,
+          subscriptionSource: 'apple',
+        },
+      });
+
+      // Step 8: Calculate subscription dates
       const purchaseDate = new Date(transactionPayload.purchaseDate);
       let expiresDate = transactionPayload.expiresDate 
         ? new Date(transactionPayload.expiresDate)
@@ -932,39 +944,66 @@ exports.verifyApplePurchase = async (req, res, next) => {
       }
       console.log('  Final Expiry Date:', expiresDate.toISOString());
 
-      // Step 7: Generate subscription ID
-      const subscriptionId = `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
-
-      // Step 8: Determine environment
+      // Step 9: Determine environment
       const environment = transactionPayload.environment || 'Sandbox';
 
-      // Step 9: Create subscription record
-      console.log('\n💾 Creating subscription record...');
-      const newSubscription = await subscriptions.create({
-        subscriptionId: subscriptionId,
-        name: subscriptionName || productId,
-        customerId: userId.toString(),
-        amountPaid: subscriptionPrice || 0,
-        currency: 'USD',
-        priceId: priceId,
-        periodStart: purchaseDate,
-        periodEnd: expiresDate,
-        status: 'active',
-        VAT: vat || 0,
-        salonDetailId:salonDetailId,
-        // Apple-specific fields
-        appleTransactionId: transactionId,
-        appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId,
-        subscriptionSource: 'apple',
-        appleProductId: productId,
-        appleEnvironment: environment,
-      });
+      let subscription;
+      
+      if (existingSubscriptionByOriginalId) {
+        // Update existing subscription with new transaction data
+        console.log('\n💾 Updating existing subscription by originalTransactionId...');
+        console.log('  Original Transaction ID:', finalOriginalTransactionId);
+        console.log('  Existing Subscription ID:', existingSubscriptionByOriginalId.subscriptionId);
+        
+        existingSubscriptionByOriginalId.subscriptionId = existingSubscriptionByOriginalId.subscriptionId || `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
+        existingSubscriptionByOriginalId.appleTransactionId = transactionId;
+        existingSubscriptionByOriginalId.name = subscriptionName || productId;
+        existingSubscriptionByOriginalId.amountPaid = subscriptionPrice || 0;
+        existingSubscriptionByOriginalId.priceId = priceId;
+        existingSubscriptionByOriginalId.periodStart = purchaseDate;
+        existingSubscriptionByOriginalId.periodEnd = expiresDate;
+        existingSubscriptionByOriginalId.status = 'active';
+        existingSubscriptionByOriginalId.VAT = vat || 0;
+        existingSubscriptionByOriginalId.salonDetailId = salonDetailId;
+        existingSubscriptionByOriginalId.appleProductId = productId;
+        existingSubscriptionByOriginalId.appleEnvironment = environment;
+        existingSubscriptionByOriginalId.customerId = userId.toString();
+        
+        await existingSubscriptionByOriginalId.save();
+        subscription = existingSubscriptionByOriginalId;
+        
+        console.log('✅ Subscription updated:', subscription.subscriptionId);
+      } else {
+        // Create new subscription
+        console.log('\n💾 Creating new subscription record...');
+        const subscriptionId = `sub_apple_${Date.now()}_${transactionId.slice(-8)}`;
+        
+        subscription = await subscriptions.create({
+          subscriptionId: subscriptionId,
+          name: subscriptionName || productId,
+          customerId: userId.toString(),
+          amountPaid: subscriptionPrice || 0,
+          currency: 'USD',
+          priceId: priceId,
+          periodStart: purchaseDate,
+          periodEnd: expiresDate,
+          status: 'active',
+          VAT: vat || 0,
+          salonDetailId: salonDetailId,
+          // Apple-specific fields
+          appleTransactionId: transactionId,
+          appleOriginalTransactionId: finalOriginalTransactionId,
+          subscriptionSource: 'apple',
+          appleProductId: productId,
+          appleEnvironment: environment,
+        });
 
-      console.log('✅ Subscription created:', newSubscription.subscriptionId);
+        console.log('✅ Subscription created:', subscription.subscriptionId);
+      }
 
       // Step 10: Update user record
       await user.update(
-        { appleOriginalTransactionId: originalTransactionId || transactionPayload.originalTransactionId },
+        { appleOriginalTransactionId: finalOriginalTransactionId },
         { where: { id: userId } }
       );
 
@@ -972,7 +1011,7 @@ exports.verifyApplePurchase = async (req, res, next) => {
       const expiryDateFormatted = expiresDate.toISOString().split('T')[0];
 
       console.log('\n✅ Apple IAP Verification Complete');
-      console.log('  Subscription ID:', subscriptionId);
+      console.log('  Subscription ID:', subscription.subscriptionId);
       console.log('  Expiry Date:', expiryDateFormatted);
       if (!hasUsedFreeTrial) {
         console.log(`  🎁 Free Trial: ${FREE_TRIAL_DAYS} days added`);
@@ -981,9 +1020,9 @@ exports.verifyApplePurchase = async (req, res, next) => {
 
       return res.status(200).json({
         status: '1',
-        message: 'Purchase verified successfully',
+        message: existingSubscriptionByOriginalId ? 'Purchase verified and subscription updated successfully' : 'Purchase verified successfully',
         data: {
-          subscriptionId: subscriptionId,
+          subscriptionId: subscription.subscriptionId,
           expiryDate: expiryDateFormatted,
           price: subscriptionPrice?.toString() || '0',
         },
