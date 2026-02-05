@@ -293,9 +293,14 @@ exports.choosePlan = async (req, res, next) => {
       console.log('📱 Processing Apple subscription...')
 
       // Get Apple subscription from database
+      // Search by multiple fields: subscriptionId, appleTransactionId, or appleOriginalTransactionId
       const appleSubscription = await subscriptions.findOne({
         where: {
-          subscriptionId: subscriptionId,
+          [Op.or]: [
+            { subscriptionId: subscriptionId },
+            { appleTransactionId: subscriptionId },
+            { appleOriginalTransactionId: subscriptionId }
+          ],
           customerId: userId.toString(),
           subscriptionSource: 'apple',
         },
@@ -315,11 +320,117 @@ exports.choosePlan = async (req, res, next) => {
       console.log('  ✅ Apple subscription found')
       console.log('  Status:', appleSubscription.status)
       console.log('  Period End:', appleSubscription.periodEnd)
+      console.log('  Product ID:', appleSubscription.appleProductId)
 
       // Use dates from Apple subscription (grace period already added during verification)
       periodStart = Math.floor(new Date(appleSubscription.periodStart).getTime() / 1000)
       periodEnd = Math.floor(new Date(appleSubscription.periodEnd).getTime() / 1000)
       subscriptionPlanId = appleSubscription.subscriptionId
+
+      // ✅ Extract and update plan metadata from product ID
+      if (appleSubscription.appleProductId) {
+        // Helper function to get subscription name from product ID
+        const getSubscriptionName = (productId) => {
+          const productMapping = {
+            'trimbiz_monthly_owner': 'Owner',
+            'trimbiz_owner_one_staff': 'Owner + 1 staff member',
+            'trimbiz_owner_two_staff': 'Owner + 2 staff member',
+            'trimbiz_owner_three_staff': 'Owner + 3 staff member',
+            'trimbiz_owner_four_staff': 'Owner + 4 staff member',
+            'trimbiz_owner_five_staff': 'Owner + 5 staff member',
+            'trimbiz_owner_unlimited_staff': 'Owner + unlimited staff member',
+          };
+          return productMapping[productId] || 'Apple Subscription';
+        };
+
+        // Helper function to get team size from product ID
+        const getTeamSizeFromAppleProduct = (productId) => {
+          const productTeamSizeMapping = {
+            'trimbiz_monthly_owner': 1,
+            'trimbiz_owner_one_staff': 2,
+            'trimbiz_owner_two_staff': 3,
+            'trimbiz_owner_three_staff': 4,
+            'trimbiz_owner_four_staff': 5,
+            'trimbiz_owner_five_staff': 6,
+            'trimbiz_owner_unlimited_staff': 999,
+          };
+          return productTeamSizeMapping[productId] || null;
+        };
+
+        const productId = appleSubscription.appleProductId;
+        const subscriptionName = getSubscriptionName(productId);
+        const teamSize = getTeamSizeFromAppleProduct(productId);
+        const membersCount = teamSize ? (teamSize - 1) : null; // Subtract 1 for owner
+
+        console.log('  📦 Plan Details:');
+        console.log('    - Product ID:', productId);
+        console.log('    - Subscription Name:', subscriptionName);
+        console.log('    - Team Size:', teamSize);
+        console.log('    - Members Count:', membersCount);
+
+        // Update salon metadata with plan details
+        // Safely extract and convert metadata to plain object to avoid serialization errors
+        let currentMetadata = {};
+        try {
+          // Safely get metadata using getDataValue to avoid getters that might cause issues
+          const rawMetadata = salonData.getDataValue ? salonData.getDataValue('metadata') : salonData.metadata;
+          
+          if (rawMetadata) {
+            // If metadata is a string, parse it
+            if (typeof rawMetadata === 'string') {
+              try {
+                currentMetadata = JSON.parse(rawMetadata);
+              } catch (e) {
+                currentMetadata = {};
+              }
+            } 
+            // If metadata is an object, convert to plain object
+            else if (typeof rawMetadata === 'object' && rawMetadata !== null) {
+              // Use JSON.parse(JSON.stringify()) to create a deep copy and remove any Sequelize internals
+              try {
+                currentMetadata = JSON.parse(JSON.stringify(rawMetadata));
+              } catch (e) {
+                // If that fails, try to extract only essential properties safely
+                try {
+                  currentMetadata = {
+                    subscriptionName: rawMetadata.subscriptionName || null,
+                    membersCount: rawMetadata.membersCount || null,
+                    freeTrialDays: rawMetadata.freeTrialDays || null,
+                    members: rawMetadata.members || null,
+                    paymentMethodId: rawMetadata.paymentMethodId || null,
+                    sloanId: rawMetadata.sloanId || null,
+                  };
+                } catch (extractError) {
+                  // If even that fails, use empty object
+                  currentMetadata = {};
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('⚠️ Error extracting metadata:', error.message);
+          currentMetadata = {};
+        }
+        
+        // Now safely update metadata
+        salonData.metadata = {
+          ...currentMetadata,
+          subscriptionName: subscriptionName,
+          membersCount: membersCount?.toString() || '',
+        };
+        
+        // Update team size
+        if (teamSize !== null) {
+          salonData.teamSize = teamSize;
+        }
+        
+        // Update subscription price if available
+        if (appleSubscription.amountPaid) {
+          salonData.subscriptionPrice = parseFloat(appleSubscription.amountPaid);
+        }
+
+        console.log('  ✅ Plan metadata updated');
+      }
 
     } else {
       console.log('💳 Processing Stripe subscription...')
@@ -365,7 +476,38 @@ exports.choosePlan = async (req, res, next) => {
     salonData.registrationDate = dateManipulation.stampToDate(periodStart)
     salonData.registrationExpiryDate = dateManipulation.stampToDate(periodEnd)
     salonData.subscriptionPlan = subscriptionPlanId
-    await salonData.save()
+    
+    // Ensure metadata is a plain object (not a Sequelize instance or complex object)
+    // Sequelize will handle JSON serialization automatically since metadata is DataTypes.JSON
+    if (salonData.metadata && typeof salonData.metadata === 'object') {
+      try {
+        // Deep clone to ensure it's a plain object without any Sequelize internals
+        salonData.metadata = JSON.parse(JSON.stringify(salonData.metadata))
+      } catch (e) {
+        console.error('⚠️ Error ensuring metadata is plain object:', e.message)
+        // If that fails, create a minimal safe object
+        salonData.metadata = {
+          subscriptionName: salonData.metadata?.subscriptionName || null,
+          membersCount: salonData.metadata?.membersCount || null,
+        }
+      }
+    }
+    
+    try {
+      await salonData.save()
+    } catch (saveError) {
+      console.error('❌ Error saving salon data:', saveError.message)
+      // If save fails due to serialization, try to save with minimal metadata
+      if (saveError.message.includes('Too many properties') || saveError.message.includes('enumerate')) {
+        salonData.metadata = {
+          subscriptionName: null,
+          membersCount: null,
+        }
+        await salonData.save()
+      } else {
+        throw saveError
+      }
+    }
 
     console.log('  ✅ Salon details updated')
     console.log('    - Approved: true')
@@ -399,12 +541,55 @@ exports.choosePlan = async (req, res, next) => {
     console.log('  ✅ Salon profile updated')
     console.log('\n✅ Choose Plan Complete!')
 
+    // Convert salonData to plain object to avoid serialization errors
+    // This prevents "Too many properties to enumerate" error
+    let salonDataPlain = null
+    try {
+      if (salonData) {
+        // Use Sequelize's toJSON() method to get plain object
+        salonDataPlain = salonData.toJSON ? salonData.toJSON() : JSON.parse(JSON.stringify(salonData))
+        
+        // Clean up metadata if it's too complex
+        if (salonDataPlain.metadata) {
+          // If metadata is a string, try to parse it
+          if (typeof salonDataPlain.metadata === 'string') {
+            try {
+              salonDataPlain.metadata = JSON.parse(salonDataPlain.metadata)
+            } catch (e) {
+              // If parsing fails, set to empty object
+              salonDataPlain.metadata = {}
+            }
+          }
+          
+          // If metadata is an object, limit to essential fields only
+          if (typeof salonDataPlain.metadata === 'object' && salonDataPlain.metadata !== null) {
+            const essentialMetadata = {
+              subscriptionName: salonDataPlain.metadata.subscriptionName || null,
+              membersCount: salonDataPlain.metadata.membersCount || null,
+            }
+            salonDataPlain.metadata = essentialMetadata
+          }
+        }
+      }
+    } catch (serializationError) {
+      console.error('⚠️ Error serializing salonData:', serializationError.message)
+      // Return only essential fields if full serialization fails
+      salonDataPlain = {
+        id: salonData?.id,
+        salonName: salonData?.salonName,
+        approvedByAdmin: salonData?.approvedByAdmin,
+        registrationDate: salonData?.registrationDate,
+        registrationExpiryDate: salonData?.registrationExpiryDate,
+        subscriptionPlan: salonData?.subscriptionPlan,
+      }
+    }
+
     return res.json(
       returnFunction(
         '1',
         'Subscription activated successfully',
         { 
-          salonData, 
+          salonData: salonDataPlain, 
           onboardingLink: connectAccount?.accountLink?.url,
           subscriptionSource: subscriptionSource 
         },
