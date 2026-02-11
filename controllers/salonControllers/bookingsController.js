@@ -2142,11 +2142,22 @@ exports.checkOutBooking = async (req, res, next) => {
 
   const customerId = customerConnect.customerId;
 
-  let amount = parseFloat(req.body.amount) + tip;
+  // ✅ FIX: Calculate service amount by subtracting tip from req.body.amount
+  // Since total includes tip, req.body.amount also includes tip
+  const tipAmount = parseFloat(tip) || 0;
+  const oldTip = parseFloat(bookingData.tip) || 0;
+  
+  // Calculate service amount: req.body.amount includes old tip (if any), so subtract both old and new tip
+  // req.body.amount = total remaining = (total - actualCapturedAmount) which includes tip
+  const serviceAmount = parseFloat(req.body.amount) - tipAmount - oldTip;
+  
+  // Calculate payment amount for Stripe: service amount + new tip
+  let amount = serviceAmount + tipAmount;
   const targetAmount = req.body.targetAmount;
-  amount=amount-bookingData.tip
-  // Fixed: salonEarning should only include service amount, not tip (tip goes to tipAmount via distributeTip)
-  const salonEarning = parseFloat(req.body.amount) + parseFloat(bookingData.actualCapturedAmount);
+  
+  // ✅ CRITICAL FIX: salonEarning should ONLY include service amount, NEVER tip
+  // Tip goes to tipAmount field via distributeTip function
+  const salonEarning = serviceAmount + parseFloat(bookingData.actualCapturedAmount);
 
   // Prepare customer name
   const customerName = bookingData.user 
@@ -2185,18 +2196,19 @@ exports.checkOutBooking = async (req, res, next) => {
     bookingData.subTotal = bookingData.total;
     await bookingData.save();
 
-    // Increment actualCapturedAmount, but SET tip (don't increment it)
+    // Increment actualCapturedAmount with service amount only (no tip)
     await booking.increment(
-      { actualCapturedAmount: parseFloat(req.body.amount) },
+      { actualCapturedAmount: serviceAmount },
       { where: { id: bookingId } }
     );
     
+    // Update tip: old tip + new tip
     await booking.update(
-      { tip: (bookingData.tip || 0) + tip },
+      { tip: oldTip + tipAmount },
       { where: { id: bookingId } }
     );
 
-    Communication.online(bookingId, tip || 0, amount);
+    Communication.online(bookingId, tipAmount, amount);
 
     await employeeCommission.update(
       { appointmentClosed: true },
@@ -2208,7 +2220,20 @@ exports.checkOutBooking = async (req, res, next) => {
       { where: { bookingId: bookingData.id } }
     );
 
-    await distributeTip(bookingData, tip || 0);
+    // ✅ IMPORTANT: Fetch updated booking data with new tip for distributeTip
+    const updatedBookingData = await booking.findByPk(bookingId, {
+      include: [
+        { 
+          model: salonDetail, 
+          attributes: ['id', 'salonDetailId'] 
+        },
+        { model: jobs }
+      ],
+      attributes: ['id', 'tip', 'salonDetailId', 'total']
+    });
+    
+    // distributeTip will add the new tip to tipAmount field (not onlineAmount)
+    await distributeTip(updatedBookingData, tipAmount);
 
     return res.json(
       returnFunction('1', 'Payment processed successfully.', {}, '')
