@@ -2220,33 +2220,55 @@ exports.checkOutBooking = async (req, res, next) => {
       { where: { bookingId: bookingData.id } }
     );
 
-    // ✅ IMPORTANT: Calculate total tip and ensure it's added to wallet
+    // ✅ CRITICAL FIX: Only add the NEW tip amount to wallet to avoid double-counting
+    // oldTip = tip added during booking (from client side) - may already be in wallet
+    // tipAmount = NEW tip added at checkout (from salon side) - this is what we add
+    // 
+    // Strategy: 
+    // 1. Let distributeTip add totalTip to wallet (for job distribution)
+    // 2. Then subtract oldTip to get net addition of only tipAmount
+    
+    const salonId = bookingData.salonDetailId || bookingData.salonDetail?.id;
     const totalTip = parseFloat(oldTip) + parseFloat(tipAmount);
     
-    // Update bookingData.tip in memory to total tip (ensure it's a number)
-    bookingData.tip = parseFloat(totalTip);
-    
-    // Ensure salonDetailId is accessible (use from attributes or include)
-    const salonId = bookingData.salonDetailId || bookingData.salonDetail?.id;
-    
-    // distributeTip will calculate: appointment.tip + extraTip = totalTip + 0 = totalTip
-    // This ensures the total tip is added to wallet.tipAmount
-    // bookingData already has salonDetailId and jobs from the initial fetch
-    try {
-      if (totalTip > 0 && salonId) {
-        await distributeTip(bookingData, 0);
-      } else {
-        console.warn(`⚠️ Cannot add tip: totalTip=${totalTip}, salonId=${salonId}`);
+    if (tipAmount > 0 && salonId) {
+      try {
+        // Step 1: Update bookingData.tip to total for distribution
+        // Set bookingData.tip to 0 and pass totalTip as extraTip
+        // distributeTip will add: 0 + totalTip = totalTip to wallet
+        const originalTip = bookingData.tip;
+        bookingData.tip = 0; // Set to 0 so distributeTip doesn't add oldTip from bookingData
+        
+        // distributeTip adds totalTip to wallet and distributes among jobs
+        await distributeTip(bookingData, totalTip);
+        
+        // Step 2: Subtract oldTip to get net addition of only tipAmount
+        // distributeTip added: totalTip = oldTip + tipAmount
+        // We want net addition: tipAmount
+        // So subtract: oldTip
+        // Net: totalTip - oldTip = (oldTip + tipAmount) - oldTip = tipAmount ✅
+        if (oldTip > 0) {
+          await wallet.increment(
+            { tipAmount: -parseFloat(oldTip) },
+            { where: { salonDetailId: salonId } }
+          );
+        }
+        
+        // Restore original tip value in bookingData
+        bookingData.tip = originalTip;
+        
+      } catch (error) {
+        console.error('Error in tip distribution:', error);
+        // If distributeTip fails, manually add only the new tip as fallback
+        if (tipAmount > 0 && salonId) {
+          await wallet.increment(
+            { tipAmount: tipAmount },
+            { where: { salonDetailId: salonId } }
+          );
+        }
       }
-    } catch (error) {
-      // If distributeTip fails, still add tip to wallet directly as fallback
-      console.error('Error in distributeTip, adding tip directly to wallet:', error);
-      if (totalTip > 0 && salonId) {
-        await wallet.increment(
-          { tipAmount: totalTip },
-          { where: { salonDetailId: salonId } }
-        );
-      }
+    } else if (tipAmount > 0 && !salonId) {
+      console.warn(`⚠️ Cannot add tip: tipAmount=${tipAmount}, salonId=${salonId}`);
     }
 
     return res.json(
