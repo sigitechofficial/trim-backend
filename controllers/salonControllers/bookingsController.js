@@ -2220,20 +2220,34 @@ exports.checkOutBooking = async (req, res, next) => {
       { where: { bookingId: bookingData.id } }
     );
 
-    // ✅ IMPORTANT: Fetch updated booking data with new tip for distributeTip
-    const updatedBookingData = await booking.findByPk(bookingId, {
-      include: [
-        { 
-          model: salonDetail, 
-          attributes: ['id', 'salonDetailId'] 
-        },
-        { model: jobs }
-      ],
-      attributes: ['id', 'tip', 'salonDetailId', 'total']
-    });
+    // ✅ IMPORTANT: Calculate total tip and ensure it's added to wallet
+    const totalTip = parseFloat(oldTip) + parseFloat(tipAmount);
     
-    // distributeTip will add the new tip to tipAmount field (not onlineAmount)
-    await distributeTip(updatedBookingData, tipAmount);
+    // Update bookingData.tip in memory to total tip (ensure it's a number)
+    bookingData.tip = parseFloat(totalTip);
+    
+    // Ensure salonDetailId is accessible (use from attributes or include)
+    const salonId = bookingData.salonDetailId || bookingData.salonDetail?.id;
+    
+    // distributeTip will calculate: appointment.tip + extraTip = totalTip + 0 = totalTip
+    // This ensures the total tip is added to wallet.tipAmount
+    // bookingData already has salonDetailId and jobs from the initial fetch
+    try {
+      if (totalTip > 0 && salonId) {
+        await distributeTip(bookingData, 0);
+      } else {
+        console.warn(`⚠️ Cannot add tip: totalTip=${totalTip}, salonId=${salonId}`);
+      }
+    } catch (error) {
+      // If distributeTip fails, still add tip to wallet directly as fallback
+      console.error('Error in distributeTip, adding tip directly to wallet:', error);
+      if (totalTip > 0 && salonId) {
+        await wallet.increment(
+          { tipAmount: totalTip },
+          { where: { salonDetailId: salonId } }
+        );
+      }
+    }
 
     return res.json(
       returnFunction('1', 'Payment processed successfully.', {}, '')
