@@ -2185,10 +2185,23 @@ exports.checkOutBooking = async (req, res, next) => {
   );
 
   if (payments.status === 'succeeded') {
+    // Add service amount to onlineAmount
     await wallet.increment(
       { onlineAmount: salonEarning },
       { where: { salonDetailId: bookingData?.salonDetail?.id } }
     );
+    
+    // ✅ CRITICAL FIX: Also add tip to onlineAmount so it's included in total wallet balance
+    // The payment amount includes tip, so onlineAmount should also include it
+    // Add the new tip (tipAmount) to onlineAmount - this ensures it's in the total
+    // Note: Old tip was already added to onlineAmount during booking (if it was paid upfront)
+    if (tipAmount > 0) {
+      await wallet.increment(
+        { onlineAmount: tipAmount },
+        { where: { salonDetailId: bookingData?.salonDetail?.id } }
+      );
+      console.log(`✅ Tip added to onlineAmount: tipAmount=${tipAmount} (new tip from checkout)`);
+    }
 
     bookingData.status = 'complete';
     bookingData.finalPaymentIntend = payments.id;
