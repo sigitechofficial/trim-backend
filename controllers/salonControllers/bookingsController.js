@@ -2233,98 +2233,15 @@ exports.checkOutBooking = async (req, res, next) => {
       { where: { bookingId: bookingData.id } }
     );
 
-    // ✅ FIX: Add BOTH old tip and new tip to wallet
-    // oldTip = tip added during booking (from client side) - NOT added to wallet during booking
-    // tipAmount = NEW tip added at checkout (from salon side)
-    // 
-    // Strategy: 
-    // 1. Add total tip directly to wallet (guaranteed to work)
-    // 2. Call distributeTip for job distribution (it will also add, so we subtract the duplicate)
-    
-    const salonId = bookingData.salonDetailId || bookingData.salonDetail?.id;
-    const totalTip = parseFloat(oldTip) + parseFloat(tipAmount);
-    
-    // Add tip to wallet - ensure tip is ALWAYS added
-    // Only add the new tip (tipAmount) from salon side checkout
-    if (tipAmount > 0 && salonId) {
-      try {
-        // Get current wallet tipAmount before adding (for verification)
-        const walletBefore = await wallet.findOne({
-          where: { salonDetailId: salonId },
-          attributes: ['tipAmount']
-        });
-        const tipAmountBefore = parseFloat(walletBefore?.tipAmount || 0);
-        
-        // Add ONLY the new tip (tipAmount) from salon side to tipAmount field
-        // Old tip was already added to tipAmount during booking (if it was paid)
-        // So we only add the new tipAmount here
-        await wallet.increment(
-          { tipAmount: tipAmount },
-          { where: { salonDetailId: salonId } }
-        );
-        
-        console.log(`✅ Tip added to wallet tipAmount field: tipAmount=${tipAmount} (new tip from salon side checkout)`);
-        
-        // Verify the tip was added
-        const walletAfter = await wallet.findOne({
-          where: { salonDetailId: salonId },
-          attributes: ['tipAmount']
-        });
-        const tipAmountAfter = parseFloat(walletAfter?.tipAmount || 0);
-        const actualIncrease = tipAmountAfter - tipAmountBefore;
-        console.log(`✅ Wallet verification: before=${tipAmountBefore}, after=${tipAmountAfter}, increase=${actualIncrease}, expected=${tipAmount}`);
-        
-        // Update bookingData for distributeTip (needs total tip for job distribution)
-        const originalTip = bookingData.tip;
-        bookingData.tip = totalTip > 0 ? totalTip : tipAmount;
-        
-        // Call distributeTip for job distribution
-        // distributeTip will add totalTip to tipAmount field (async, not awaited)
-        // We've already added tipAmount, so we need to subtract oldTip after
-        try {
-          const distributeResult = distributeTip(bookingData, 0);
-          
-          if (distributeResult !== false) {
-            // distributeTip will add totalTip (oldTip + tipAmount) to tipAmount field
-            // We've already added tipAmount, so we need to subtract oldTip
-            // Wait a bit for the async wallet.increment to complete
-            await new Promise(resolve => setTimeout(resolve, 150));
-            
-            if (oldTip > 0) {
-              await wallet.increment(
-                { tipAmount: -parseFloat(oldTip) },
-                { where: { salonDetailId: salonId } }
-              );
-              console.log(`✅ Adjusted tipAmount: subtracted oldTip=${oldTip} (distributeTip added totalTip, we only want new tipAmount)`);
-            }
-          } else {
-            console.log(`✅ distributeTip returned false, so it didn't add tip. Only new tipAmount added.`);
-          }
-        } catch (distributeError) {
-          console.error('Error in distributeTip (non-critical):', distributeError);
-          // distributeTip failure doesn't affect wallet tip addition
-        }
-        
-        // Restore original tip value
-        bookingData.tip = originalTip;
-        
-      } catch (error) {
-        console.error('Error adding tip to wallet:', error);
-        // Last resort: try to add tip directly one more time (only new tipAmount)
-        try {
-          await wallet.increment(
-            { tipAmount: tipAmount },
-            { where: { salonDetailId: salonId } }
-          );
-          console.log(`✅ Emergency fallback: Tip added to wallet tipAmount field: tipAmount=${tipAmount}`);
-        } catch (fallbackError) {
-          console.error('❌ CRITICAL: Failed to add tip to wallet even in fallback:', fallbackError);
-        }
-      }
-    } else {
-      if (tipAmount > 0) {
-        console.warn(`⚠️ Cannot add tip: tipAmount=${tipAmount}, salonId=${salonId}`);
-      }
+    // Call distributeTip for job distribution (tip distribution among employees)
+    // distributeTip will handle adding tip to tipAmount field
+    try {
+      const originalTip = bookingData.tip;
+      bookingData.tip = parseFloat(oldTip) + parseFloat(tipAmount);
+      distributeTip(bookingData, 0);
+      bookingData.tip = originalTip;
+    } catch (error) {
+      console.error('Error in distributeTip (non-critical):', error);
     }
 
     return res.json(
