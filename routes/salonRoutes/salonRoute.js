@@ -11,6 +11,7 @@ const {
 const salonController = require('../../controllers/salonControllers/salonController')
 const customerController = require('../../controllers/userControllers/customerController')
 const appleSubscriptionController = require('../../controllers/appleSubscriptions/appleSubscriptionController')
+const revenueCatWebhookController = require('../../controllers/revenueCatControllers/revenueCatWebhookController')
 const {
   fetchFAQs,
 } = require('../../controllers/adminController/adminController')
@@ -27,6 +28,13 @@ const path = require('path')
 router.get(
   '/salon-feedback/:salon',
   catchAsync(salonController.clientFeedBackSalon),
+)
+
+// RevenueCat webhook endpoint (must be before validateToken - webhooks don't need auth)
+router.post(
+  '/webhooks/revenuecat',
+  express.json(),
+  catchAsync(revenueCatWebhookController.revenueCatWebhookHandler),
 )
 
 router.use(validateToken)

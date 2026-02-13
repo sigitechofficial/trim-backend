@@ -1976,21 +1976,48 @@ exports.customerSubscription = async (req, res, next) => {
       // Update price from subscription record
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
 
+      // Preserve existing metadata from Stripe (includes paymentMethodId)
+      const existingMetaData = customerSubscription.metaData || {};
+      
+      // Determine paymentMethodId: 
+      // 1. Use from Stripe metadata if exists (for Stripe subscriptions)
+      // 2. Use defaultPaymentMethodId from subscription if metadata doesn't have it
+      // 3. Use 'apple_pay' for Apple subscriptions
+      // 4. Otherwise empty string
+      let paymentMethodId = '';
+      if (subscriptionRecord.subscriptionSource === 'apple') {
+        paymentMethodId = 'apple_pay';
+      } else if (subscriptionSource === 'stripe') {
+        // For Stripe: try metadata first, then defaultPaymentMethodId
+        paymentMethodId = existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '';
+      }
+
+      // Merge metadata: preserve Stripe metadata, add/override with our fields
       customerSubscription.metaData = {
+        ...existingMetaData, // Preserve all Stripe metadata (including paymentMethodId)
         freeTrialDays: salonData.hasObtainedFreeTrial ? 0 : 7,
         members: memberCount,
         membersCount: memberCount,
-        paymentMethodId: subscriptionRecord.subscriptionSource === 'apple' ? 'apple_pay' : '',
+        paymentMethodId: paymentMethodId || existingMetaData.paymentMethodId || '', // Use determined value or existing
         sloanId: salonData.id.toString(),
         subscriptionName: subscriptionRecord.name || subscriptionRecord.priceId,
       };
     } else {
       // Fallback if no subscription found
+      // Preserve existing metadata from Stripe (includes paymentMethodId)
+      const existingMetaData = customerSubscription.metaData || {};
+      
+      // For Stripe: try metadata first, then defaultPaymentMethodId
+      const paymentMethodId = subscriptionSource === 'stripe' 
+        ? (existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '')
+        : '';
+      
       customerSubscription.metaData = {
+        ...existingMetaData, // Preserve all Stripe metadata (including paymentMethodId)
         freeTrialDays: '',
         members: 1,
         membersCount: 1,
-        paymentMethodId: '',
+        paymentMethodId: paymentMethodId, // Use from Stripe metadata or defaultPaymentMethodId
         sloanId: salonData.id.toString(),
         subscriptionName: '',
       };
@@ -2160,6 +2187,137 @@ exports.updateSubscription = async (req, res, next) => {
   salonData.teamSize = newMemberCount
   salonData.subscriptionPrice = subscriptionPrice
   const updatedData = await salonData.save()
+
+  // ============================================
+  // Create or Update Subscription Record
+  // ============================================
+  try {
+    // Extract data from updateSubscription object (which has latest_invoice expanded)
+    const latestInvoice = updateSubscription?.latest_invoice
+    
+    // Get invoice details if available
+    let invoiceId = null
+    let invoicePdfUrl = null
+    let amountPaid = parseFloat(subscriptionPrice) || 0
+    let currency = updateSubscription?.currency || 'gbp'
+    let vatAmount = 0
+
+    if (latestInvoice) {
+      // If latest_invoice is an object (expanded), use it directly
+      if (typeof latestInvoice === 'object' && latestInvoice.id) {
+        invoiceId = latestInvoice.id
+        invoicePdfUrl = latestInvoice.invoice_pdf || null
+        amountPaid = (latestInvoice.amount_paid || 0) / 100 // Convert from cents
+        currency = latestInvoice.currency || currency
+        
+        // Extract VAT from invoice metadata or tax amounts
+        if (latestInvoice.metadata?.VAT) {
+          vatAmount = parseFloat(latestInvoice.metadata.VAT) || 0
+        } else if (latestInvoice.tax) {
+          vatAmount = (latestInvoice.tax || 0) / 100
+        } else if (latestInvoice.total_tax_amounts && latestInvoice.total_tax_amounts.length > 0) {
+          // Sum all tax amounts
+          vatAmount = latestInvoice.total_tax_amounts.reduce((sum, tax) => sum + (tax.amount || 0), 0) / 100
+        }
+      } else if (typeof latestInvoice === 'string') {
+        // If it's just an ID string, try to retrieve it
+        invoiceId = latestInvoice
+        try {
+          const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+          const retrievedInvoice = await stripe.invoices.retrieve(latestInvoice)
+          if (retrievedInvoice) {
+            invoicePdfUrl = retrievedInvoice.invoice_pdf || null
+            amountPaid = (retrievedInvoice.amount_paid || 0) / 100
+            currency = retrievedInvoice.currency || currency
+            
+            // Extract VAT
+            if (retrievedInvoice.metadata?.VAT) {
+              vatAmount = parseFloat(retrievedInvoice.metadata.VAT) || 0
+            } else if (retrievedInvoice.total_tax_amounts && retrievedInvoice.total_tax_amounts.length > 0) {
+              vatAmount = retrievedInvoice.total_tax_amounts.reduce((sum, tax) => sum + (tax.amount || 0), 0) / 100
+            }
+          }
+        } catch (invoiceError) {
+          console.warn('⚠️ Could not retrieve invoice details:', invoiceError.message)
+          // Fallback to subscriptionPrice
+          amountPaid = parseFloat(subscriptionPrice) || 0
+        }
+      }
+    } else {
+      // No invoice yet, use subscriptionPrice as fallback
+      amountPaid = parseFloat(subscriptionPrice) || 0
+    }
+
+    // Extract priceId from subscription items or use newPriceId
+    const priceId = updateSubscription?.items?.data?.[0]?.price?.id || newPriceId || null
+    
+    // Get subscription name from metadata or request
+    const subscriptionNameValue = subscriptionName || 
+                                   updateSubscription?.metadata?.subscriptionName || 
+                                   updateSubscription?.items?.data?.[0]?.price?.nickname || 
+                                   'Subscription'
+
+    // Get subscription status
+    const subscriptionStatus = updateSubscription?.status || 'active'
+
+    // Prepare subscription data with all columns
+    const subscriptionData = {
+      subscriptionId: updateSubscription?.id,
+      invoiceId: invoiceId,
+      name: subscriptionNameValue,
+      customerId: customerId,
+      amountPaid: amountPaid,
+      currency: currency,
+      priceId: priceId,
+      invoice: invoicePdfUrl,
+      periodStart: registrationDate,
+      periodEnd: registrationExpiryDate,
+      status: subscriptionStatus,
+      VAT: vatAmount,
+      salonDetailId: salonData.id,
+      subscriptionSource: 'stripe',
+      // Apple fields should be null for Stripe subscriptions
+      appleTransactionId: null,
+      appleOriginalTransactionId: null,
+      appleProductId: null,
+      appleEnvironment: null,
+    }
+
+    // Check if subscription record already exists
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        salonDetailId: salonData.id,
+        subscriptionId: updateSubscription?.id,
+        subscriptionSource: 'stripe',
+      },
+    })
+
+    let subscriptionRecord
+    if (existingSubscription) {
+      // Update existing subscription
+      await existingSubscription.update(subscriptionData)
+      subscriptionRecord = existingSubscription
+      console.log('✅ Updated existing subscription record:', subscriptionRecord.id)
+    } else {
+      // Create new subscription record
+      subscriptionRecord = await subscriptions.create(subscriptionData)
+      console.log('✅ Created new subscription record:', subscriptionRecord.id)
+    }
+
+    console.log('📝 Subscription record saved successfully:', {
+      id: subscriptionRecord.id,
+      subscriptionId: subscriptionRecord.subscriptionId,
+      salonDetailId: subscriptionRecord.salonDetailId,
+      amountPaid: subscriptionRecord.amountPaid,
+      status: subscriptionRecord.status,
+      invoiceId: subscriptionRecord.invoiceId,
+    })
+  } catch (subscriptionError) {
+    // Log error but don't fail the entire request
+    console.error('⚠️ Error creating/updating subscription record:', subscriptionError)
+    console.error('⚠️ Error stack:', subscriptionError.stack)
+    // Continue with the response even if subscription record creation fails
+  }
 
   return res.json(
     returnFunction(

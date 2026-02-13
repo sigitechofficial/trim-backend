@@ -556,6 +556,7 @@ async function getSubscription(subscriptionPlan) {
       paymentMethods: paymentMethods?.data[0]?.card?.last4,
       expire: subscription.current_period_end,
       metaData: subscription.metadata,
+      defaultPaymentMethodId: subscription.default_payment_method || subscription.default_source || null, // Include default payment method ID
     };
   } catch (error) {
     console.log("Ã°Å¸Å¡â‚¬ ~ getSubscription ~ error:", error);

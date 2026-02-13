@@ -2343,6 +2343,25 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
     output.couponOnBooking = null
   }
 
+  // Calculate payment breakdown for "pay on the day" tracking
+  const upfrontAmount = parseFloat(output.initialPayment || 0)
+  const totalCapturedAmount = parseFloat(output.actualCapturedAmount || 0)
+  let payOnTheDayAmount = Math.max(0, totalCapturedAmount - upfrontAmount) // Amount received at checkout
+  const remainingAmount = Math.max(0, parseFloat(output.total || 0) - totalCapturedAmount) // Amount still pending (if any)
+  
+  // If payOnTheDayAmount is 0, use the remaining amount instead
+  if (payOnTheDayAmount === 0) {
+    payOnTheDayAmount = remainingAmount
+  }
+  
+  // Add payment breakdown to output
+  output.paymentBreakdown = {
+    upfrontAmount: upfrontAmount, // Amount paid upfront when booking
+    payOnTheDayAmount: payOnTheDayAmount, // Amount received later at checkout
+    totalAmountReceived: totalCapturedAmount, // Total amount received (upfront + checkout)
+    remainingAmount: remainingAmount, // Amount still pending (if any)
+  }
+
   const policies = await salonDetail.findOne({
     where: { id: output.salonDetail.id },
     attributes: ['id', 'salonName'],
