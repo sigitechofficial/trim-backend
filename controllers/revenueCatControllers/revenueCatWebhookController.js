@@ -112,10 +112,17 @@ exports.revenueCatWebhookHandler = async (req, res) => {
     // Verify webhook authorization
     verifyRevenueCatWebhook(req);
     
-    const event = req.body;
+    const webhookPayload = req.body;
+    const event = webhookPayload.event; // Extract the event object from nested structure
+    
     console.log('📦 RevenueCat Webhook Event Received');
-    console.log('📦 Event Type:', event.type);
-    console.log('📦 Event Data:', JSON.stringify(event, null, 2));
+    console.log('📦 Event Type:', event?.type);
+    console.log('📦 Event Data:', JSON.stringify(webhookPayload, null, 2));
+
+    if (!event || !event.type) {
+      console.warn('⚠️ Invalid webhook payload - missing event or event.type');
+      return res.status(200).json({ received: false, error: 'Invalid payload' });
+    }
 
     // Handle different event types
     switch (event.type) {
@@ -242,6 +249,7 @@ const handleInitialPurchase = async (event) => {
       VAT: vatAmount,
       // RevenueCat fields
       revenueCatUserId: app_user_id,
+      revenueCatOriginalTransactionId: event.original_transaction_id || null,
       revenueCatStore: store || null,
       // Set Apple/Stripe fields to null
       appleTransactionId: null,
@@ -344,6 +352,7 @@ const handleRenewal = async (event) => {
       priceId: product_id,
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
+      revenueCatOriginalTransactionId: event.original_transaction_id || null,
       revenueCatStore: store || null,
       appleTransactionId: null,
       appleOriginalTransactionId: null,
@@ -589,6 +598,7 @@ const handleProductChange = async (event) => {
       priceId: product_id,
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
+      revenueCatOriginalTransactionId: event.original_transaction_id || null,
       revenueCatStore: store || null,
       appleTransactionId: null,
       appleOriginalTransactionId: null,
@@ -715,6 +725,7 @@ const handleUncancellation = async (event) => {
       priceId: product_id,
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
+      revenueCatOriginalTransactionId: event.original_transaction_id || null,
       appleTransactionId: null,
       appleOriginalTransactionId: null,
       appleProductId: null,
