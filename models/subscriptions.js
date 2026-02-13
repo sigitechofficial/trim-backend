@@ -59,7 +59,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
     },
     subscriptionSource: {
-      type: DataTypes.ENUM('stripe', 'apple'),
+      type: DataTypes.ENUM('stripe', 'apple', 'revenuecat'),
       defaultValue: 'stripe',
       allowNull: true,
     },
@@ -69,6 +69,19 @@ module.exports = (sequelize, DataTypes) => {
     },
     appleEnvironment: {
       type: DataTypes.ENUM('Sandbox', 'Production'),
+      allowNull: true,
+    },
+    // RevenueCat-specific fields
+    revenueCatUserId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    revenueCatOriginalTransactionId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
+    revenueCatStore: {
+      type: DataTypes.STRING(),
       allowNull: true,
     },
   })
