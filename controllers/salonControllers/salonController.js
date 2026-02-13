@@ -1976,21 +1976,48 @@ exports.customerSubscription = async (req, res, next) => {
       // Update price from subscription record
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
 
+      // Preserve existing metadata from Stripe (includes paymentMethodId)
+      const existingMetaData = customerSubscription.metaData || {};
+      
+      // Determine paymentMethodId: 
+      // 1. Use from Stripe metadata if exists (for Stripe subscriptions)
+      // 2. Use defaultPaymentMethodId from subscription if metadata doesn't have it
+      // 3. Use 'apple_pay' for Apple subscriptions
+      // 4. Otherwise empty string
+      let paymentMethodId = '';
+      if (subscriptionRecord.subscriptionSource === 'apple') {
+        paymentMethodId = 'apple_pay';
+      } else if (subscriptionSource === 'stripe') {
+        // For Stripe: try metadata first, then defaultPaymentMethodId
+        paymentMethodId = existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '';
+      }
+
+      // Merge metadata: preserve Stripe metadata, add/override with our fields
       customerSubscription.metaData = {
+        ...existingMetaData, // Preserve all Stripe metadata (including paymentMethodId)
         freeTrialDays: salonData.hasObtainedFreeTrial ? 0 : 7,
         members: memberCount,
         membersCount: memberCount,
-        paymentMethodId: subscriptionRecord.subscriptionSource === 'apple' ? 'apple_pay' : '',
+        paymentMethodId: paymentMethodId || existingMetaData.paymentMethodId || '', // Use determined value or existing
         sloanId: salonData.id.toString(),
         subscriptionName: subscriptionRecord.name || subscriptionRecord.priceId,
       };
     } else {
       // Fallback if no subscription found
+      // Preserve existing metadata from Stripe (includes paymentMethodId)
+      const existingMetaData = customerSubscription.metaData || {};
+      
+      // For Stripe: try metadata first, then defaultPaymentMethodId
+      const paymentMethodId = subscriptionSource === 'stripe' 
+        ? (existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '')
+        : '';
+      
       customerSubscription.metaData = {
+        ...existingMetaData, // Preserve all Stripe metadata (including paymentMethodId)
         freeTrialDays: '',
         members: 1,
         membersCount: 1,
-        paymentMethodId: '',
+        paymentMethodId: paymentMethodId, // Use from Stripe metadata or defaultPaymentMethodId
         sloanId: salonData.id.toString(),
         subscriptionName: '',
       };
