@@ -59,24 +59,137 @@ const calculatePeriodEnd = (startDate, periodType) => {
 
 /**
  * Find user by RevenueCat app_user_id
+ * RevenueCat app_user_id can be:
+ * 1. User ID (if set via RevenueCat SDK identify())
+ * 2. Email (if set via RevenueCat SDK identify())
+ * 3. Anonymous ID ($RCAnonymousID:...) - in this case, we look up by existing subscription
+ * 4. Aliases - check if user has any subscription with this RevenueCat user ID
  */
-const findUserByAppUserId = async (appUserId) => {
+const findUserByAppUserId = async (appUserId, event = null) => {
   try {
-    // Try by user ID
-    let salonUser = await user.findOne({
-      where: { id: appUserId },
-      attributes: ['id', 'email', 'stripeCustomerId'],
-    });
-
-    // Try by email
-    if (!salonUser) {
-      salonUser = await user.findOne({
-        where: { email: appUserId },
+    // Skip if it's an anonymous ID and we'll look it up via subscription
+    const isAnonymousId = appUserId && appUserId.startsWith('$RCAnonymousID:');
+    
+    // Try by user ID (if app_user_id is set to actual user ID)
+    if (!isAnonymousId) {
+      let salonUser = await user.findOne({
+        where: { id: appUserId },
         attributes: ['id', 'email', 'stripeCustomerId'],
       });
+
+      // Try by email
+      if (!salonUser) {
+        salonUser = await user.findOne({
+          where: { email: appUserId },
+          attributes: ['id', 'email', 'stripeCustomerId'],
+        });
+      }
+
+      if (salonUser) {
+        return salonUser;
+      }
     }
 
-    return salonUser;
+    // If anonymous ID or not found, try to find by existing subscription with this RevenueCat user ID
+    // This handles cases where user purchased before we set app_user_id
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        revenueCatUserId: appUserId,
+        subscriptionSource: 'revenuecat',
+      },
+      include: [
+        {
+          model: salonDetail,
+          attributes: ['userId'],
+          include: [
+            {
+              model: user,
+              attributes: ['id', 'email', 'stripeCustomerId'],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (existingSubscription?.salonDetail?.user) {
+      console.log(`✅ Found user via existing subscription for RevenueCat ID: ${appUserId}`);
+      return existingSubscription.salonDetail.user;
+    }
+
+    // Also check aliases if provided in event
+    if (event?.aliases && Array.isArray(event.aliases)) {
+      for (const alias of event.aliases) {
+        if (alias && !alias.startsWith('$RCAnonymousID:')) {
+          // Try to find by this alias (could be user ID or email)
+          let salonUser = await user.findOne({
+            where: { id: alias },
+            attributes: ['id', 'email', 'stripeCustomerId'],
+          });
+
+          if (!salonUser) {
+            salonUser = await user.findOne({
+              where: { email: alias },
+              attributes: ['id', 'email', 'stripeCustomerId'],
+            });
+          }
+
+          if (salonUser) {
+            console.log(`✅ Found user via alias: ${alias}`);
+            return salonUser;
+          }
+        }
+      }
+    }
+
+    // Check original_app_user_id if available
+    if (event?.original_app_user_id && !event.original_app_user_id.startsWith('$RCAnonymousID:')) {
+      let salonUser = await user.findOne({
+        where: { id: event.original_app_user_id },
+        attributes: ['id', 'email', 'stripeCustomerId'],
+      });
+
+      if (!salonUser) {
+        salonUser = await user.findOne({
+          where: { email: event.original_app_user_id },
+          attributes: ['id', 'email', 'stripeCustomerId'],
+        });
+      }
+
+      if (salonUser) {
+        console.log(`✅ Found user via original_app_user_id: ${event.original_app_user_id}`);
+        return salonUser;
+      }
+    }
+
+    // Last resort: Try to find by original_transaction_id in existing subscriptions
+    // This helps when user has made previous purchases
+    if (event?.original_transaction_id) {
+      const subscriptionByTransaction = await subscriptions.findOne({
+        where: {
+          revenueCatOriginalTransactionId: event.original_transaction_id,
+          subscriptionSource: 'revenuecat',
+        },
+        include: [
+          {
+            model: salonDetail,
+            attributes: ['userId'],
+            include: [
+              {
+                model: user,
+                attributes: ['id', 'email', 'stripeCustomerId'],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (subscriptionByTransaction?.salonDetail?.user) {
+        console.log(`✅ Found user via original_transaction_id: ${event.original_transaction_id}`);
+        return subscriptionByTransaction.salonDetail.user;
+      }
+    }
+
+    return null;
   } catch (error) {
     console.error('Error finding user by app_user_id:', error);
     return null;
@@ -198,9 +311,11 @@ const handleInitialPurchase = async (event) => {
     });
 
     // Find user
-    const salonUser = await findUserByAppUserId(app_user_id);
+    const salonUser = await findUserByAppUserId(app_user_id, event);
     if (!salonUser) {
       console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Event aliases: ${JSON.stringify(event.aliases)}`);
+      console.warn(`⚠️ Original app_user_id: ${event.original_app_user_id}`);
       return;
     }
 
