@@ -156,7 +156,31 @@ const handleInvoicePayment = async (invoice, state, status) => {
     }
 
     input.salonDetailId = salon.id;
-    subscriptions.create(input);
+    input.subscriptionSource = 'stripe';
+    // Apple fields should be null for Stripe subscriptions
+    input.appleTransactionId = null;
+    input.appleOriginalTransactionId = null;
+    input.appleProductId = null;
+    input.appleEnvironment = null;
+
+    // Check if subscription record already exists
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        salonDetailId: salon.id,
+        subscriptionId: subscriptionId,
+        subscriptionSource: 'stripe',
+      },
+    });
+
+    if (existingSubscription) {
+      // Update existing subscription with invoice data
+      await existingSubscription.update(input);
+      console.log(`✅ Updated subscription record with invoice: ${existingSubscription.id}`);
+    } else {
+      // Create new subscription record
+      await subscriptions.create(input);
+      console.log(`✅ Created new subscription record with invoice for salon: ${salon.id}`);
+    }
 
     console.log(
       `Payment succeeded for user ${salon.salonName} with ID ${salon.id}, subscriptions ID: ${subscriptionId}`,
