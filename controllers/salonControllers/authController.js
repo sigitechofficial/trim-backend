@@ -162,20 +162,12 @@ exports.signup = async (req, res, next) => {
   console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>', req.body)
 
   // check if user with same eamil and phoneNum exists
-  // Only match by phone if both countryCode and phoneNum are provided and not empty
-  const whereConditions = [
-    { email: email },
-  ]
-  
-  if (countryCode && phoneNum) {
-    whereConditions.push({
-      [Op.and]: [{ countryCode: countryCode }, { phonenum: phoneNum }]
-    })
-  }
-
   let userExist = await user.findOne({
     where: {
-      [Op.or]: whereConditions,
+      [Op.or]: [
+        { email: email },
+        { [Op.and]: [{ countryCode: countryCode }, { phonenum: phoneNum }] },
+      ],
       deleted: false,
     },
     include: [
