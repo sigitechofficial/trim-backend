@@ -58,7 +58,215 @@ const calculatePeriodEnd = (startDate, periodType) => {
 };
 
 /**
- * Find user by RevenueCat app_user_id
+ * Find salon by salonDetailId from subscriber attributes or RevenueCat app_user_id
+ * Priority:
+ * 1. Check subscriber_attributes for salonDetailId (sent by frontend)
+ * 2. Try to find by app_user_id (could be salonDetailId, user ID, email, or anonymous ID)
+ * 3. Look up by existing subscription with RevenueCat user ID
+ */
+const findSalonByAppUserId = async (appUserId, event = null) => {
+  try {
+    // First, check if salonDetailId is in subscriber_attributes (sent by frontend)
+    if (event?.subscriber_attributes?.salonDetailId?.value) {
+      const salonDetailId = event.subscriber_attributes.salonDetailId.value;
+      const salon = await salonDetail.findOne({
+        where: { id: salonDetailId },
+        attributes: [
+          'id',
+          'userId',
+          'registrationDate',
+          'salonName',
+          'approvedByAdmin',
+          'subscriptionPlan',
+          'registrationExpiryDate',
+          'subscriptionLatestPaymentStatus',
+        ],
+        include: [
+          {
+            model: user,
+            attributes: ['id', 'email', 'stripeCustomerId'],
+          },
+        ],
+      });
+
+      if (salon) {
+        console.log(`✅ Found salon via subscriber_attributes.salonDetailId: ${salonDetailId}`);
+        return salon;
+      }
+    }
+
+    // Try to find salon by app_user_id if it's a salonDetailId (numeric)
+    if (appUserId && !isNaN(appUserId) && !appUserId.startsWith('$RCAnonymousID:')) {
+      const salon = await salonDetail.findOne({
+        where: { id: appUserId },
+        attributes: [
+          'id',
+          'userId',
+          'registrationDate',
+          'salonName',
+          'approvedByAdmin',
+          'subscriptionPlan',
+          'registrationExpiryDate',
+          'subscriptionLatestPaymentStatus',
+        ],
+        include: [
+          {
+            model: user,
+            attributes: ['id', 'email', 'stripeCustomerId'],
+          },
+        ],
+      });
+
+      if (salon) {
+        console.log(`✅ Found salon by app_user_id (salonDetailId): ${appUserId}`);
+        return salon;
+      }
+    }
+
+    // If anonymous ID or not found, try to find by existing subscription with this RevenueCat user ID
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        revenueCatUserId: appUserId,
+        subscriptionSource: 'revenuecat',
+      },
+      include: [
+        {
+          model: salonDetail,
+          attributes: [
+            'id',
+            'userId',
+            'registrationDate',
+            'salonName',
+            'approvedByAdmin',
+            'subscriptionPlan',
+            'registrationExpiryDate',
+            'subscriptionLatestPaymentStatus',
+          ],
+          include: [
+            {
+              model: user,
+              attributes: ['id', 'email', 'stripeCustomerId'],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (existingSubscription?.salonDetail) {
+      console.log(`✅ Found salon via existing subscription for RevenueCat ID: ${appUserId}`);
+      return existingSubscription.salonDetail;
+    }
+
+    // Also check aliases if provided in event
+    if (event?.aliases && Array.isArray(event.aliases)) {
+      for (const alias of event.aliases) {
+        if (alias && !alias.startsWith('$RCAnonymousID:')) {
+          // Try to find by this alias (could be salonDetailId)
+          if (!isNaN(alias)) {
+            const salon = await salonDetail.findOne({
+              where: { id: alias },
+              attributes: [
+                'id',
+                'userId',
+                'registrationDate',
+                'salonName',
+                'approvedByAdmin',
+                'subscriptionPlan',
+                'registrationExpiryDate',
+                'subscriptionLatestPaymentStatus',
+              ],
+              include: [
+                {
+                  model: user,
+                  attributes: ['id', 'email', 'stripeCustomerId'],
+                },
+              ],
+            });
+
+            if (salon) {
+              console.log(`✅ Found salon via alias (salonDetailId): ${alias}`);
+              return salon;
+            }
+          }
+        }
+      }
+    }
+
+    // Check original_app_user_id if available
+    if (event?.original_app_user_id && !event.original_app_user_id.startsWith('$RCAnonymousID:')) {
+      if (!isNaN(event.original_app_user_id)) {
+        const salon = await salonDetail.findOne({
+          where: { id: event.original_app_user_id },
+          attributes: [
+            'id',
+            'userId',
+            'registrationDate',
+            'salonName',
+            'approvedByAdmin',
+            'subscriptionPlan',
+            'registrationExpiryDate',
+            'subscriptionLatestPaymentStatus',
+          ],
+          include: [
+            {
+              model: user,
+              attributes: ['id', 'email', 'stripeCustomerId'],
+            },
+          ],
+        });
+
+        if (salon) {
+          console.log(`✅ Found salon via original_app_user_id (salonDetailId): ${event.original_app_user_id}`);
+          return salon;
+        }
+      }
+    }
+
+    // Last resort: Try to find by original_transaction_id in existing subscriptions
+    if (event?.original_transaction_id) {
+      const subscriptionByTransaction = await subscriptions.findOne({
+        where: {
+          revenueCatOriginalTransactionId: event.original_transaction_id,
+          subscriptionSource: 'revenuecat',
+        },
+        include: [
+          {
+            model: salonDetail,
+            attributes: [
+              'id',
+              'userId',
+              'registrationDate',
+              'salonName',
+              'approvedByAdmin',
+              'subscriptionPlan',
+              'registrationExpiryDate',
+              'subscriptionLatestPaymentStatus',
+            ],
+            include: [
+              {
+                model: user,
+                attributes: ['id', 'email', 'stripeCustomerId'],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (subscriptionByTransaction?.salonDetail) {
+        console.log(`✅ Found salon via original_transaction_id: ${event.original_transaction_id}`);
+        return subscriptionByTransaction.salonDetail;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error finding salon by app_user_id:', error);
+    return null;
+  }
+};
+
+/**
+ * Find user by RevenueCat app_user_id (kept for backward compatibility and TRANSFER events)
  * RevenueCat app_user_id can be:
  * 1. User ID (if set via RevenueCat SDK identify())
  * 2. Email (if set via RevenueCat SDK identify())
@@ -271,6 +479,10 @@ exports.revenueCatWebhookHandler = async (req, res) => {
         await handleUncancellation(event);
         break;
       
+      case 'TRANSFER':
+        await handleTransfer(event);
+        break;
+      
       default:
         console.log(`⚠️ Unhandled RevenueCat event type: ${event.type}`);
     }
@@ -310,30 +522,13 @@ const handleInitialPurchase = async (event) => {
       purchased_at_ms
     });
 
-    // Find user
-    const salonUser = await findUserByAppUserId(app_user_id, event);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
+    // Find salon by salonDetailId (from subscriber_attributes or app_user_id)
+    const salon = await findSalonByAppUserId(app_user_id, event);
+    if (!salon) {
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
       console.warn(`⚠️ Event aliases: ${JSON.stringify(event.aliases)}`);
       console.warn(`⚠️ Original app_user_id: ${event.original_app_user_id}`);
-      return;
-    }
-
-    // Find salon details
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: [
-        'id',
-        'registrationDate',
-        'salonName',
-        'approvedByAdmin',
-        'subscriptionPlan',
-        'registrationExpiryDate',
-      ],
-    });
-
-    if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -348,7 +543,7 @@ const handleInitialPurchase = async (event) => {
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: product_id || entitlement_id,
-      customerId: salonUser.id.toString(),
+      customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
       name: product_id || entitlement_id,
@@ -424,20 +619,14 @@ const handleRenewal = async (event) => {
     
     console.log('🔄 Renewal Event:', { app_user_id, product_id, price });
 
-    // Find salon
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'subscriptionPlan', 'registrationExpiryDate', 'salonName'],
-    });
-
+    // Find salon by salonDetailId (from subscriber_attributes or app_user_id)
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Event aliases: ${JSON.stringify(event.aliases)}`);
+      console.warn(`⚠️ Original app_user_id: ${event.original_app_user_id}`);
+      console.warn(`⚠️ Original transaction_id: ${event.original_transaction_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -452,7 +641,7 @@ const handleRenewal = async (event) => {
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: product_id || entitlement_id,
-      customerId: salonUser.id.toString(),
+      customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
       name: product_id || entitlement_id,
@@ -514,19 +703,10 @@ const handleCancellation = async (event) => {
     
     console.log('🚫 Cancellation Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName', 'subscriptionPlan'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -565,19 +745,10 @@ const handleExpiration = async (event) => {
     
     console.log('⏰ Expiration Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName', 'approvedByAdmin'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -617,19 +788,10 @@ const handleBillingIssue = async (event) => {
     
     console.log('💳 Billing Issue Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -677,19 +839,10 @@ const handleProductChange = async (event) => {
     
     console.log('🔄 Product Change Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName', 'subscriptionPlan'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -700,7 +853,7 @@ const handleProductChange = async (event) => {
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: product_id || entitlement_id,
-      customerId: salonUser.id.toString(),
+      customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
       name: product_id || entitlement_id,
@@ -761,19 +914,10 @@ const handleSubscriptionPaused = async (event) => {
     
     console.log('⏸️ Subscription Paused Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -804,19 +948,10 @@ const handleUncancellation = async (event) => {
     
     console.log('✅ Uncancellation Event:', { app_user_id, product_id });
 
-    const salonUser = await findUserByAppUserId(app_user_id);
-    if (!salonUser) {
-      console.warn(`⚠️ User not found for app_user_id: ${app_user_id}`);
-      return;
-    }
-
-    const salon = await salonDetail.findOne({
-      where: { userId: salonUser.id },
-      attributes: ['id', 'salonName'],
-    });
-
+    const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
-      console.warn(`⚠️ Salon not found for user: ${salonUser.id}`);
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
@@ -827,7 +962,7 @@ const handleUncancellation = async (event) => {
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: product_id || entitlement_id,
-      customerId: salonUser.id.toString(),
+      customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
       name: product_id || entitlement_id,
@@ -875,6 +1010,284 @@ const handleUncancellation = async (event) => {
     console.log(`✅ Uncancellation processed for salon ${salon.salonName}`);
   } catch (error) {
     console.error('❌ Error handling UNCANCELLATION:', error);
+  }
+};
+
+/**
+ * Update subscriptions by RevenueCat user ID (when we don't know the salon)
+ */
+const updateSubscriptionsByRevenueCatUserId = async (oldRevenueCatUserId, newRevenueCatUserId) => {
+  try {
+    const subscriptionsToUpdate = await subscriptions.findAll({
+      where: {
+        revenueCatUserId: oldRevenueCatUserId,
+        subscriptionSource: 'revenuecat',
+      },
+    });
+
+    for (const subscription of subscriptionsToUpdate) {
+      subscription.revenueCatUserId = newRevenueCatUserId;
+      await subscription.save();
+      console.log(`✅ Updated subscription ${subscription.id} RevenueCat user ID from ${oldRevenueCatUserId} to ${newRevenueCatUserId}`);
+    }
+
+    return subscriptionsToUpdate.length;
+  } catch (error) {
+    console.error('❌ Error updating subscriptions by RevenueCat user ID:', error);
+    return 0;
+  }
+};
+
+/**
+ * Update subscriptions for a specific salon with new RevenueCat user ID
+ */
+const updateSubscriptionsByRevenueCatUserIdForSalon = async (salonDetailId, newRevenueCatUserId) => {
+  try {
+    const subscriptionsToUpdate = await subscriptions.findAll({
+      where: {
+        salonDetailId: salonDetailId,
+        subscriptionSource: 'revenuecat',
+      },
+    });
+
+    for (const subscription of subscriptionsToUpdate) {
+      subscription.revenueCatUserId = newRevenueCatUserId;
+      await subscription.save();
+      console.log(`✅ Updated subscription ${subscription.id} RevenueCat user ID to ${newRevenueCatUserId}`);
+    }
+
+    return subscriptionsToUpdate.length;
+  } catch (error) {
+    console.error('❌ Error updating subscriptions for salon:', error);
+    return 0;
+  }
+};
+
+/**
+ * Handle TRANSFER - Subscription transferred from one user to another
+ * This happens when a user restores purchases or transfers subscription to a new account
+ */
+const handleTransfer = async (event) => {
+  try {
+    const { 
+      transferred_from, 
+      transferred_to,
+      environment
+    } = event;
+    
+    console.log('🔄 Transfer Event:', { 
+      transferred_from, 
+      transferred_to,
+      environment 
+    });
+
+    if (!transferred_from || !Array.isArray(transferred_from) || transferred_from.length === 0) {
+      console.warn('⚠️ Transfer event missing transferred_from');
+      return;
+    }
+
+    if (!transferred_to || !Array.isArray(transferred_to) || transferred_to.length === 0) {
+      console.warn('⚠️ Transfer event missing transferred_to');
+      return;
+    }
+
+    // Find salons by salonDetailId (priority) or via subscriptions
+    let fromSalon = null;
+    let toSalon = null;
+
+    // Extract salon IDs from transferred_from (skip anonymous IDs)
+    for (const id of transferred_from) {
+      if (id && !id.startsWith('$RCAnonymousID:')) {
+        // Try to find salon by salonDetailId (if numeric)
+        if (!isNaN(id)) {
+          const salon = await salonDetail.findOne({
+            where: { id: id },
+            attributes: [
+              'id',
+              'userId',
+              'salonName',
+              'subscriptionPlan',
+              'registrationExpiryDate',
+              'registrationDate',
+              'approvedByAdmin',
+              'subscriptionLatestPaymentStatus',
+            ],
+          });
+
+          if (salon) {
+            fromSalon = salon;
+            console.log(`✅ Found source salon: ${salon.id} (${salon.salonName})`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract salon IDs from transferred_to (skip anonymous IDs)
+    for (const id of transferred_to) {
+      if (id && !id.startsWith('$RCAnonymousID:')) {
+        // Try to find salon by salonDetailId (if numeric)
+        if (!isNaN(id)) {
+          const salon = await salonDetail.findOne({
+            where: { id: id },
+            attributes: [
+              'id',
+              'userId',
+              'salonName',
+              'subscriptionPlan',
+              'registrationExpiryDate',
+              'registrationDate',
+              'approvedByAdmin',
+              'subscriptionLatestPaymentStatus',
+            ],
+          });
+
+          if (salon) {
+            toSalon = salon;
+            console.log(`✅ Found destination salon: ${salon.id} (${salon.salonName})`);
+            break;
+          }
+        }
+      }
+    }
+
+    // If we couldn't find salons by direct IDs, try to find via existing subscriptions
+    if (!fromSalon) {
+      // Try to find subscriptions with the old RevenueCat user IDs
+      for (const oldId of transferred_from) {
+        const oldSubscription = await subscriptions.findOne({
+          where: {
+            revenueCatUserId: oldId,
+            subscriptionSource: 'revenuecat',
+          },
+          include: [
+            {
+              model: salonDetail,
+              attributes: [
+                'id',
+                'userId',
+                'salonName',
+                'subscriptionPlan',
+                'registrationExpiryDate',
+                'registrationDate',
+                'approvedByAdmin',
+                'subscriptionLatestPaymentStatus',
+              ],
+            },
+          ],
+        });
+
+        if (oldSubscription?.salonDetail) {
+          fromSalon = oldSubscription.salonDetail;
+          console.log(`✅ Found source salon via subscription: ${fromSalon.id}`);
+          break;
+        }
+      }
+    }
+
+    if (!toSalon) {
+      // Try to find subscriptions with the new RevenueCat user IDs
+      for (const newId of transferred_to) {
+        const newSubscription = await subscriptions.findOne({
+          where: {
+            revenueCatUserId: newId,
+            subscriptionSource: 'revenuecat',
+          },
+          include: [
+            {
+              model: salonDetail,
+              attributes: [
+                'id',
+                'userId',
+                'salonName',
+                'subscriptionPlan',
+                'registrationExpiryDate',
+                'registrationDate',
+                'approvedByAdmin',
+                'subscriptionLatestPaymentStatus',
+              ],
+            },
+          ],
+        });
+
+        if (newSubscription?.salonDetail) {
+          toSalon = newSubscription.salonDetail;
+          console.log(`✅ Found destination salon via subscription: ${toSalon.id}`);
+          break;
+        }
+      }
+    }
+
+    // Get the new RevenueCat user ID (could be anonymous)
+    const newRevenueCatUserId = transferred_to && transferred_to.length > 0 ? transferred_to[0] : null;
+
+    if (!fromSalon) {
+      console.warn(`⚠️ Could not find source salon from: ${JSON.stringify(transferred_from)}`);
+      // Even if we can't find the source salon, try to update subscriptions by RevenueCat user ID
+      if (transferred_from && transferred_from.length > 0 && newRevenueCatUserId) {
+        const oldRevenueCatUserId = transferred_from.find(id => id && id.startsWith('$RCAnonymousID:')) || transferred_from[0];
+        await updateSubscriptionsByRevenueCatUserId(oldRevenueCatUserId, newRevenueCatUserId);
+      }
+      return;
+    }
+
+    // If destination salon found, transfer subscriptions
+    if (toSalon) {
+      if (fromSalon.id === toSalon.id) {
+        console.log(`ℹ️ Transfer source and destination are the same salon: ${fromSalon.id}`);
+        // Still update RevenueCat user ID even if same salon
+        if (newRevenueCatUserId) {
+          await updateSubscriptionsByRevenueCatUserIdForSalon(fromSalon.id, newRevenueCatUserId);
+        }
+        return;
+      }
+
+      // Update all subscriptions from source user to destination user
+      const subscriptionsToTransfer = await subscriptions.findAll({
+        where: {
+          salonDetailId: fromSalon.id,
+          subscriptionSource: 'revenuecat',
+        },
+      });
+
+      console.log(`📦 Found ${subscriptionsToTransfer.length} subscriptions to transfer`);
+
+      for (const subscription of subscriptionsToTransfer) {
+        // Update subscription to point to destination salon
+        subscription.salonDetailId = toSalon.id;
+        subscription.customerId = toSalon.userId ? toSalon.userId.toString() : toSalon.id.toString();
+        
+        // Update RevenueCat user ID to the new one
+        if (newRevenueCatUserId) {
+          subscription.revenueCatUserId = newRevenueCatUserId;
+        }
+        
+        await subscription.save();
+        console.log(`✅ Transferred subscription ${subscription.id} from salon ${fromSalon.id} to salon ${toSalon.id}`);
+      }
+
+      // Transfer salon subscription details if source salon has active subscription
+      if (fromSalon.subscriptionPlan && fromSalon.registrationExpiryDate && new Date(fromSalon.registrationExpiryDate) > new Date()) {
+        toSalon.subscriptionPlan = fromSalon.subscriptionPlan;
+        toSalon.registrationExpiryDate = fromSalon.registrationExpiryDate;
+        toSalon.registrationDate = fromSalon.registrationDate;
+        toSalon.approvedByAdmin = fromSalon.approvedByAdmin;
+        toSalon.subscriptionLatestPaymentStatus = fromSalon.subscriptionLatestPaymentStatus;
+        await toSalon.save();
+        console.log(`✅ Transferred subscription plan details to destination salon`);
+      }
+    } else {
+      // Destination is anonymous ID - just update RevenueCat user ID on existing subscriptions
+      // This allows future RENEWAL events to find the salon via subscription lookup
+      console.log(`ℹ️ Destination is anonymous ID, updating RevenueCat user ID on existing subscriptions`);
+      if (newRevenueCatUserId) {
+        await updateSubscriptionsByRevenueCatUserIdForSalon(fromSalon.id, newRevenueCatUserId);
+      }
+    }
+
+    console.log(`✅ Transfer completed: Subscriptions updated for salon ${fromSalon.id}${toSalon ? ` to salon ${toSalon.id}` : ' (anonymous destination)'}`);
+  } catch (error) {
+    console.error('❌ Error handling TRANSFER:', error);
   }
 };
 
