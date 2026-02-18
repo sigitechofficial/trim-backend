@@ -516,10 +516,13 @@ const handleInitialPurchase = async (event) => {
     console.log('🆕 Initial Purchase Event:', {
       app_user_id,
       product_id,
+      entitlement_id,
       price,
+      price_in_purchased_currency,
       currency,
       period_type,
-      purchased_at_ms
+      purchased_at_ms,
+      subscriptionId: product_id || entitlement_id
     });
 
     // Find salon by salonDetailId (from subscriber_attributes or app_user_id)
@@ -539,6 +542,11 @@ const handleInitialPurchase = async (event) => {
     // Extract VAT
     const vatAmount = extractVAT(event);
 
+    // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
+    const calculatedAmountPaid = price_in_purchased_currency 
+      ? price_in_purchased_currency 
+      : (price || 0);
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
@@ -550,9 +558,7 @@ const handleInitialPurchase = async (event) => {
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
-      amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency / 100 
-        : (price ? price / 100 : 0),
+      amountPaid: calculatedAmountPaid,
       invoice: null,
       invoiceId: null,
       priceId: product_id,
@@ -567,6 +573,16 @@ const handleInitialPurchase = async (event) => {
       appleProductId: null,
       appleEnvironment: null,
     };
+
+    console.log('💰 Subscription Data Prepared:', {
+      subscriptionId: subscriptionData.subscriptionId,
+      amountPaid: subscriptionData.amountPaid,
+      currency: subscriptionData.currency,
+      price_in_purchased_currency,
+      price,
+      VAT: subscriptionData.VAT,
+      salonDetailId: subscriptionData.salonDetailId
+    });
 
     // Update salon details
     salon.approvedByAdmin = true;
@@ -617,7 +633,15 @@ const handleRenewal = async (event) => {
       entitlement_id
     } = event;
     
-    console.log('🔄 Renewal Event:', { app_user_id, product_id, price });
+    console.log('🔄 Renewal Event:', { 
+      app_user_id, 
+      product_id, 
+      entitlement_id,
+      price,
+      price_in_purchased_currency,
+      currency,
+      subscriptionId: product_id || entitlement_id
+    });
 
     // Find salon by salonDetailId (from subscriber_attributes or app_user_id)
     const salon = await findSalonByAppUserId(app_user_id, event);
@@ -637,6 +661,11 @@ const handleRenewal = async (event) => {
     // Extract VAT
     const vatAmount = extractVAT(event);
 
+    // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
+    const calculatedAmountPaid = price_in_purchased_currency 
+      ? price_in_purchased_currency 
+      : (price || 0);
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
@@ -648,9 +677,7 @@ const handleRenewal = async (event) => {
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
-      amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency / 100 
-        : (price ? price / 100 : 0),
+      amountPaid: calculatedAmountPaid,
       invoice: null,
       invoiceId: null,
       priceId: product_id,
@@ -663,6 +690,16 @@ const handleRenewal = async (event) => {
       appleProductId: null,
       appleEnvironment: null,
     };
+
+    console.log('💰 Renewal Subscription Data Prepared:', {
+      subscriptionId: subscriptionData.subscriptionId,
+      amountPaid: subscriptionData.amountPaid,
+      currency: subscriptionData.currency,
+      price_in_purchased_currency,
+      price,
+      VAT: subscriptionData.VAT,
+      salonDetailId: subscriptionData.salonDetailId
+    });
 
     // Update salon
     salon.registrationExpiryDate = periodEnd;
@@ -837,7 +874,15 @@ const handleProductChange = async (event) => {
       entitlement_id
     } = event;
     
-    console.log('🔄 Product Change Event:', { app_user_id, product_id });
+    console.log('🔄 Product Change Event:', { 
+      app_user_id, 
+      product_id,
+      entitlement_id,
+      price,
+      price_in_purchased_currency,
+      currency,
+      subscriptionId: product_id || entitlement_id
+    });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
@@ -861,8 +906,8 @@ const handleProductChange = async (event) => {
       periodEnd: periodEnd,
       currency: currency || 'gbp',
       amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency / 100 
-        : (price ? price / 100 : 0),
+        ? price_in_purchased_currency 
+        : (price || 0),
       priceId: product_id,
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
@@ -946,7 +991,15 @@ const handleUncancellation = async (event) => {
       entitlement_id
     } = event;
     
-    console.log('✅ Uncancellation Event:', { app_user_id, product_id });
+    console.log('✅ Uncancellation Event:', { 
+      app_user_id, 
+      product_id,
+      entitlement_id,
+      price,
+      price_in_purchased_currency,
+      currency,
+      subscriptionId: product_id || entitlement_id
+    });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
@@ -970,8 +1023,8 @@ const handleUncancellation = async (event) => {
       periodEnd: periodEnd,
       currency: currency || 'gbp',
       amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency / 100 
-        : (price ? price / 100 : 0),
+        ? price_in_purchased_currency 
+        : (price || 0),
       priceId: product_id,
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
