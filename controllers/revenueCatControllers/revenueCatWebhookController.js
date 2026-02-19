@@ -1011,11 +1011,30 @@ const handleProductChange = async (event) => {
       ? price_in_purchased_currency 
       : (price || 0);
 
-    // If product change event has price 0, preserve existing subscription price
-    // (RevenueCat often sends price 0 for product changes, actual price comes in renewal)
-    if (calculatedAmountPaid === 0 && existingSubscription && existingSubscription.amountPaid > 0) {
-      calculatedAmountPaid = existingSubscription.amountPaid;
-      console.log(`⚠️ Product change has price 0, preserving existing price: ${calculatedAmountPaid}`);
+    // If product change event has price 0, try to find the new product's price
+    // from other subscriptions in the database
+    if (calculatedAmountPaid === 0) {
+      // Try to find the price of the new product from existing subscriptions
+      const newProductSubscription = await subscriptions.findOne({
+        where: {
+          subscriptionId: activeProductId,
+          subscriptionSource: 'revenuecat',
+          amountPaid: { [Op.gt]: 0 }, // Only get subscriptions with valid prices
+        },
+        order: [['createdAt', 'DESC']], // Get the most recent one
+      });
+
+      if (newProductSubscription && newProductSubscription.amountPaid > 0) {
+        calculatedAmountPaid = newProductSubscription.amountPaid;
+        console.log(`✅ Found new product price from database: ${calculatedAmountPaid} for product ${activeProductId}`);
+      } 
+      // If we can't find the new product's price, preserve existing subscription price as fallback
+      else if (existingSubscription && existingSubscription.amountPaid > 0) {
+        calculatedAmountPaid = existingSubscription.amountPaid;
+        console.log(`⚠️ Product change has price 0, preserving existing price: ${calculatedAmountPaid} (new product price not found in DB)`);
+      } else {
+        console.log(`⚠️ Product change has price 0 and no price found in database for product ${activeProductId}`);
+      }
     }
 
     // Get display name for subscription (use NEW product ID)
@@ -1058,20 +1077,14 @@ const handleProductChange = async (event) => {
     });
 
     // Update salon with NEW subscription details
-    // Preserve salon subscriptionPrice if calculated price is 0 and salon has existing price
-    let salonSubscriptionPrice = calculatedAmountPaid;
-    if (calculatedAmountPaid === 0 && salon.subscriptionPrice > 0) {
-      salonSubscriptionPrice = salon.subscriptionPrice;
-      console.log(`⚠️ Preserving salon subscriptionPrice: ${salonSubscriptionPrice} (product change price was 0)`);
-    }
-
+    // Use the calculated price (which may have been looked up from DB)
     salon.subscriptionPlan = activeProductId || entitlement_id; // Use NEW product ID
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
     salon.approvedByAdmin = true;
     salon.teamSize = teamSize;
-    salon.subscriptionPrice = salonSubscriptionPrice;
+    salon.subscriptionPrice = calculatedAmountPaid; // Use calculated price (may be from DB lookup)
     await salon.save();
 
     // Update or create subscription record
