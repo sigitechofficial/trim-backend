@@ -426,6 +426,45 @@ const extractVAT = (event) => {
 };
 
 /**
+ * Map RevenueCat product ID to display name
+ * Converts product IDs like "trimbiz_monthly_owner" to "Owner Only"
+ */
+const getSubscriptionDisplayName = (productId) => {
+  if (!productId) return null;
+  
+  const productNameMap = {
+    'trimbiz_monthly_owner': 'Owner Only',
+    'trimbiz_owner_one_staff': 'Owner + 1 staff member',
+    'trimbiz_owner_two_staff': 'Owner + 2 staff members',
+    'trimbiz_owner_three_staff': 'Owner + 3 staff members',
+    'trimbiz_owner_four_staff': 'Owner + 4 staff members',
+    'trimbiz_owner_five_staff': 'Owner + 5 staff members',
+  };
+  
+  // Return mapped name or fallback to product ID if not found
+  return productNameMap[productId] || productId;
+};
+
+/**
+ * Extract teamSize from RevenueCat product ID
+ * teamSize = owner (1) + number of staff
+ */
+const getTeamSizeFromProductId = (productId) => {
+  if (!productId) return 1; // Default to owner only
+  
+  const teamSizeMap = {
+    'trimbiz_monthly_owner': 1,      // Owner only
+    'trimbiz_owner_one_staff': 2,    // Owner + 1 staff
+    'trimbiz_owner_two_staff': 3,    // Owner + 2 staff
+    'trimbiz_owner_three_staff': 4,  // Owner + 3 staff
+    'trimbiz_owner_four_staff': 5,   // Owner + 4 staff
+    'trimbiz_owner_five_staff': 6,   // Owner + 5 staff
+  };
+  
+  return teamSizeMap[productId] || 1; // Default to 1 if not found
+};
+
+/**
  * Main RevenueCat webhook handler
  */
 exports.revenueCatWebhookHandler = async (req, res) => {
@@ -547,21 +586,34 @@ const handleInitialPurchase = async (event) => {
       ? price_in_purchased_currency 
       : (price || 0);
 
+    // Log price debugging info for INITIAL_PURCHASE
+    if (calculatedAmountPaid === 0) {
+      console.warn(`⚠️ INITIAL_PURCHASE: Price is 0!`, {
+        price_in_purchased_currency,
+        price,
+        product_id,
+        event_keys: Object.keys(event).filter(k => k.includes('price') || k.includes('amount') || k.includes('cost'))
+      });
+    }
+
+    // Get display name for subscription
+    const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
-      subscriptionId: product_id || entitlement_id,
+      subscriptionId: product_id || entitlement_id, // Keep product ID here
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
-      name: product_id || entitlement_id,
+      name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
       amountPaid: calculatedAmountPaid,
       invoice: null,
       invoiceId: null,
-      priceId: product_id,
+      priceId: product_id, // Keep product ID here
       VAT: vatAmount,
       // RevenueCat fields
       revenueCatUserId: app_user_id,
@@ -576,6 +628,7 @@ const handleInitialPurchase = async (event) => {
 
     console.log('💰 Subscription Data Prepared:', {
       subscriptionId: subscriptionData.subscriptionId,
+      name: subscriptionData.name,
       amountPaid: subscriptionData.amountPaid,
       currency: subscriptionData.currency,
       price_in_purchased_currency,
@@ -584,6 +637,9 @@ const handleInitialPurchase = async (event) => {
       salonDetailId: subscriptionData.salonDetailId
     });
 
+    // Get teamSize from product ID
+    const teamSize = getTeamSizeFromProductId(product_id);
+    
     // Update salon details
     salon.approvedByAdmin = true;
     salon.subscriptionPlan = product_id || entitlement_id;
@@ -591,6 +647,8 @@ const handleInitialPurchase = async (event) => {
     salon.registrationDate = periodStart;
     salon.hasObtainedFreeTrial = 1;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
+    salon.teamSize = teamSize;
+    salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
     // Check if subscription already exists
@@ -603,9 +661,20 @@ const handleInitialPurchase = async (event) => {
     });
 
     if (existingSubscription) {
+      // If new amountPaid is 0 but existing has a price, preserve the existing price
+      if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
+        subscriptionData.amountPaid = existingSubscription.amountPaid;
+        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} (new price was 0)`);
+      }
+      
       await existingSubscription.update(subscriptionData);
       console.log(`✅ Updated subscription record: ${existingSubscription.id}`);
     } else {
+      // Only create if we have a valid price, or if it's truly a new subscription
+      if (calculatedAmountPaid === 0) {
+        console.warn(`⚠️ Initial purchase has 0 price - this might be a free trial or issue with webhook data`);
+        console.warn(`⚠️ Price values: price_in_purchased_currency=${price_in_purchased_currency}, price=${price}`);
+      }
       await subscriptions.create(subscriptionData);
       console.log(`✅ Created new subscription record for salon: ${salon.id}`);
     }
@@ -666,21 +735,24 @@ const handleRenewal = async (event) => {
       ? price_in_purchased_currency 
       : (price || 0);
 
+    // Get display name for subscription
+    const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
-      subscriptionId: product_id || entitlement_id,
+      subscriptionId: product_id || entitlement_id, // Keep product ID here
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
-      name: product_id || entitlement_id,
+      name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
       amountPaid: calculatedAmountPaid,
       invoice: null,
       invoiceId: null,
-      priceId: product_id,
+      priceId: product_id, // Keep product ID here
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,
@@ -701,11 +773,17 @@ const handleRenewal = async (event) => {
       salonDetailId: subscriptionData.salonDetailId
     });
 
+    // Get teamSize from product ID
+    const teamSize = getTeamSizeFromProductId(product_id);
+    
     // Update salon
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
     salon.approvedByAdmin = true;
+    salon.teamSize = teamSize;
+    salon.subscriptionPrice = calculatedAmountPaid;
+    salon.subscriptionPlan = product_id || entitlement_id; // Update subscription plan
     await salon.save();
 
     // Create or update subscription record
@@ -718,6 +796,16 @@ const handleRenewal = async (event) => {
     });
 
     if (existingSubscription) {
+      // If existing subscription has 0 price but renewal has a price, update it
+      if (existingSubscription.amountPaid === 0 && calculatedAmountPaid > 0) {
+        console.log(`✅ Backfilling price from ${existingSubscription.amountPaid} to ${calculatedAmountPaid}`);
+      }
+      // If renewal has 0 price but existing has a price, preserve existing price
+      else if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
+        subscriptionData.amountPaid = existingSubscription.amountPaid;
+        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} (renewal price was 0)`);
+      }
+      
       await existingSubscription.update(subscriptionData);
       console.log(`✅ Updated renewal subscription record: ${existingSubscription.id}`);
     } else {
@@ -747,7 +835,8 @@ const handleCancellation = async (event) => {
       return;
     }
 
-    // Don't revoke access immediately - let it expire naturally
+    // Set approvedByAdmin to 0 when subscription is cancelled
+    salon.approvedByAdmin = 0;
     salon.subscriptionLatestPaymentStatus = 'cancelled';
     await salon.save();
 
@@ -895,20 +984,29 @@ const handleProductChange = async (event) => {
     const periodEnd = calculatePeriodEnd(periodStart, period_type);
     const vatAmount = extractVAT(event);
 
+    // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
+    const calculatedAmountPaid = price_in_purchased_currency 
+      ? price_in_purchased_currency 
+      : (price || 0);
+
+    // Get display name for subscription
+    const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
+    
+    // Get teamSize from product ID
+    const teamSize = getTeamSizeFromProductId(product_id);
+
     const subscriptionData = {
       salonDetailId: salon.id,
-      subscriptionId: product_id || entitlement_id,
+      subscriptionId: product_id || entitlement_id, // Keep product ID here
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
-      name: product_id || entitlement_id,
+      name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
-      amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency 
-        : (price || 0),
-      priceId: product_id,
+      amountPaid: calculatedAmountPaid,
+      priceId: product_id, // Keep product ID here
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,
@@ -925,6 +1023,8 @@ const handleProductChange = async (event) => {
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
     salon.approvedByAdmin = true;
+    salon.teamSize = teamSize;
+    salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
     // Create or update subscription
@@ -1012,20 +1112,29 @@ const handleUncancellation = async (event) => {
     const periodEnd = calculatePeriodEnd(periodStart, period_type);
     const vatAmount = extractVAT(event);
 
+    // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
+    const calculatedAmountPaid = price_in_purchased_currency 
+      ? price_in_purchased_currency 
+      : (price || 0);
+
+    // Get display name for subscription
+    const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
+    
+    // Get teamSize from product ID
+    const teamSize = getTeamSizeFromProductId(product_id);
+
     const subscriptionData = {
       salonDetailId: salon.id,
-      subscriptionId: product_id || entitlement_id,
+      subscriptionId: product_id || entitlement_id, // Keep product ID here
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
-      name: product_id || entitlement_id,
+      name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
-      amountPaid: price_in_purchased_currency 
-        ? price_in_purchased_currency 
-        : (price || 0),
-      priceId: product_id,
+      amountPaid: calculatedAmountPaid,
+      priceId: product_id, // Keep product ID here
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,
@@ -1041,6 +1150,8 @@ const handleUncancellation = async (event) => {
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
+    salon.teamSize = teamSize;
+    salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
     // Create or update subscription
