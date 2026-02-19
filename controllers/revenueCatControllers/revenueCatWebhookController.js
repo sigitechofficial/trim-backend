@@ -997,10 +997,26 @@ const handleProductChange = async (event) => {
     const periodEnd = calculatePeriodEnd(periodStart, period_type);
     const vatAmount = extractVAT(event);
 
+    // Always find existing subscription first to preserve price if needed
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        salonDetailId: salon.id,
+        subscriptionSource: 'revenuecat',
+      },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
+    });
+
     // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
-    const calculatedAmountPaid = price_in_purchased_currency 
+    let calculatedAmountPaid = price_in_purchased_currency 
       ? price_in_purchased_currency 
       : (price || 0);
+
+    // If product change event has price 0, preserve existing subscription price
+    // (RevenueCat often sends price 0 for product changes, actual price comes in renewal)
+    if (calculatedAmountPaid === 0 && existingSubscription && existingSubscription.amountPaid > 0) {
+      calculatedAmountPaid = existingSubscription.amountPaid;
+      console.log(`⚠️ Product change has price 0, preserving existing price: ${calculatedAmountPaid}`);
+    }
 
     // Get display name for subscription (use NEW product ID)
     const subscriptionDisplayName = getSubscriptionDisplayName(activeProductId);
@@ -1030,26 +1046,35 @@ const handleProductChange = async (event) => {
       appleEnvironment: null,
     };
 
+    console.log('💰 Product Change Subscription Data Prepared:', {
+      subscriptionId: subscriptionData.subscriptionId,
+      amountPaid: subscriptionData.amountPaid,
+      currency: subscriptionData.currency,
+      price_in_purchased_currency,
+      price,
+      existingPrice: existingSubscription ? existingSubscription.amountPaid : null,
+      VAT: subscriptionData.VAT,
+      salonDetailId: subscriptionData.salonDetailId
+    });
+
     // Update salon with NEW subscription details
+    // Preserve salon subscriptionPrice if calculated price is 0 and salon has existing price
+    let salonSubscriptionPrice = calculatedAmountPaid;
+    if (calculatedAmountPaid === 0 && salon.subscriptionPrice > 0) {
+      salonSubscriptionPrice = salon.subscriptionPrice;
+      console.log(`⚠️ Preserving salon subscriptionPrice: ${salonSubscriptionPrice} (product change price was 0)`);
+    }
+
     salon.subscriptionPlan = activeProductId || entitlement_id; // Use NEW product ID
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
     salon.approvedByAdmin = true;
     salon.teamSize = teamSize;
-    salon.subscriptionPrice = calculatedAmountPaid;
+    salon.subscriptionPrice = salonSubscriptionPrice;
     await salon.save();
 
-    // Always find by salonDetailId and subscriptionSource only (not subscriptionId)
-    // This ensures we update the same record even when product changes
-    const existingSubscription = await subscriptions.findOne({
-      where: {
-        salonDetailId: salon.id,
-        subscriptionSource: 'revenuecat',
-      },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
-    });
-
+    // Update or create subscription record
     if (existingSubscription) {
       await existingSubscription.update(subscriptionData);
       console.log(`✅ Updated product change subscription: ${existingSubscription.id}`);
