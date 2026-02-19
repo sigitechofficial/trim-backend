@@ -484,50 +484,59 @@ exports.revenueCatWebhookHandler = async (req, res) => {
       return res.status(200).json({ received: false, error: 'Invalid payload' });
     }
 
-    // Handle different event types
-    switch (event.type) {
-      case 'INITIAL_PURCHASE':
-        await handleInitialPurchase(event);
-        break;
-      
-      case 'RENEWAL':
-        await handleRenewal(event);
-        break;
-      
-      case 'CANCELLATION':
-        await handleCancellation(event);
-        break;
-      
-      case 'EXPIRATION':
-        await handleExpiration(event);
-        break;
-      
-      case 'BILLING_ISSUE':
-        await handleBillingIssue(event);
-        break;
-      
-      case 'PRODUCT_CHANGE':
-        await handleProductChange(event);
-        break;
-      
-      case 'SUBSCRIPTION_PAUSED':
-        await handleSubscriptionPaused(event);
-        break;
-      
-      case 'UNCANCELLATION':
-        await handleUncancellation(event);
-        break;
-      
-      case 'TRANSFER':
-        await handleTransfer(event);
-        break;
-      
-      default:
-        console.log(`⚠️ Unhandled RevenueCat event type: ${event.type}`);
-    }
-
-    // Always return 200 immediately
+    // ⚡ CRITICAL: Return 200 immediately to RevenueCat
+    // Process webhook asynchronously to avoid delays
     res.status(200).json({ received: true });
+
+    // Process event asynchronously (fire and forget)
+    // This prevents RevenueCat from waiting for database operations
+    setImmediate(async () => {
+      try {
+        // Handle different event types
+        switch (event.type) {
+          case 'INITIAL_PURCHASE':
+            await handleInitialPurchase(event);
+            break;
+          
+          case 'RENEWAL':
+            await handleRenewal(event);
+            break;
+          
+          case 'CANCELLATION':
+            await handleCancellation(event);
+            break;
+          
+          case 'EXPIRATION':
+            await handleExpiration(event);
+            break;
+          
+          case 'BILLING_ISSUE':
+            await handleBillingIssue(event);
+            break;
+          
+          case 'PRODUCT_CHANGE':
+            await handleProductChange(event);
+            break;
+          
+          case 'SUBSCRIPTION_PAUSED':
+            await handleSubscriptionPaused(event);
+            break;
+          
+          case 'UNCANCELLATION':
+            await handleUncancellation(event);
+            break;
+          
+          case 'TRANSFER':
+            await handleTransfer(event);
+            break;
+          
+          default:
+            console.log(`⚠️ Unhandled RevenueCat event type: ${event.type}`);
+        }
+      } catch (error) {
+        console.error('❌ Error processing webhook event asynchronously:', error);
+      }
+    });
   } catch (error) {
     console.error('❌ RevenueCat webhook error:', error.message);
     res.status(200).json({ received: false, error: error.message });
@@ -651,13 +660,14 @@ const handleInitialPurchase = async (event) => {
     salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
-    // Check if subscription already exists
+    // Always find by salonDetailId and subscriptionSource only (not subscriptionId)
+    // This ensures we update the same record even when product changes
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: product_id || entitlement_id,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -786,13 +796,13 @@ const handleRenewal = async (event) => {
     salon.subscriptionPlan = product_id || entitlement_id; // Update subscription plan
     await salon.save();
 
-    // Create or update subscription record
+    // Always find by salonDetailId and subscriptionSource only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: product_id || entitlement_id,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -840,14 +850,13 @@ const handleCancellation = async (event) => {
     salon.subscriptionLatestPaymentStatus = 'cancelled';
     await salon.save();
 
-    // Update subscription record if exists
-    const subscriptionId = product_id || entitlement_id;
+    // Always find by salonDetailId and subscriptionSource only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: subscriptionId,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -883,14 +892,13 @@ const handleExpiration = async (event) => {
     salon.subscriptionLatestPaymentStatus = 'expired';
     await salon.save();
 
-    // Update subscription record
-    const subscriptionId = product_id || entitlement_id;
+    // Always find by salonDetailId and subscriptionSource only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: subscriptionId,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -924,14 +932,13 @@ const handleBillingIssue = async (event) => {
     salon.subscriptionLatestPaymentStatus = 'payment_failed';
     await salon.save();
 
-    // Update subscription record
-    const subscriptionId = product_id || entitlement_id;
+    // Always find by salonDetailId and subscriptionSource only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: subscriptionId,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -953,7 +960,8 @@ const handleProductChange = async (event) => {
   try {
     const { 
       app_user_id, 
-      product_id, 
+      product_id,        // OLD product ID
+      new_product_id,    // NEW product ID (use this!)
       price, 
       price_in_purchased_currency,
       currency, 
@@ -963,14 +971,19 @@ const handleProductChange = async (event) => {
       entitlement_id
     } = event;
     
+    // Use new_product_id for the new subscription, fallback to product_id
+    const activeProductId = new_product_id || product_id;
+    
     console.log('🔄 Product Change Event:', { 
       app_user_id, 
-      product_id,
+      product_id,        // Old product
+      new_product_id,    // New product
+      activeProductId,   // Product we're using
       entitlement_id,
       price,
       price_in_purchased_currency,
       currency,
-      subscriptionId: product_id || entitlement_id
+      subscriptionId: activeProductId || entitlement_id
     });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
@@ -989,24 +1002,24 @@ const handleProductChange = async (event) => {
       ? price_in_purchased_currency 
       : (price || 0);
 
-    // Get display name for subscription
-    const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
+    // Get display name for subscription (use NEW product ID)
+    const subscriptionDisplayName = getSubscriptionDisplayName(activeProductId);
     
-    // Get teamSize from product ID
-    const teamSize = getTeamSizeFromProductId(product_id);
+    // Get teamSize from product ID (use NEW product ID)
+    const teamSize = getTeamSizeFromProductId(activeProductId);
 
     const subscriptionData = {
       salonDetailId: salon.id,
-      subscriptionId: product_id || entitlement_id, // Keep product ID here
+      subscriptionId: activeProductId || entitlement_id, // Use NEW product ID
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
       status: 'payment_succeeded',
-      name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
+      name: subscriptionDisplayName || activeProductId || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
       currency: currency || 'gbp',
       amountPaid: calculatedAmountPaid,
-      priceId: product_id, // Keep product ID here
+      priceId: activeProductId, // Use NEW product ID
       VAT: vatAmount,
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,
@@ -1017,8 +1030,8 @@ const handleProductChange = async (event) => {
       appleEnvironment: null,
     };
 
-    // Update salon
-    salon.subscriptionPlan = product_id || entitlement_id;
+    // Update salon with NEW subscription details
+    salon.subscriptionPlan = activeProductId || entitlement_id; // Use NEW product ID
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
@@ -1027,13 +1040,14 @@ const handleProductChange = async (event) => {
     salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
-    // Create or update subscription
+    // Always find by salonDetailId and subscriptionSource only (not subscriptionId)
+    // This ensures we update the same record even when product changes
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: product_id || entitlement_id,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
@@ -1044,7 +1058,7 @@ const handleProductChange = async (event) => {
       console.log(`✅ Created product change subscription for salon: ${salon.id}`);
     }
 
-    console.log(`✅ Product change processed for salon ${salon.salonName}`);
+    console.log(`✅ Product change processed: ${product_id} → ${activeProductId} for salon ${salon.salonName}`);
   } catch (error) {
     console.error('❌ Error handling PRODUCT_CHANGE:', error);
   }
@@ -1154,13 +1168,13 @@ const handleUncancellation = async (event) => {
     salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
 
-    // Create or update subscription
+    // Always find by salonDetailId and subscriptionSource only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
-        subscriptionId: product_id || entitlement_id,
         subscriptionSource: 'revenuecat',
       },
+      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
     });
 
     if (existingSubscription) {
