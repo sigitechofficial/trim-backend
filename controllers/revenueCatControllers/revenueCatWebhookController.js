@@ -917,8 +917,7 @@ const handleCancellation = async (event) => {
       return;
     }
 
-    // Set approvedByAdmin to 0 when subscription is cancelled
-    salon.approvedByAdmin = 0;
+    // Keep approvedByAdmin as true (don't change it on cancellation)
     salon.subscriptionLatestPaymentStatus = 'cancelled';
     await salon.save();
 
@@ -959,8 +958,7 @@ const handleExpiration = async (event) => {
       return;
     }
 
-    // Revoke access
-    salon.approvedByAdmin = false;
+    // Keep approvedByAdmin as true (don't change it on expiration)
     salon.subscriptionLatestPaymentStatus = 'expired';
     await salon.save();
 
