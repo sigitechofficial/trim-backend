@@ -1,9 +1,12 @@
 require('dotenv').config();
 const { Op, literal } = require('sequelize');
+const axios = require('axios');
 const { salonDetail, user, subscriptions } = require('../../models');
 
 // RevenueCat webhook authorization secret
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
+// RevenueCat API key for fetching product prices
+const REVENUECAT_SECRET_API_KEY = process.env.REVENUECAT_SECRET_API_KEY;
 
 /**
  * Verify RevenueCat webhook authorization
@@ -422,6 +425,75 @@ const extractVAT = (event) => {
     return 0;
   } catch (error) {
     return 0;
+  }
+};
+
+/**
+ * Fetch product price from RevenueCat by checking subscriber's product history
+ * RevenueCat API v1: https://docs.revenuecat.com/reference/get_v1-subscribers-app_user_id
+ */
+const fetchProductPriceFromRevenueCat = async (appUserId, productId) => {
+  try {
+    if (!REVENUECAT_SECRET_API_KEY) {
+      console.warn('⚠️ REVENUECAT_SECRET_API_KEY not configured, cannot fetch product price from API');
+      return null;
+    }
+
+    // RevenueCat REST API uses v1 in the URL path
+    const response = await axios.get(
+      `https://api.revenuecat.com/v1/subscribers/${appUserId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${REVENUECAT_SECRET_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      }
+    );
+
+    const subscriber = response.data?.subscriber;
+    if (!subscriber) {
+      console.warn(`⚠️ No subscriber data found for app_user_id: ${appUserId}`);
+      return null;
+    }
+
+    // Check subscriptions for the product
+    const subscriptions = subscriber.subscriptions || {};
+    if (subscriptions[productId]) {
+      const subscription = subscriptions[productId];
+      
+      // Check store transactions for price
+      if (subscription.store_transactions && subscription.store_transactions.length > 0) {
+        // Get the most recent transaction
+        const latestTransaction = subscription.store_transactions
+          .sort((a, b) => (b.purchase_date_ms || 0) - (a.purchase_date_ms || 0))[0];
+        
+        if (latestTransaction.price && latestTransaction.price > 0) {
+          console.log(`✅ Found product price from RevenueCat API: ${latestTransaction.price} for product ${productId}`);
+          return latestTransaction.price;
+        }
+      }
+      
+      // Check non-subscriptions (one-time purchases)
+      const nonSubscriptions = subscriber.non_subscriptions || {};
+      if (nonSubscriptions[productId] && nonSubscriptions[productId].length > 0) {
+        const purchase = nonSubscriptions[productId]
+          .sort((a, b) => (b.purchase_date_ms || 0) - (a.purchase_date_ms || 0))[0];
+        if (purchase.price && purchase.price > 0) {
+          console.log(`✅ Found product price from RevenueCat API (non-subscription): ${purchase.price}`);
+          return purchase.price;
+        }
+      }
+    }
+
+    console.warn(`⚠️ Product ${productId} price not found in RevenueCat subscriber data`);
+    return null;
+  } catch (error) {
+    console.error(`❌ Error fetching product price from RevenueCat API:`, error.message);
+    if (error.response) {
+      console.error(`❌ RevenueCat API response:`, error.response.status, error.response.data);
+    }
+    return null;
   }
 };
 
@@ -974,6 +1046,7 @@ const handleProductChange = async (event) => {
     // Use new_product_id for the new subscription, fallback to product_id
     const activeProductId = new_product_id || product_id;
     
+    // Log all price-related fields from the event for debugging
     console.log('🔄 Product Change Event:', { 
       app_user_id, 
       product_id,        // Old product
@@ -983,7 +1056,16 @@ const handleProductChange = async (event) => {
       price,
       price_in_purchased_currency,
       currency,
-      subscriptionId: activeProductId || entitlement_id
+      subscriptionId: activeProductId || entitlement_id,
+      // Log full event to see all available fields
+      fullEventPriceFields: {
+        price: event.price,
+        price_in_purchased_currency: event.price_in_purchased_currency,
+        currency: event.currency,
+        takehome_percentage: event.takehome_percentage,
+        tax_percentage: event.tax_percentage,
+        commission_percentage: event.commission_percentage,
+      }
     });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
@@ -1007,33 +1089,49 @@ const handleProductChange = async (event) => {
     });
 
     // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
-    let calculatedAmountPaid = price_in_purchased_currency 
-      ? price_in_purchased_currency 
-      : (price || 0);
-
-    // If product change event has price 0, try to find the new product's price
-    // from other subscriptions in the database
-    if (calculatedAmountPaid === 0) {
-      // Try to find the price of the new product from existing subscriptions
-      const newProductSubscription = await subscriptions.findOne({
-        where: {
-          subscriptionId: activeProductId,
-          subscriptionSource: 'revenuecat',
-          amountPaid: { [Op.gt]: 0 }, // Only get subscriptions with valid prices
-        },
-        order: [['createdAt', 'DESC']], // Get the most recent one
-      });
-
-      if (newProductSubscription && newProductSubscription.amountPaid > 0) {
-        calculatedAmountPaid = newProductSubscription.amountPaid;
-        console.log(`✅ Found new product price from database: ${calculatedAmountPaid} for product ${activeProductId}`);
+    // Check both price_in_purchased_currency and price fields
+    let calculatedAmountPaid = 0;
+    
+    if (price_in_purchased_currency && price_in_purchased_currency > 0) {
+      calculatedAmountPaid = price_in_purchased_currency;
+      console.log(`✅ Using price_in_purchased_currency from event: ${calculatedAmountPaid}`);
+    } else if (price && price > 0) {
+      calculatedAmountPaid = price;
+      console.log(`✅ Using price from event: ${calculatedAmountPaid}`);
+    } else {
+      console.log(`⚠️ No price in PRODUCT_CHANGE event (price: ${price}, price_in_purchased_currency: ${price_in_purchased_currency})`);
+      
+      // Priority 1: Try to fetch from RevenueCat API
+      console.log(`🔍 Fetching product price from RevenueCat API for product: ${activeProductId}`);
+      const apiPrice = await fetchProductPriceFromRevenueCat(app_user_id, activeProductId);
+      
+      if (apiPrice && apiPrice > 0) {
+        calculatedAmountPaid = apiPrice;
+        console.log(`✅ Using price from RevenueCat API: ${calculatedAmountPaid}`);
       } 
-      // If we can't find the new product's price, preserve existing subscription price as fallback
-      else if (existingSubscription && existingSubscription.amountPaid > 0) {
-        calculatedAmountPaid = existingSubscription.amountPaid;
-        console.log(`⚠️ Product change has price 0, preserving existing price: ${calculatedAmountPaid} (new product price not found in DB)`);
-      } else {
-        console.log(`⚠️ Product change has price 0 and no price found in database for product ${activeProductId}`);
+      // Priority 2: Try to find from database
+      else {
+        const newProductSubscription = await subscriptions.findOne({
+          where: {
+            subscriptionId: activeProductId,
+            subscriptionSource: 'revenuecat',
+            amountPaid: { [Op.gt]: 0 }, // Only get subscriptions with valid prices
+          },
+          order: [['createdAt', 'DESC']], // Get the most recent one
+        });
+
+        if (newProductSubscription && newProductSubscription.amountPaid > 0) {
+          calculatedAmountPaid = newProductSubscription.amountPaid;
+          console.log(`✅ Found new product price from database: ${calculatedAmountPaid} for product ${activeProductId}`);
+        } 
+        // Priority 3: Preserve existing subscription price as fallback
+        else if (existingSubscription && existingSubscription.amountPaid > 0) {
+          calculatedAmountPaid = existingSubscription.amountPaid;
+          console.log(`⚠️ Preserving existing subscription price: ${calculatedAmountPaid} (new product price not found)`);
+        } else {
+          console.log(`⚠️ Product change has price 0 and no price found for product ${activeProductId}`);
+          console.log(`⚠️ The price will be updated when the RENEWAL event is received`);
+        }
       }
     }
 
