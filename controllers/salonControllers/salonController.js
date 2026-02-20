@@ -1821,7 +1821,90 @@ exports.customerSubscription = async (req, res, next) => {
     // Route to appropriate payment provider
     // ============================================
     
-    if (subscriptionSource === 'apple') {
+    if (subscriptionSource === 'revenuecat') {
+      // ===== REVENUECAT SUBSCRIPTION =====
+      console.log('📱 Fetching RevenueCat subscription...');
+      
+      // Get the latest RevenueCat subscription record
+      const revenueCatSubscription = await subscriptions.findOne({
+        where: { 
+          salonDetailId: salonData.id,
+          subscriptionSource: 'revenuecat'
+        },
+        order: [['createdAt', 'DESC']],
+        attributes: [
+          'id',
+          'subscriptionId',
+          'name',
+          'amountPaid',
+          'currency',
+          'priceId',
+          'status',
+          'periodStart',
+          'periodEnd',
+          'VAT',
+          'revenueCatUserId',
+          'revenueCatOriginalTransactionId',
+          'revenueCatStore',
+        ],
+      });
+
+      if (!revenueCatSubscription) {
+        return res.json(returnFunction('2', 'No RevenueCat subscription found', {}, ''));
+      }
+
+      // Map RevenueCat status to standard status
+      const statusMap = {
+        'payment_succeeded': 'active',
+        'active': 'active',
+        'cancelled': 'canceled',
+        'canceled': 'canceled',
+        'expired': 'expired',
+        'payment_failed': 'past_due',
+        'paused': 'paused',
+      };
+      
+      const mappedStatus = statusMap[revenueCatSubscription.status?.toLowerCase()] || 'active';
+      
+      // Check if subscription is actually expired based on periodEnd
+      const now = new Date();
+      const periodEnd = revenueCatSubscription.periodEnd ? new Date(revenueCatSubscription.periodEnd) : null;
+      let finalStatus = mappedStatus;
+      
+      if (periodEnd && periodEnd < now && mappedStatus !== 'canceled') {
+        finalStatus = 'expired';
+      } else if (periodEnd && periodEnd > now && mappedStatus === 'expired') {
+        // Still valid, override expired status
+        finalStatus = 'active';
+      }
+
+      // Build response matching Stripe/Apple format
+      customerSubscription = {
+        id: revenueCatSubscription.subscriptionId || revenueCatSubscription.priceId,
+        status: finalStatus,
+        name: revenueCatSubscription.name || revenueCatSubscription.priceId || 'RevenueCat Subscription',
+        description: revenueCatSubscription.name || revenueCatSubscription.priceId,
+        price: revenueCatSubscription.amountPaid || salonData.subscriptionPrice || 0,
+        PriceId: revenueCatSubscription.priceId || revenueCatSubscription.subscriptionId,
+        duration: 'month', // Default, could be extracted from product_id if needed
+        paymentMethods: revenueCatSubscription.revenueCatStore === 'APP_STORE' ? 'Apple Pay' : 'RevenueCat',
+        expire: salonData.registrationExpiryDate || revenueCatSubscription.periodEnd,
+        start: salonData.registrationDate || revenueCatSubscription.periodStart,
+        subscriptionLatestPaymentStatus: salonData.subscriptionLatestPaymentStatus || revenueCatSubscription.status,
+        source: 'revenuecat',
+        subscriptionSource: 'revenuecat',
+        currency: revenueCatSubscription.currency || 'gbp',
+        VAT: revenueCatSubscription.VAT || 0,
+        revenueCatUserId: revenueCatSubscription.revenueCatUserId,
+        revenueCatOriginalTransactionId: revenueCatSubscription.revenueCatOriginalTransactionId,
+        revenueCatStore: revenueCatSubscription.revenueCatStore,
+        periodStart: revenueCatSubscription.periodStart,
+        periodEnd: revenueCatSubscription.periodEnd,
+      };
+      
+      console.log('✅ RevenueCat subscription retrieved');
+      
+    } else if (subscriptionSource === 'apple') {
       // ===== APPLE IN-APP PURCHASE =====
       console.log('🍎 Fetching Apple subscription...');
       
@@ -1983,10 +2066,20 @@ exports.customerSubscription = async (req, res, next) => {
       // 1. Use from Stripe metadata if exists (for Stripe subscriptions)
       // 2. Use defaultPaymentMethodId from subscription if metadata doesn't have it
       // 3. Use 'apple_pay' for Apple subscriptions
-      // 4. Otherwise empty string
+      // 4. Use 'revenuecat' or store-specific for RevenueCat subscriptions
+      // 5. Otherwise empty string
       let paymentMethodId = '';
       if (subscriptionRecord.subscriptionSource === 'apple') {
         paymentMethodId = 'apple_pay';
+      } else if (subscriptionRecord.subscriptionSource === 'revenuecat') {
+        // For RevenueCat: use store type (APP_STORE = apple_pay, GOOGLE_PLAY = google_pay)
+        if (customerSubscription.revenueCatStore === 'APP_STORE') {
+          paymentMethodId = 'apple_pay';
+        } else if (customerSubscription.revenueCatStore === 'PLAY_STORE') {
+          paymentMethodId = 'google_pay';
+        } else {
+          paymentMethodId = 'revenuecat';
+        }
       } else if (subscriptionSource === 'stripe') {
         // For Stripe: try metadata first, then defaultPaymentMethodId
         paymentMethodId = existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '';
@@ -2007,10 +2100,23 @@ exports.customerSubscription = async (req, res, next) => {
       // Preserve existing metadata from Stripe (includes paymentMethodId)
       const existingMetaData = customerSubscription.metaData || {};
       
-      // For Stripe: try metadata first, then defaultPaymentMethodId
-      const paymentMethodId = subscriptionSource === 'stripe' 
-        ? (existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '')
-        : '';
+      // Determine paymentMethodId based on subscription source
+      let paymentMethodId = '';
+      if (subscriptionSource === 'apple') {
+        paymentMethodId = 'apple_pay';
+      } else if (subscriptionSource === 'revenuecat') {
+        // For RevenueCat: use store type
+        if (customerSubscription.revenueCatStore === 'APP_STORE') {
+          paymentMethodId = 'apple_pay';
+        } else if (customerSubscription.revenueCatStore === 'PLAY_STORE') {
+          paymentMethodId = 'google_pay';
+        } else {
+          paymentMethodId = 'revenuecat';
+        }
+      } else if (subscriptionSource === 'stripe') {
+        // For Stripe: try metadata first, then defaultPaymentMethodId
+        paymentMethodId = existingMetaData.paymentMethodId || customerSubscription.defaultPaymentMethodId || '';
+      }
       
       customerSubscription.metaData = {
         ...existingMetaData, // Preserve all Stripe metadata (including paymentMethodId)
