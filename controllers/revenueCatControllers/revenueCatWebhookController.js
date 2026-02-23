@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Op, literal } = require('sequelize');
 const axios = require('axios');
-const { salonDetail, user, subscriptions } = require('../../models');
+const { salonDetail, user, subscriptions, employee } = require('../../models');
 
 // RevenueCat webhook authorization secret
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
@@ -1089,6 +1089,287 @@ const handleBillingIssue = async (event) => {
 };
 
 /**
+ * Handle subscription plan change (upgrade/downgrade) - blocks employees on downgrade
+ * This function handles both regular employees and external employees (rent a chair)
+ * @param {Object} salon - Salon detail instance
+ * @param {string} oldProductId - Previous product ID
+ * @param {string} newProductId - New product ID
+ */
+const handleSubscriptionPlanChange = async (salon, oldProductId, newProductId) => {
+  try {
+    const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
+    
+    // Get old and new member counts
+    let oldTeamSize = getTeamSizeFromProductId(oldProductId);
+    let newTeamSize = getTeamSizeFromProductId(newProductId);
+    
+    // ✅ FALLBACK: If we can't determine from product IDs, use salon's current teamSize
+    if (!oldTeamSize && salon.teamSize) {
+      oldTeamSize = salon.teamSize;
+      console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
+    }
+    
+    if (!newTeamSize) {
+      console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
+      return;
+    }
+    
+    // Ensure we have valid numbers
+    oldTeamSize = oldTeamSize || 0;
+    newTeamSize = newTeamSize || 0;
+    const oldStaffCount = oldTeamSize > 0 ? oldTeamSize - 1 : 0;
+    const newStaffCount = newTeamSize > 0 ? newTeamSize - 1 : 0;
+    
+    console.log(`📊 Subscription Plan Change:`);
+    console.log(`   Old: ${oldProductId} (${oldTeamSize} total, ${oldStaffCount} staff)`);
+    console.log(`   New: ${newProductId} (${newTeamSize} total, ${newStaffCount} staff)`);
+    console.log(`   Salon current teamSize: ${salon.teamSize || 'not set'}`);
+    
+    // Only proceed if this is a downgrade (new limit is less than old)
+    if (newTeamSize >= oldTeamSize || newTeamSize === 999) {
+      console.log(`   ✅ Upgrade or same level - no action needed`);
+      console.log(`   📊 Comparison: newTeamSize (${newTeamSize}) >= oldTeamSize (${oldTeamSize})`);
+      return;
+    }
+    
+    console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
+    
+    // Get all active employees (excluding owner) for this salon
+    // This includes BOTH regular employees AND external employees (rent a chair)
+    const allEmployees = await employee.findAll({
+      where: {
+        salonDetailId: salon.id,
+        isOwner: false,
+        deleted: false,
+        // Note: We don't filter by isExternalEmployee - we want BOTH types
+      },
+      include: [{
+        model: user,
+        attributes: ['id', 'firstName', 'lastName', 'status'],
+        required: false, // LEFT JOIN - include employees even if user is missing
+      }],
+      order: [['createdAt', 'DESC']], // Most recently added first
+    });
+    
+    console.log(`   📋 Total employees found (excluding owner, includes both regular and external): ${allEmployees.length}`);
+    
+    // Log all employees for debugging
+    if (allEmployees.length > 0) {
+      console.log(`   📋 Employee details:`);
+      allEmployees.forEach((emp, idx) => {
+        const empStatus = emp.status ? 'active' : 'blocked';
+        const userStatus = emp.user?.status !== false ? 'active' : 'blocked';
+        const userName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'No user';
+        const empType = emp.isExternalEmployee ? 'External (Rent a Chair)' : 'Regular';
+        console.log(`      ${idx + 1}. Employee ID: ${emp.id}, User ID: ${emp.userId || emp.user?.id || 'N/A'}, Name: ${userName}, Type: ${empType}, Employee Status: ${empStatus}, User Status: ${userStatus}`);
+      });
+    }
+    
+    // Count currently active employees (both employee.status AND user.status must be true/not false)
+    const activeEmployees = allEmployees.filter(emp => 
+      emp.status === true && emp.user?.status !== false
+    );
+    
+    const activeCount = activeEmployees.length;
+    console.log(`   ✅ Current active staff (regular + external): ${activeCount}`);
+    console.log(`   📊 New limit: ${newStaffCount} staff`);
+    
+    // Calculate how many employees need to be blocked
+    const excessCount = activeCount - newStaffCount;
+    
+    if (excessCount <= 0) {
+      console.log(`   ✅ No excess employees - all can remain active`);
+      return;
+    }
+    
+    console.log(`   ⚠️ Need to block ${excessCount} employee(s)`);
+    
+    // Block the most recently added employees (they're already sorted by createdAt DESC)
+    const employeesToBlock = activeEmployees.slice(0, excessCount);
+    
+    const blockedEmployeesList = [];
+    
+    for (const emp of employeesToBlock) {
+      try {
+        const userId = emp.userId || emp.user?.id;
+        const employeeName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'Unknown';
+        const empType = emp.isExternalEmployee ? 'External (Rent a Chair)' : 'Regular';
+        
+        if (!userId) {
+          console.warn(`   ⚠️ Employee ${emp.id} (${empType}) has no userId, skipping`);
+          continue;
+        }
+        
+        // CRITICAL: Block BOTH employee and user status
+        // Step 1: Update employee status in employee table
+        // Use findByPk + save() method for more reliable updates
+        let employeeUpdateSuccess = false;
+        try {
+          const employeeRecord = await employee.findByPk(emp.id);
+          if (employeeRecord) {
+            employeeRecord.status = false;
+            await employeeRecord.save();
+            employeeUpdateSuccess = true;
+            console.log(`   ✅ ${empType} Employee ${emp.id} status set to false in employee table (via save())`);
+          } else {
+            console.error(`   ❌ Employee ${emp.id} not found in database`);
+          }
+        } catch (employeeError) {
+          console.error(`   ❌ Error updating employee ${emp.id} via save():`, employeeError.message);
+          // Fallback to update() method
+          try {
+            const employeeUpdateResult = await employee.update(
+              { status: false },
+              { where: { id: emp.id } }
+            );
+            if (employeeUpdateResult[0] > 0) {
+              employeeUpdateSuccess = true;
+              console.log(`   ✅ ${empType} Employee ${emp.id} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update employee ${emp.id} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
+        }
+        
+        // Step 2: Update user status in user table - CRITICAL
+        // Use findByPk + save() method for more reliable updates
+        let userUpdateSuccess = false;
+        try {
+          const userRecord = await user.findByPk(userId);
+          if (userRecord) {
+            userRecord.status = false;
+            await userRecord.save();
+            userUpdateSuccess = true;
+            console.log(`   ✅ User ${userId} (${empType}) status set to false in user table (via save())`);
+          } else {
+            console.error(`   ❌ User ${userId} not found in database`);
+          }
+        } catch (userError) {
+          console.error(`   ❌ Error updating user ${userId} via save():`, userError.message);
+          // Fallback to update() method
+          try {
+            const userUpdateResult = await user.update(
+              { status: false },
+              { where: { id: userId } }
+            );
+            if (userUpdateResult[0] > 0) {
+              userUpdateSuccess = true;
+              console.log(`   ✅ User ${userId} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update user ${userId} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
+        }
+        
+        // Step 3: Verify both updates succeeded by checking database
+        // Wait a moment for database to sync
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const verifyEmployee = await employee.findByPk(emp.id, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        const verifyUser = await user.findByPk(userId, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        
+        const employeeStatus = verifyEmployee?.getDataValue ? verifyEmployee.getDataValue('status') : verifyEmployee?.status;
+        const userStatus = verifyUser?.getDataValue ? verifyUser.getDataValue('status') : verifyUser?.status;
+        
+        const employeeBlocked = employeeStatus === false;
+        const userBlocked = userStatus === false;
+        
+        console.log(`   🔍 Verification Results (${empType}):`);
+        console.log(`      Employee ${emp.id}: status = ${employeeStatus} (expected: false, success: ${employeeBlocked})`);
+        console.log(`      User ${userId}: status = ${userStatus} (expected: false, success: ${userBlocked})`);
+        
+        if (!employeeBlocked) {
+          console.error(`   ❌ CRITICAL: Employee ${emp.id} status is still ${employeeStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
+          try {
+            await employee.update(
+              { status: false },
+              { 
+                where: { id: emp.id },
+                individualHooks: false,
+                hooks: false
+              }
+            );
+            console.log(`   🔄 Final force update attempt for employee ${emp.id}`);
+            // Verify again
+            const recheck = await employee.findByPk(emp.id, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check employee ${emp.id} status: ${recheck?.status}`);
+          } catch (finalError) {
+            console.error(`   ❌ Final employee update attempt failed:`, finalError.message);
+          }
+        }
+        
+        if (!userBlocked) {
+          console.error(`   ❌ CRITICAL: User ${userId} status is still ${userStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
+          try {
+            await user.update(
+              { status: false },
+              { 
+                where: { id: userId },
+                individualHooks: false,
+                hooks: false
+              }
+            );
+            console.log(`   🔄 Final force update attempt for user ${userId}`);
+            // Verify again
+            const recheck = await user.findByPk(userId, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check user ${userId} status: ${recheck?.status}`);
+          } catch (finalError) {
+            console.error(`   ❌ Final user update attempt failed:`, finalError.message);
+          }
+        }
+        
+        if (employeeBlocked && userBlocked) {
+          console.log(`   ✅ SUCCESS: Both ${empType} employee ${emp.id} and user ${userId} are blocked`);
+        } else {
+          console.error(`   ⚠️ WARNING: Blocking incomplete - Employee blocked: ${employeeBlocked}, User blocked: ${userBlocked}`);
+        }
+        
+        // Send socket event to notify employee
+        await blockEmployees(false, {
+          id: userId,
+          employeeId: emp.id,
+          isExternalEmployee: emp.isExternalEmployee || false,
+        });
+        
+        blockedEmployeesList.push({
+          employeeId: emp.id,
+          userId: userId,
+          name: employeeName,
+          type: empType,
+        });
+        
+      } catch (error) {
+        console.error(`   ❌ Error blocking employee ${emp.id}:`, error.message);
+      }
+    }
+    
+    if (blockedEmployeesList.length > 0) {
+      console.log(`   ✅ Successfully blocked ${blockedEmployeesList.length} employee(s) due to downgrade:`);
+      blockedEmployeesList.forEach((emp, idx) => {
+        console.log(`      ${idx + 1}. ${emp.name} (${emp.type}) - Employee ID: ${emp.employeeId}, User ID: ${emp.userId}`);
+      });
+    } else {
+      console.log(`   ⚠️ No employees were blocked (this might indicate an issue)`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription plan change:', error);
+  }
+};
+
+/**
  * Handle PRODUCT_CHANGE - Customer changed subscription tier
  */
 const handleProductChange = async (event) => {
@@ -1258,6 +1539,15 @@ const handleProductChange = async (event) => {
     } else {
       await subscriptions.create(subscriptionData);
       console.log(`✅ Created product change subscription for salon: ${salon.id}`);
+    }
+
+    // ✅ Handle subscription plan change (upgrade/downgrade) - block employees if downgrade
+    // This handles both regular employees and external employees (rent a chair)
+    if (product_id && activeProductId && product_id !== activeProductId) {
+      console.log(`  📊 Processing subscription plan change: ${product_id} → ${activeProductId}`);
+      await handleSubscriptionPlanChange(salon, product_id, activeProductId);
+      // Reload salon to get the latest data after plan change (metadata, teamSize updated)
+      await salon.reload();
     }
 
     console.log(`✅ Product change processed: ${product_id} → ${activeProductId} for salon ${salon.salonName}`);
