@@ -537,6 +537,65 @@ const getTeamSizeFromProductId = (productId) => {
 };
 
 /**
+ * Build metadata object for salonDetail
+ * Preserves existing metadata and updates subscription-related fields
+ */
+const buildSalonMetadata = (salon, productId, teamSize, store) => {
+  try {
+    // Get existing metadata safely
+    let existingMetadata = {};
+    if (salon.metadata) {
+      if (typeof salon.metadata === 'string') {
+        try {
+          existingMetadata = JSON.parse(salon.metadata);
+        } catch (e) {
+          existingMetadata = {};
+        }
+      } else if (typeof salon.metadata === 'object' && salon.metadata !== null) {
+        existingMetadata = JSON.parse(JSON.stringify(salon.metadata));
+      }
+    }
+
+    // Get subscription display name
+    const subscriptionDisplayName = getSubscriptionDisplayName(productId);
+    
+    // Determine payment method ID based on store
+    let paymentMethodId = existingMetadata.paymentMethodId || '';
+    if (store === 'APP_STORE') {
+      paymentMethodId = 'apple_pay';
+    } else if (store === 'PLAY_STORE') {
+      paymentMethodId = 'google_pay';
+    } else if (store && !paymentMethodId) {
+      paymentMethodId = 'revenuecat';
+    }
+
+    // Build new metadata object
+    const newMetadata = {
+      ...existingMetadata, // Preserve existing fields
+      subscriptionName: subscriptionDisplayName || productId || '',
+      membersCount: teamSize?.toString() || existingMetadata.membersCount || '1',
+      members: teamSize?.toString() || existingMetadata.members || '1',
+      paymentMethodId: paymentMethodId,
+      sloanId: salon.id?.toString() || existingMetadata.sloanId || '',
+      freeTrialDays: salon.hasObtainedFreeTrial ? '0' : (existingMetadata.freeTrialDays || '7'),
+    };
+
+    return newMetadata;
+  } catch (error) {
+    console.error('❌ Error building salon metadata:', error);
+    // Return minimal safe metadata
+    return {
+      subscriptionName: getSubscriptionDisplayName(productId) || productId || '',
+      membersCount: teamSize?.toString() || '1',
+      members: teamSize?.toString() || '1',
+      paymentMethodId: store === 'APP_STORE' ? 'apple_pay' : (store === 'PLAY_STORE' ? 'google_pay' : 'revenuecat'),
+      sloanId: salon.id?.toString() || '',
+      freeTrialDays: salon.hasObtainedFreeTrial ? '0' : '7',
+    };
+  }
+};
+
+/**
  * Main RevenueCat webhook handler
  */
 exports.revenueCatWebhookHandler = async (req, res) => {
@@ -721,6 +780,9 @@ const handleInitialPurchase = async (event) => {
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
     
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, store);
+    
     // Update salon details
     salon.approvedByAdmin = true;
     salon.subscriptionPlan = product_id || entitlement_id;
@@ -857,6 +919,9 @@ const handleRenewal = async (event) => {
 
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
+    
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, store);
     
     // Update salon
     salon.registrationExpiryDate = periodEnd;
@@ -1139,6 +1204,9 @@ const handleProductChange = async (event) => {
     // Get teamSize from product ID (use NEW product ID)
     const teamSize = getTeamSizeFromProductId(activeProductId);
 
+    // Build and update metadata (use NEW product ID)
+    salon.metadata = buildSalonMetadata(salon, activeProductId, teamSize, store);
+
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: activeProductId || entitlement_id, // Use NEW product ID
@@ -1270,6 +1338,9 @@ const handleUncancellation = async (event) => {
     
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
+
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, event.store);
 
     const subscriptionData = {
       salonDetailId: salon.id,
