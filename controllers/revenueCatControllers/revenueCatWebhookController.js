@@ -972,81 +972,27 @@ const handleRenewal = async (event) => {
 
 /**
  * Handle CANCELLATION - Subscription cancelled
+ * Do NOT change DB (teamSize, subscription, etc.) and do NOT block employees.
  */
 const handleCancellation = async (event) => {
   try {
-    const { app_user_id, product_id, entitlement_id } = event;
-    
-    console.log('🚫 Cancellation Event:', { app_user_id, product_id });
-
-    const salon = await findSalonByAppUserId(app_user_id, event);
-    if (!salon) {
-      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
-      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
-      return;
-    }
-
-    // Keep approvedByAdmin as true (don't change it on cancellation)
-    salon.subscriptionLatestPaymentStatus = 'cancelled';
-    await salon.save();
-
-    // Always find by salonDetailId and subscriptionSource only
-    const existingSubscription = await subscriptions.findOne({
-      where: {
-        salonDetailId: salon.id,
-        subscriptionSource: 'revenuecat',
-      },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
-    });
-
-    if (existingSubscription) {
-      existingSubscription.status = 'cancelled';
-      await existingSubscription.save();
-      console.log(`✅ Updated subscription status to cancelled: ${existingSubscription.id}`);
-    }
-
-    console.log(`✅ Cancellation processed for salon ${salon.salonName}`);
+    const { app_user_id, product_id } = event;
+    console.log('🚫 Cancellation Event (no DB changes, no employee blocking):', { app_user_id, product_id });
+    // Intentionally no salon or subscription updates — everything remains same
   } catch (error) {
     console.error('❌ Error handling CANCELLATION:', error);
   }
 };
 
 /**
- * Handle EXPIRATION - Subscription expired (revoke access)
+ * Handle EXPIRATION - Subscription expired
+ * Do NOT change DB (teamSize, subscription, etc.) and do NOT block employees.
  */
 const handleExpiration = async (event) => {
   try {
-    const { app_user_id, product_id, entitlement_id } = event;
-    
-    console.log('⏰ Expiration Event:', { app_user_id, product_id });
-
-    const salon = await findSalonByAppUserId(app_user_id, event);
-    if (!salon) {
-      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
-      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
-      return;
-    }
-
-    // Keep approvedByAdmin as true (don't change it on expiration)
-    salon.subscriptionLatestPaymentStatus = 'expired';
-    await salon.save();
-
-    // Always find by salonDetailId and subscriptionSource only
-    const existingSubscription = await subscriptions.findOne({
-      where: {
-        salonDetailId: salon.id,
-        subscriptionSource: 'revenuecat',
-      },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
-    });
-
-    if (existingSubscription) {
-      existingSubscription.status = 'expired';
-      await existingSubscription.save();
-      console.log(`✅ Updated subscription status to expired: ${existingSubscription.id}`);
-    }
-
-    console.log(`✅ Expiration processed - access revoked for salon ${salon.salonName}`);
+    const { app_user_id, product_id } = event;
+    console.log('⏰ Expiration Event (no DB changes, no employee blocking):', { app_user_id, product_id });
+    // Intentionally no salon or subscription updates — everything remains same
   } catch (error) {
     console.error('❌ Error handling EXPIRATION:', error);
   }
