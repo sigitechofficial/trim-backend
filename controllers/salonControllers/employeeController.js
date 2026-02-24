@@ -107,8 +107,7 @@ exports.fetchEmployees = async (req, res, next) => {
       console.log(`✅ Using Apple subscription team size: ${appleTeamSize} (Product: ${appleSubscription.appleProductId})`);
     }
   } else {
-    // Fallback to Stripe/RevenueCat subscription team size from salonDetails
-    if (membersAllowed === UNLIMITED_TEAM_SIZE) membersAllowed = 'unlimited';
+    // Fallback to Stripe/RevenueCat subscription team size from salonDetails (999 = unlimited)
     console.log(`✅ Using Stripe/RevenueCat subscription team size: ${membersAllowed}`);
   }
   
