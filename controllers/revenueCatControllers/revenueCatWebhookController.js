@@ -521,16 +521,20 @@ const getSubscriptionDisplayName = (productId) => {
  * Extract teamSize from RevenueCat product ID
  * teamSize = owner (1) + number of staff
  */
+/** Sentinel for unlimited team size (stored as INTEGER in DB) */
+const UNLIMITED_TEAM_SIZE = 999;
+
 const getTeamSizeFromProductId = (productId) => {
   if (!productId) return 1; // Default to owner only
   
   const teamSizeMap = {
-    'trimbiz_monthly_owner': 1,      // Owner only
-    'trimbiz_owner_one_staff': 2,    // Owner + 1 staff
-    'trimbiz_owner_two_staff': 3,    // Owner + 2 staff
-    'trimbiz_owner_three_staff': 4,  // Owner + 3 staff
-    'trimbiz_owner_four_staff': 5,   // Owner + 4 staff
-    'trimbiz_owner_five_staff': 6,   // Owner + 5 staff
+    'trimbiz_monthly_owner': 1,               // Owner only
+    'trimbiz_owner_one_staff': 2,             // Owner + 1 staff
+    'trimbiz_owner_two_staff': 3,             // Owner + 2 staff
+    'trimbiz_owner_three_staff': 4,           // Owner + 3 staff
+    'trimbiz_owner_four_staff': 5,            // Owner + 4 staff
+    'trimbiz_owner_five_staff': 6,            // Owner + 5 staff
+    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,  // Owner + unlimited staff
   };
   
   return teamSizeMap[productId] || 1; // Default to 1 if not found
