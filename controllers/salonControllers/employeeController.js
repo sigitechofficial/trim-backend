@@ -66,7 +66,7 @@ const getTeamSizeFromAppleProduct = (productId) => {
     'trimbiz_owner_three_staff': 4,                  // Owner + 3 staff
     'trimbiz_owner_four_staff': 5,                   // Owner + 4 staff
     'trimbiz_owner_five_staff': 6,                   // Owner + 5 staff
-    'trimbiz_owner_unlimited_staff': "unlimited",            // Owner + unlimited staff
+    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,            // Owner + unlimited staff
   };
   
   return productTeamSizeMapping[productId] || null;
