@@ -51,6 +51,9 @@ let returnFunction = (status, message, data, error) => {
   }
 }
 
+// Sentinel for unlimited team size (RevenueCat/Stripe store this as 999 in DB)
+const UNLIMITED_TEAM_SIZE = 999;
+
 //! Helper Function: Get team size from Apple product ID
 const getTeamSizeFromAppleProduct = (productId) => {
   if (!productId) return null;
@@ -63,7 +66,7 @@ const getTeamSizeFromAppleProduct = (productId) => {
     'trimbiz_owner_three_staff': 4,                  // Owner + 3 staff
     'trimbiz_owner_four_staff': 5,                   // Owner + 4 staff
     'trimbiz_owner_five_staff': 6,                   // Owner + 5 staff
-    'trimbiz_owner_unlimited_staff': "unlimited",            // Owner + unlimited staff
+    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,            // Owner + unlimited staff
   };
   
   return productTeamSizeMapping[productId] || null;
@@ -104,8 +107,8 @@ exports.fetchEmployees = async (req, res, next) => {
       console.log(`✅ Using Apple subscription team size: ${appleTeamSize} (Product: ${appleSubscription.appleProductId})`);
     }
   } else {
-    // Fallback to Stripe subscription team size from salonDetails
-    console.log(`✅ Using Stripe subscription team size: ${membersAllowed}`);
+    // Fallback to Stripe/RevenueCat subscription team size from salonDetails (999 = unlimited)
+    console.log(`✅ Using Stripe/RevenueCat subscription team size: ${membersAllowed}`);
   }
   
   const condition = { salonDetailId, deleted: false, isExternalEmployee: false }
@@ -135,9 +138,11 @@ exports.fetchEmployees = async (req, res, next) => {
     },
   })
 
-  const activeMembers = await employee.count({
+  const activeStaffCount = await employee.count({
     where: { salonDetailId, deleted: false, isOwner: false, status: true },
   })
+  // activeMembers = owner (1) + active staff (aligns with membersAllowed = owner + N staff)
+  const activeMembers = 1 + activeStaffCount
 
   return res.json(
     returnFunction(
@@ -190,7 +195,8 @@ exports.AddEmployee = async (req, res, next) => {
   // to equal self employee
 
   if (req?.body?.registerEmployeeDuringSalonRegistration != 'fromAuth') {
-    if (teamCount >= salonDetails.teamSize) {
+    const limit = salonDetails.teamSize;
+    if (limit !== UNLIMITED_TEAM_SIZE && teamCount >= limit) {
       return next(
         new appError(
           'Your subscription limit has been reached. Please upgrade your plan to add more employees.',
@@ -1012,7 +1018,8 @@ exports.activeBlockEmployee = async (req, res, next) => {
   })
   console.log('🚀 ~ = ~ activeMembers >= salon?.teamSize:', activeMembers)
   console.log('🚀 ~ = ~ req.body.status:', salon?.teamSize)
-  if (activeMembers >= salon?.teamSize && req.body.status) {
+  const teamLimit = salon?.teamSize;
+  if (teamLimit !== UNLIMITED_TEAM_SIZE && activeMembers >= teamLimit && req.body.status) {
     return next(
       new appError(
         'Your team size must not exceed the limit of your subscription.',

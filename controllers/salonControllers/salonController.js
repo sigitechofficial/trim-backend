@@ -1790,29 +1790,32 @@ exports.customerSubscription = async (req, res, next) => {
       return res.json(returnFunction('2', 'Salon not found', {}, ''));
     }
 
-    if (!salonData.subscriptionPlan || 
-        (typeof salonData.subscriptionPlan === 'string' && 
-         salonData.subscriptionPlan.trim() === '')) {
-      return res.json(returnFunction('2', 'No subscription plan', {}, ''));
-    }
-
     // ============================================
-    // NEW: Detect subscription source (Stripe or Apple)
+    // Detect subscription source and ensure we have a plan (from salonDetail or subscriptions table)
     // ============================================
-    
-    // Option 1: Check from request (explicit)
     let subscriptionSource = req.body.source || req.query.source;
-    
-    // Option 2: Auto-detect from database
+     const latestSubscription = await subscriptions.findOne({
+      where: { salonDetailId: salonData.id },
+      order: [['createdAt', 'DESC']],
+      attributes: ['subscriptionSource', 'subscriptionId', 'priceId', 'appleOriginalTransactionId'],
+    });
+
     if (!subscriptionSource) {
-      const latestSubscription = await subscriptions.findOne({
-        where: { salonDetailId: salonData.id },
-        order: [['createdAt', 'DESC']],
-        attributes: ['subscriptionSource', 'subscriptionId', 'appleOriginalTransactionId'],
-      });
-      
       subscriptionSource = latestSubscription?.subscriptionSource || 'stripe';
       console.log('🔍 Auto-detected subscription source:', subscriptionSource);
+    }
+
+    // If salonDetail.subscriptionPlan is empty, use plan from subscriptions table (e.g. cancelled/expired still have a record)
+    const hasPlanOnSalon = salonData.subscriptionPlan &&
+      (typeof salonData.subscriptionPlan !== 'string' || salonData.subscriptionPlan.trim() !== '');
+    if (!hasPlanOnSalon && latestSubscription?.subscriptionId) {
+      salonData.subscriptionPlan = latestSubscription.subscriptionId || latestSubscription.priceId;
+      console.log('🔍 Using plan from subscriptions table:', salonData.subscriptionPlan);
+    }
+
+    if (!salonData.subscriptionPlan ||
+        (typeof salonData.subscriptionPlan === 'string' && salonData.subscriptionPlan.trim() === '')) {
+      return res.json(returnFunction('2', 'No subscription plan', {}, ''));
     }
 
     let customerSubscription;

@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Op, literal } = require('sequelize');
 const axios = require('axios');
-const { salonDetail, user, subscriptions } = require('../../models');
+const { salonDetail, user, subscriptions, employee } = require('../../models');
 
 // RevenueCat webhook authorization secret
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
@@ -521,19 +521,82 @@ const getSubscriptionDisplayName = (productId) => {
  * Extract teamSize from RevenueCat product ID
  * teamSize = owner (1) + number of staff
  */
+/** Sentinel for unlimited team size (stored as INTEGER in DB) */
+const UNLIMITED_TEAM_SIZE = 999;
+
 const getTeamSizeFromProductId = (productId) => {
   if (!productId) return 1; // Default to owner only
   
   const teamSizeMap = {
-    'trimbiz_monthly_owner': 1,      // Owner only
-    'trimbiz_owner_one_staff': 2,    // Owner + 1 staff
-    'trimbiz_owner_two_staff': 3,    // Owner + 2 staff
-    'trimbiz_owner_three_staff': 4,  // Owner + 3 staff
-    'trimbiz_owner_four_staff': 5,   // Owner + 4 staff
-    'trimbiz_owner_five_staff': 6,   // Owner + 5 staff
+    'trimbiz_monthly_owner': 1,               // Owner only
+    'trimbiz_owner_one_staff': 2,             // Owner + 1 staff
+    'trimbiz_owner_two_staff': 3,             // Owner + 2 staff
+    'trimbiz_owner_three_staff': 4,           // Owner + 3 staff
+    'trimbiz_owner_four_staff': 5,            // Owner + 4 staff
+    'trimbiz_owner_five_staff': 6,            // Owner + 5 staff
+    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,  // Owner + unlimited staff
   };
   
   return teamSizeMap[productId] || 1; // Default to 1 if not found
+};
+
+/**
+ * Build metadata object for salonDetail
+ * Preserves existing metadata and updates subscription-related fields
+ */
+const buildSalonMetadata = (salon, productId, teamSize, store) => {
+  try {
+    // Get existing metadata safely
+    let existingMetadata = {};
+    if (salon.metadata) {
+      if (typeof salon.metadata === 'string') {
+        try {
+          existingMetadata = JSON.parse(salon.metadata);
+        } catch (e) {
+          existingMetadata = {};
+        }
+      } else if (typeof salon.metadata === 'object' && salon.metadata !== null) {
+        existingMetadata = JSON.parse(JSON.stringify(salon.metadata));
+      }
+    }
+
+    // Get subscription display name
+    const subscriptionDisplayName = getSubscriptionDisplayName(productId);
+    
+    // Determine payment method ID based on store
+    let paymentMethodId = existingMetadata.paymentMethodId || '';
+    if (store === 'APP_STORE') {
+      paymentMethodId = 'apple_pay';
+    } else if (store === 'PLAY_STORE') {
+      paymentMethodId = 'google_pay';
+    } else if (store && !paymentMethodId) {
+      paymentMethodId = 'revenuecat';
+    }
+
+    // Build new metadata object
+    const newMetadata = {
+      ...existingMetadata, // Preserve existing fields
+      subscriptionName: subscriptionDisplayName || productId || '',
+      membersCount: teamSize?.toString() || existingMetadata.membersCount || '1',
+      members: teamSize?.toString() || existingMetadata.members || '1',
+      paymentMethodId: paymentMethodId,
+      sloanId: salon.id?.toString() || existingMetadata.sloanId || '',
+      freeTrialDays: salon.hasObtainedFreeTrial ? '0' : (existingMetadata.freeTrialDays || '7'),
+    };
+
+    return newMetadata;
+  } catch (error) {
+    console.error('❌ Error building salon metadata:', error);
+    // Return minimal safe metadata
+    return {
+      subscriptionName: getSubscriptionDisplayName(productId) || productId || '',
+      membersCount: teamSize?.toString() || '1',
+      members: teamSize?.toString() || '1',
+      paymentMethodId: store === 'APP_STORE' ? 'apple_pay' : (store === 'PLAY_STORE' ? 'google_pay' : 'revenuecat'),
+      sloanId: salon.id?.toString() || '',
+      freeTrialDays: salon.hasObtainedFreeTrial ? '0' : '7',
+    };
+  }
 };
 
 /**
@@ -721,6 +784,9 @@ const handleInitialPurchase = async (event) => {
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
     
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, store);
+    
     // Update salon details
     salon.approvedByAdmin = true;
     salon.subscriptionPlan = product_id || entitlement_id;
@@ -858,6 +924,9 @@ const handleRenewal = async (event) => {
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
     
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, store);
+    
     // Update salon
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
@@ -903,81 +972,77 @@ const handleRenewal = async (event) => {
 
 /**
  * Handle CANCELLATION - Subscription cancelled
+ * Update status only in salonDetail and subscriptions tables. Do NOT change teamSize or block employees.
  */
 const handleCancellation = async (event) => {
   try {
-    const { app_user_id, product_id, entitlement_id } = event;
-    
+    const { app_user_id, product_id } = event;
     console.log('🚫 Cancellation Event:', { app_user_id, product_id });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
       console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
-      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
-    // Keep approvedByAdmin as true (don't change it on cancellation)
+    // Update salonDetail status only
     salon.subscriptionLatestPaymentStatus = 'cancelled';
     await salon.save();
 
-    // Always find by salonDetailId and subscriptionSource only
+    // Update subscription record status only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
         subscriptionSource: 'revenuecat',
       },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
+      order: [['createdAt', 'DESC']],
     });
-
     if (existingSubscription) {
       existingSubscription.status = 'cancelled';
       await existingSubscription.save();
-      console.log(`✅ Updated subscription status to cancelled: ${existingSubscription.id}`);
+      console.log(`✅ Cancellation: updated salonDetail and subscription status for salon ${salon.salonName}`);
+    } else {
+      console.log(`✅ Cancellation: updated salonDetail status for salon ${salon.salonName} (no subscription record found)`);
     }
-
-    console.log(`✅ Cancellation processed for salon ${salon.salonName}`);
   } catch (error) {
     console.error('❌ Error handling CANCELLATION:', error);
   }
 };
 
 /**
- * Handle EXPIRATION - Subscription expired (revoke access)
+ * Handle EXPIRATION - Subscription expired
+ * Update status only in salonDetail and subscriptions tables. Do NOT change teamSize or block employees.
  */
 const handleExpiration = async (event) => {
   try {
-    const { app_user_id, product_id, entitlement_id } = event;
-    
+    const { app_user_id, product_id } = event;
     console.log('⏰ Expiration Event:', { app_user_id, product_id });
 
     const salon = await findSalonByAppUserId(app_user_id, event);
     if (!salon) {
       console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
-      console.warn(`⚠️ Subscriber attributes: ${JSON.stringify(event.subscriber_attributes)}`);
       return;
     }
 
-    // Keep approvedByAdmin as true (don't change it on expiration)
+    // Update salonDetail status only
     salon.subscriptionLatestPaymentStatus = 'expired';
     await salon.save();
 
-    // Always find by salonDetailId and subscriptionSource only
+    // Update subscription record status only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
         subscriptionSource: 'revenuecat',
       },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
+      order: [['createdAt', 'DESC']],
     });
-
     if (existingSubscription) {
       existingSubscription.status = 'expired';
       await existingSubscription.save();
-      console.log(`✅ Updated subscription status to expired: ${existingSubscription.id}`);
+      console.log(`✅ Expiration: updated salonDetail and subscription status for salon ${salon.salonName}`);
+    } else {
+      console.log(`✅ Expiration: updated salonDetail status for salon ${salon.salonName} (no subscription record found)`);
     }
-
-    console.log(`✅ Expiration processed - access revoked for salon ${salon.salonName}`);
   } catch (error) {
     console.error('❌ Error handling EXPIRATION:', error);
   }
@@ -1020,6 +1085,287 @@ const handleBillingIssue = async (event) => {
     console.log(`✅ Billing issue processed for salon ${salon.salonName}`);
   } catch (error) {
     console.error('❌ Error handling BILLING_ISSUE:', error);
+  }
+};
+
+/**
+ * Handle subscription plan change (upgrade/downgrade) - blocks employees on downgrade
+ * This function handles both regular employees and external employees (rent a chair)
+ * @param {Object} salon - Salon detail instance
+ * @param {string} oldProductId - Previous product ID
+ * @param {string} newProductId - New product ID
+ */
+const handleSubscriptionPlanChange = async (salon, oldProductId, newProductId) => {
+  try {
+    const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
+    
+    // Get old and new member counts
+    let oldTeamSize = getTeamSizeFromProductId(oldProductId);
+    let newTeamSize = getTeamSizeFromProductId(newProductId);
+    
+    // ✅ FALLBACK: If we can't determine from product IDs, use salon's current teamSize
+    if (!oldTeamSize && salon.teamSize) {
+      oldTeamSize = salon.teamSize;
+      console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
+    }
+    
+    if (!newTeamSize) {
+      console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
+      return;
+    }
+    
+    // Ensure we have valid numbers
+    oldTeamSize = oldTeamSize || 0;
+    newTeamSize = newTeamSize || 0;
+    const oldStaffCount = oldTeamSize > 0 ? oldTeamSize - 1 : 0;
+    const newStaffCount = newTeamSize > 0 ? newTeamSize - 1 : 0;
+    
+    console.log(`📊 Subscription Plan Change:`);
+    console.log(`   Old: ${oldProductId} (${oldTeamSize} total, ${oldStaffCount} staff)`);
+    console.log(`   New: ${newProductId} (${newTeamSize} total, ${newStaffCount} staff)`);
+    console.log(`   Salon current teamSize: ${salon.teamSize || 'not set'}`);
+    
+    // Only proceed if this is a downgrade (new limit is less than old)
+    if (newTeamSize >= oldTeamSize || newTeamSize === 999) {
+      console.log(`   ✅ Upgrade or same level - no action needed`);
+      console.log(`   📊 Comparison: newTeamSize (${newTeamSize}) >= oldTeamSize (${oldTeamSize})`);
+      return;
+    }
+    
+    console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
+    
+    // Get all active employees (excluding owner) for this salon
+    // This includes BOTH regular employees AND external employees (rent a chair)
+    const allEmployees = await employee.findAll({
+      where: {
+        salonDetailId: salon.id,
+        isOwner: false,
+        deleted: false,
+        // Note: We don't filter by isExternalEmployee - we want BOTH types
+      },
+      include: [{
+        model: user,
+        attributes: ['id', 'firstName', 'lastName', 'status'],
+        required: false, // LEFT JOIN - include employees even if user is missing
+      }],
+      order: [['createdAt', 'DESC']], // Most recently added first
+    });
+    
+    console.log(`   📋 Total employees found (excluding owner, includes both regular and external): ${allEmployees.length}`);
+    
+    // Log all employees for debugging
+    if (allEmployees.length > 0) {
+      console.log(`   📋 Employee details:`);
+      allEmployees.forEach((emp, idx) => {
+        const empStatus = emp.status ? 'active' : 'blocked';
+        const userStatus = emp.user?.status !== false ? 'active' : 'blocked';
+        const userName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'No user';
+        const empType = emp.isExternalEmployee ? 'External (Rent a Chair)' : 'Regular';
+        console.log(`      ${idx + 1}. Employee ID: ${emp.id}, User ID: ${emp.userId || emp.user?.id || 'N/A'}, Name: ${userName}, Type: ${empType}, Employee Status: ${empStatus}, User Status: ${userStatus}`);
+      });
+    }
+    
+    // Count currently active employees (both employee.status AND user.status must be true/not false)
+    const activeEmployees = allEmployees.filter(emp => 
+      emp.status === true && emp.user?.status !== false
+    );
+    
+    const activeCount = activeEmployees.length;
+    console.log(`   ✅ Current active staff (regular + external): ${activeCount}`);
+    console.log(`   📊 New limit: ${newStaffCount} staff`);
+    
+    // Calculate how many employees need to be blocked
+    const excessCount = activeCount - newStaffCount;
+    
+    if (excessCount <= 0) {
+      console.log(`   ✅ No excess employees - all can remain active`);
+      return;
+    }
+    
+    console.log(`   ⚠️ Need to block ${excessCount} employee(s)`);
+    
+    // Block the most recently added employees (they're already sorted by createdAt DESC)
+    const employeesToBlock = activeEmployees.slice(0, excessCount);
+    
+    const blockedEmployeesList = [];
+    
+    for (const emp of employeesToBlock) {
+      try {
+        const userId = emp.userId || emp.user?.id;
+        const employeeName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'Unknown';
+        const empType = emp.isExternalEmployee ? 'External (Rent a Chair)' : 'Regular';
+        
+        if (!userId) {
+          console.warn(`   ⚠️ Employee ${emp.id} (${empType}) has no userId, skipping`);
+          continue;
+        }
+        
+        // CRITICAL: Block BOTH employee and user status
+        // Step 1: Update employee status in employee table
+        // Use findByPk + save() method for more reliable updates
+        let employeeUpdateSuccess = false;
+        try {
+          const employeeRecord = await employee.findByPk(emp.id);
+          if (employeeRecord) {
+            employeeRecord.status = false;
+            await employeeRecord.save();
+            employeeUpdateSuccess = true;
+            console.log(`   ✅ ${empType} Employee ${emp.id} status set to false in employee table (via save())`);
+          } else {
+            console.error(`   ❌ Employee ${emp.id} not found in database`);
+          }
+        } catch (employeeError) {
+          console.error(`   ❌ Error updating employee ${emp.id} via save():`, employeeError.message);
+          // Fallback to update() method
+          try {
+            const employeeUpdateResult = await employee.update(
+              { status: false },
+              { where: { id: emp.id } }
+            );
+            if (employeeUpdateResult[0] > 0) {
+              employeeUpdateSuccess = true;
+              console.log(`   ✅ ${empType} Employee ${emp.id} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update employee ${emp.id} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
+        }
+        
+        // Step 2: Update user status in user table - CRITICAL
+        // Use findByPk + save() method for more reliable updates
+        let userUpdateSuccess = false;
+        try {
+          const userRecord = await user.findByPk(userId);
+          if (userRecord) {
+            userRecord.status = false;
+            await userRecord.save();
+            userUpdateSuccess = true;
+            console.log(`   ✅ User ${userId} (${empType}) status set to false in user table (via save())`);
+          } else {
+            console.error(`   ❌ User ${userId} not found in database`);
+          }
+        } catch (userError) {
+          console.error(`   ❌ Error updating user ${userId} via save():`, userError.message);
+          // Fallback to update() method
+          try {
+            const userUpdateResult = await user.update(
+              { status: false },
+              { where: { id: userId } }
+            );
+            if (userUpdateResult[0] > 0) {
+              userUpdateSuccess = true;
+              console.log(`   ✅ User ${userId} status set to false via update() fallback`);
+            } else {
+              console.error(`   ❌ FAILED to update user ${userId} status (both methods failed)`);
+            }
+          } catch (updateError) {
+            console.error(`   ❌ Fallback update() also failed:`, updateError.message);
+          }
+        }
+        
+        // Step 3: Verify both updates succeeded by checking database
+        // Wait a moment for database to sync
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const verifyEmployee = await employee.findByPk(emp.id, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        const verifyUser = await user.findByPk(userId, { 
+          attributes: ['id', 'status'],
+          raw: false // Get model instance, not plain object
+        });
+        
+        const employeeStatus = verifyEmployee?.getDataValue ? verifyEmployee.getDataValue('status') : verifyEmployee?.status;
+        const userStatus = verifyUser?.getDataValue ? verifyUser.getDataValue('status') : verifyUser?.status;
+        
+        const employeeBlocked = employeeStatus === false;
+        const userBlocked = userStatus === false;
+        
+        console.log(`   🔍 Verification Results (${empType}):`);
+        console.log(`      Employee ${emp.id}: status = ${employeeStatus} (expected: false, success: ${employeeBlocked})`);
+        console.log(`      User ${userId}: status = ${userStatus} (expected: false, success: ${userBlocked})`);
+        
+        if (!employeeBlocked) {
+          console.error(`   ❌ CRITICAL: Employee ${emp.id} status is still ${employeeStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
+          try {
+            await employee.update(
+              { status: false },
+              { 
+                where: { id: emp.id },
+                individualHooks: false,
+                hooks: false
+              }
+            );
+            console.log(`   🔄 Final force update attempt for employee ${emp.id}`);
+            // Verify again
+            const recheck = await employee.findByPk(emp.id, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check employee ${emp.id} status: ${recheck?.status}`);
+          } catch (finalError) {
+            console.error(`   ❌ Final employee update attempt failed:`, finalError.message);
+          }
+        }
+        
+        if (!userBlocked) {
+          console.error(`   ❌ CRITICAL: User ${userId} status is still ${userStatus}, NOT blocked!`);
+          // Final attempt - force update with individualHooks disabled
+          try {
+            await user.update(
+              { status: false },
+              { 
+                where: { id: userId },
+                individualHooks: false,
+                hooks: false
+              }
+            );
+            console.log(`   🔄 Final force update attempt for user ${userId}`);
+            // Verify again
+            const recheck = await user.findByPk(userId, { attributes: ['id', 'status'] });
+            console.log(`   🔍 Re-check user ${userId} status: ${recheck?.status}`);
+          } catch (finalError) {
+            console.error(`   ❌ Final user update attempt failed:`, finalError.message);
+          }
+        }
+        
+        if (employeeBlocked && userBlocked) {
+          console.log(`   ✅ SUCCESS: Both ${empType} employee ${emp.id} and user ${userId} are blocked`);
+        } else {
+          console.error(`   ⚠️ WARNING: Blocking incomplete - Employee blocked: ${employeeBlocked}, User blocked: ${userBlocked}`);
+        }
+        
+        // Send socket event to notify employee
+        await blockEmployees(false, {
+          id: userId,
+          employeeId: emp.id,
+          isExternalEmployee: emp.isExternalEmployee || false,
+        });
+        
+        blockedEmployeesList.push({
+          employeeId: emp.id,
+          userId: userId,
+          name: employeeName,
+          type: empType,
+        });
+        
+      } catch (error) {
+        console.error(`   ❌ Error blocking employee ${emp.id}:`, error.message);
+      }
+    }
+    
+    if (blockedEmployeesList.length > 0) {
+      console.log(`   ✅ Successfully blocked ${blockedEmployeesList.length} employee(s) due to downgrade:`);
+      blockedEmployeesList.forEach((emp, idx) => {
+        console.log(`      ${idx + 1}. ${emp.name} (${emp.type}) - Employee ID: ${emp.employeeId}, User ID: ${emp.userId}`);
+      });
+    } else {
+      console.log(`   ⚠️ No employees were blocked (this might indicate an issue)`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription plan change:', error);
   }
 };
 
@@ -1139,6 +1485,9 @@ const handleProductChange = async (event) => {
     // Get teamSize from product ID (use NEW product ID)
     const teamSize = getTeamSizeFromProductId(activeProductId);
 
+    // Build and update metadata (use NEW product ID)
+    salon.metadata = buildSalonMetadata(salon, activeProductId, teamSize, store);
+
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: activeProductId || entitlement_id, // Use NEW product ID
@@ -1190,6 +1539,15 @@ const handleProductChange = async (event) => {
     } else {
       await subscriptions.create(subscriptionData);
       console.log(`✅ Created product change subscription for salon: ${salon.id}`);
+    }
+
+    // ✅ Handle subscription plan change (upgrade/downgrade) - block employees if downgrade
+    // This handles both regular employees and external employees (rent a chair)
+    if (product_id && activeProductId && product_id !== activeProductId) {
+      console.log(`  📊 Processing subscription plan change: ${product_id} → ${activeProductId}`);
+      await handleSubscriptionPlanChange(salon, product_id, activeProductId);
+      // Reload salon to get the latest data after plan change (metadata, teamSize updated)
+      await salon.reload();
     }
 
     console.log(`✅ Product change processed: ${product_id} → ${activeProductId} for salon ${salon.salonName}`);
@@ -1270,6 +1628,9 @@ const handleUncancellation = async (event) => {
     
     // Get teamSize from product ID
     const teamSize = getTeamSizeFromProductId(product_id);
+
+    // Build and update metadata
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, event.store);
 
     const subscriptionData = {
       salonDetailId: salon.id,
