@@ -1011,13 +1011,38 @@ const handleCancellation = async (event) => {
 
 /**
  * Handle EXPIRATION - Subscription expired
- * Do NOT change DB (teamSize, subscription, etc.) and do NOT block employees.
+ * Update status only in salonDetail and subscriptions tables. Do NOT change teamSize or block employees.
  */
 const handleExpiration = async (event) => {
   try {
     const { app_user_id, product_id } = event;
-    console.log('⏰ Expiration Event (no DB changes, no employee blocking):', { app_user_id, product_id });
-    // Intentionally no salon or subscription updates — everything remains same
+    console.log('⏰ Expiration Event:', { app_user_id, product_id });
+
+    const salon = await findSalonByAppUserId(app_user_id, event);
+    if (!salon) {
+      console.warn(`⚠️ Salon not found for app_user_id: ${app_user_id}`);
+      return;
+    }
+
+    // Update salonDetail status only
+    salon.subscriptionLatestPaymentStatus = 'expired';
+    await salon.save();
+
+    // Update subscription record status only
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        salonDetailId: salon.id,
+        subscriptionSource: 'revenuecat',
+      },
+      order: [['createdAt', 'DESC']],
+    });
+    if (existingSubscription) {
+      existingSubscription.status = 'expired';
+      await existingSubscription.save();
+      console.log(`✅ Expiration: updated salonDetail and subscription status for salon ${salon.salonName}`);
+    } else {
+      console.log(`✅ Expiration: updated salonDetail status for salon ${salon.salonName} (no subscription record found)`);
+    }
   } catch (error) {
     console.error('❌ Error handling EXPIRATION:', error);
   }
