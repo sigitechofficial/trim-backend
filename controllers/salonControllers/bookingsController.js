@@ -515,21 +515,27 @@ exports.calendarAppointments = async (req, res, next) => {
 
   // Check salon subscription status
   let subscriptionExpire = false
-    const salonSubscription = await subscriptions.findOne({
-      where: { salonDetailId: salon?.id },
-      attributes: ['subscriptionId'],
-      order: [['createdAt', 'DESC']], // Get the latest subscription
-    })
+  const salonSubscription = await subscriptions.findOne({
+    where: { salonDetailId: salon?.id },
+    attributes: ['subscriptionId', 'status', 'subscriptionSource'],
+    order: [['createdAt', 'DESC']], // Get the latest subscription
+  })
 
-    if (salonSubscription && salonSubscription.subscriptionId) {
+  if (salonSubscription) {
+    if (salonSubscription.subscriptionSource === 'revenuecat') {
+      // For RevenueCat subscriptions, status is already stored in DB
+      if (salonSubscription.status === 'expired' || salonSubscription.status === 'cancelled') {
+        subscriptionExpire = true
+      }
+    } else if (salonSubscription.subscriptionId) {
+      // For Stripe subscriptions, fetch live status from Stripe API
       const subscriptionStatus = await Stripe.getSubscriptionStatus(salonSubscription.subscriptionId)
       console.log('🚀 ~ Subscription Status:', subscriptionStatus)
-      
-      // Check if subscription is cancelled
       if (subscriptionStatus === 'canceled' || subscriptionStatus === 'cancelled') {
         subscriptionExpire = true
       }
     }
+  }
 
   const output = response({
     message: 'Success.',
