@@ -515,7 +515,12 @@ exports.home = async (req, res, next) => {
   const salonCondition = {
     [Op.or]: [
       { isExternalEmployee: true },
-      { registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly } },
+      {
+        registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
+        subscriptionLatestPaymentStatus: {
+          [Op.notIn]: ['expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded'],
+        },
+      },
     ],
     approvedByAdmin: true,
     status: 1,
