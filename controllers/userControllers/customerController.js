@@ -514,7 +514,20 @@ exports.home = async (req, res, next) => {
   // Base salon filter (no zone filter at all)
   const salonCondition = {
     [Op.or]: [
-      { isExternalEmployee: true },
+      {
+        // External employee salons are only visible if their parent salon has an active subscription
+        isExternalEmployee: true,
+        parentSalonId: {
+          [Op.in]: literal(`(
+            SELECT id FROM salonDetails
+            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
+            AND (
+              subscriptionLatestPaymentStatus IS NULL
+              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
+            )
+          )`),
+        },
+      },
       {
         registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
         subscriptionLatestPaymentStatus: {
