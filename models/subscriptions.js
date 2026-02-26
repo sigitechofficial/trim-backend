@@ -84,6 +84,9 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(),
       allowNull: true,
     },
+  }, {
+    paranoid: true,
+    timestamps: true,
   })
 
   subscriptions.associate = (models) => {}

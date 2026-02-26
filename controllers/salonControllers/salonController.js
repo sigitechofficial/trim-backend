@@ -4051,6 +4051,9 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
+  await subscriptions.destroy({ where: { salonDetailId: salon?.id } })
+  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon?.id } })
+
   //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
   deleteEmployeesAll(salon?.id)
