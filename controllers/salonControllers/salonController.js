@@ -3993,50 +3993,137 @@ exports.changePaymentMethodsForSubscription = async (req, res, next) => {
 exports.accountDelete = async (req, res, next) => {
   const id = req.user.id
 
-  const salon = await salonDetail.findOne({
-    where: { userId: id },
-    attributes: ['id'],
-  })
-
-  const data = await user.findOne({
-    where: { id },
-    attributes: [
-      'firstName',
-      'lastName',
-      'image',
-      'email',
-      'countryCode',
-      'phoneNum',
-      'stripeCustomerId',
-    ],
-  })
+  // Fetch salon (extra fields needed for subscription cancellation) and user in parallel
+  const [salon, data] = await Promise.all([
+    salonDetail.findOne({
+      where: { userId: id },
+      attributes: ['id', 'subscriptionPlan', 'subscriptionPrice', 'metadata'],
+    }),
+    user.findOne({
+      where: { id },
+      attributes: [
+        'firstName',
+        'lastName',
+        'image',
+        'email',
+        'countryCode',
+        'phoneNum',
+        'stripeCustomerId',
+      ],
+    }),
+  ])
 
   if (!data || !salon) throw new appError('resource not found', 200)
 
-  if (salon) {
-    const work = await booking.findAll({
-      where: {
-        [Op.or]: [{ status: 'assign' }, { status: 'pending' }],
-        salonDetailId: salon?.id,
-      },
-      attributes: [
-        'id',
-        'status',
-        'actualCapturedAmount',
-        'tip',
-        'initialPaymentIntend',
-        'stripeCardId',
-        'total',
-        'subTotal',
-        'initialPayment',
-        'salonDetailId',
-      ],
-    })
-    processAllAppointments(work)
-  }
-  //TODO using Customer table for salon as well. will change in future if needed
+  // ─── CHECK 1: Block if an active RevenueCat subscription exists ──────────
+  // RevenueCat subscriptions are managed by the App Store / Play Store.
+  // We cannot cancel them server-side — the user must cancel from their device.
+  const revenueCatSub = await subscriptions.findOne({
+    where: {
+      salonDetailId: salon.id,
+      subscriptionSource: 'revenuecat',
+      status: { [Op.notIn]: ['cancelled', 'canceled', 'expired'] },
+    },
+    attributes: ['id', 'status'],
+    order: [['createdAt', 'DESC']],
+  })
 
-  await deletedCustomer.create({ userId: id, ...data.get({ plain: true }) })
+  if (revenueCatSub) {
+    return res.json(
+      returnFunction(
+        '2',
+        'You have an active subscription purchased through the app store. Please cancel your subscription first before deleting your account. If you do not cancel, you will continue to be charged even after deletion.',
+        {},
+        ''
+      )
+    )
+  }
+
+  // ─── CHECK 2: Block if salon has active or upcoming bookings ─────────────
+  const activeBookingsCount = await booking.count({
+    where: {
+      salonDetailId: salon.id,
+      status: { [Op.in]: ['assign', 'pending'] },
+    },
+  })
+
+  if (activeBookingsCount > 0) {
+    return res.json(
+      returnFunction(
+        '2',
+        `Your salon has ${activeBookingsCount} active or upcoming appointment(s). Please complete or cancel all bookings before deleting your account.`,
+        { activeBookingsCount },
+        ''
+      )
+    )
+  }
+
+  // ─── STEP 3: Auto-cancel Stripe subscription if active ───────────────────
+  // We have full API control over Stripe, so cancel it on behalf of the user.
+  const stripeSub = await subscriptions.findOne({
+    where: {
+      salonDetailId: salon.id,
+      subscriptionSource: { [Op.notIn]: ['revenuecat', 'apple'] },
+      status: { [Op.notIn]: ['canceled', 'cancelled', 'expired'] },
+    },
+    attributes: ['id', 'status'],
+    order: [['createdAt', 'DESC']],
+  })
+
+  if (stripeSub && salon.subscriptionPlan) {
+    try {
+      const cancelResult = await Stripe.cancelSubscription(salon.subscriptionPlan)
+      if (cancelResult) {
+        await cancelledSubscriptions.create({
+          subscriptionId: salon.subscriptionPlan,
+          amount: salon.subscriptionPrice,
+          metadata: salon.metadata,
+          reason: 'Account deleted by user',
+        })
+        console.log(`✅ Stripe subscription cancelled for salon ${salon.id} during account deletion`)
+      }
+    } catch (stripeErr) {
+      // Log but do NOT block deletion — subscription may already be cancelled on Stripe's side
+      console.error(`⚠️ Stripe cancellation error during account delete for salon ${salon.id}:`, stripeErr.message)
+    }
+  }
+
+  // ─── STEP 4: Cancel any remaining in-progress bookings (fire-and-forget) ─
+  //TODO using Customer table for salon as well. will change in future if needed
+  const work = await booking.findAll({
+    where: {
+      salonDetailId: salon.id,
+      status: { [Op.in]: ['assign', 'pending'] },
+    },
+    attributes: [
+      'id',
+      'status',
+      'actualCapturedAmount',
+      'tip',
+      'initialPaymentIntend',
+      'stripeCardId',
+      'total',
+      'subTotal',
+      'initialPayment',
+      'salonDetailId',
+    ],
+  })
+  processAllAppointments(work)
+
+  // ─── STEP 5: Archive user data and anonymise the account ─────────────────
+  await deletedCustomer.create({
+    userId: id,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    email: data.email,
+    countryCode: data.countryCode,
+    phoneNum: data.phoneNum,
+    image: data.image,
+    stripeCustomerId: data.stripeCustomerId,
+    deletedAt: new Date(),
+    recovered: false,
+    permanentlyDeleted: false,
+  })
 
   await user.update(
     {
@@ -4051,12 +4138,12 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
-  await subscriptions.destroy({ where: { salonDetailId: salon?.id } })
-  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon?.id } })
+  await subscriptions.destroy({ where: { salonDetailId: salon.id } })
+  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon.id } })
 
   //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
-  deleteEmployeesAll(salon?.id)
+  deleteEmployeesAll(salon.id)
   return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
