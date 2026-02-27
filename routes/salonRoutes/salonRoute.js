@@ -33,7 +33,6 @@ router.get(
 // RevenueCat webhook endpoint (must be before validateToken - webhooks don't need auth)
 router.post(
   '/webhooks/revenuecat',
-  express.json(),
   catchAsync(revenueCatWebhookController.revenueCatWebhookHandler),
 )
 
