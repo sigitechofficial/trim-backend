@@ -743,13 +743,18 @@ const handleInitialPurchase = async (event) => {
     // Get display name for subscription
     const subscriptionDisplayName = getSubscriptionDisplayName(product_id);
 
+    // Determine correct status: free trial gets "trial", paid purchase gets "payment_succeeded"
+    const isTrial = period_type?.toUpperCase() === 'TRIAL';
+    const initialStatus = isTrial ? 'trial' : 'payment_succeeded';
+    console.log(`📋 INITIAL_PURCHASE period_type: ${period_type} → status: "${initialStatus}"`);
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
       subscriptionId: product_id || entitlement_id, // Keep product ID here
       customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
       subscriptionSource: 'revenuecat',
-      status: 'payment_succeeded',
+      status: initialStatus,
       name: subscriptionDisplayName || product_id || entitlement_id, // Use display name
       periodStart: periodStart,
       periodEnd: periodEnd,
@@ -793,7 +798,7 @@ const handleInitialPurchase = async (event) => {
     salon.registrationExpiryDate = periodEnd;
     salon.registrationDate = periodStart;
     salon.hasObtainedFreeTrial = 1;
-    salon.subscriptionLatestPaymentStatus = 'payment_succeeded';
+    salon.subscriptionLatestPaymentStatus = initialStatus;
     salon.teamSize = teamSize;
     salon.subscriptionPrice = calculatedAmountPaid;
     await salon.save();
