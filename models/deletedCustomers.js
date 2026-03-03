@@ -40,7 +40,7 @@ module.exports = (sequelize) => {
       },
       deletedAt: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: DataTypes.NOW,
       },
       recovered: {
