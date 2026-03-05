@@ -719,8 +719,16 @@ const handleInitialPurchase = async (event) => {
     }
 
     // Calculate period dates
+    // Prefer expiration_at_ms from payload (exact date from RevenueCat/Apple/Google)
+    // Fall back to calculated date if not provided
     const periodStart = new Date(purchased_at_ms);
-    const periodEnd = calculatePeriodEnd(periodStart, period_type);
+    const rawPeriodEnd = event.expiration_at_ms
+      ? new Date(event.expiration_at_ms)
+      : calculatePeriodEnd(periodStart, period_type);
+    // Add 3-day grace period
+    const periodEnd = new Date(rawPeriodEnd);
+    periodEnd.setDate(periodEnd.getDate() + 3);
+    console.log(`📅 INITIAL_PURCHASE dates → start: ${periodStart.toISOString()}, end (with grace): ${periodEnd.toISOString()}`);
 
     // Extract VAT
     const vatAmount = extractVAT(event);
@@ -877,8 +885,16 @@ const handleRenewal = async (event) => {
     }
 
     // Calculate new period
+    // Prefer expiration_at_ms from payload (exact date from RevenueCat/Apple/Google)
+    // Fall back to calculated date if not provided
     const periodStart = new Date(purchased_at_ms);
-    const periodEnd = calculatePeriodEnd(periodStart, period_type);
+    const rawPeriodEnd = event.expiration_at_ms
+      ? new Date(event.expiration_at_ms)
+      : calculatePeriodEnd(periodStart, period_type);
+    // Add 3-day grace period
+    const periodEnd = new Date(rawPeriodEnd);
+    periodEnd.setDate(periodEnd.getDate() + 3);
+    console.log(`📅 RENEWAL dates → start: ${periodStart.toISOString()}, end (with grace): ${periodEnd.toISOString()}`);
 
     // Extract VAT
     const vatAmount = extractVAT(event);
@@ -1424,8 +1440,16 @@ const handleProductChange = async (event) => {
       return;
     }
 
+    // Prefer expiration_at_ms from payload (exact date from RevenueCat/Apple/Google)
+    // Fall back to calculated date if not provided
     const periodStart = new Date(purchased_at_ms);
-    const periodEnd = calculatePeriodEnd(periodStart, period_type);
+    const rawPeriodEnd = event.expiration_at_ms
+      ? new Date(event.expiration_at_ms)
+      : calculatePeriodEnd(periodStart, period_type);
+    // Add 3-day grace period
+    const periodEnd = new Date(rawPeriodEnd);
+    periodEnd.setDate(periodEnd.getDate() + 3);
+    console.log(`📅 PRODUCT_CHANGE dates → start: ${periodStart.toISOString()}, end (with grace): ${periodEnd.toISOString()}`);
     const vatAmount = extractVAT(event);
 
     // Always find existing subscription first to preserve price if needed
@@ -1619,8 +1643,16 @@ const handleUncancellation = async (event) => {
       return;
     }
 
+    // Prefer expiration_at_ms from payload (exact date from RevenueCat/Apple/Google)
+    // Fall back to calculated date if not provided
     const periodStart = new Date(purchased_at_ms);
-    const periodEnd = calculatePeriodEnd(periodStart, period_type);
+    const rawPeriodEnd = event.expiration_at_ms
+      ? new Date(event.expiration_at_ms)
+      : calculatePeriodEnd(periodStart, period_type);
+    // Add 3-day grace period
+    const periodEnd = new Date(rawPeriodEnd);
+    periodEnd.setDate(periodEnd.getDate() + 3);
+    console.log(`📅 UNCANCELLATION dates → start: ${periodStart.toISOString()}, end (with grace): ${periodEnd.toISOString()}`);
     const vatAmount = extractVAT(event);
 
     // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
