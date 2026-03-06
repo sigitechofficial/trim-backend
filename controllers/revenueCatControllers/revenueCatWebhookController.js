@@ -822,10 +822,12 @@ const handleInitialPurchase = async (event) => {
     });
 
     if (existingSubscription) {
-      // If new amountPaid is 0 but existing has a price, preserve the existing price
+      // If new amountPaid is 0 but existing has a price, preserve the existing price AND force GBP
+      // This prevents currency/amount mismatch (e.g. GBP amount stored with PKR currency on re-subscribe)
       if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
         subscriptionData.amountPaid = existingSubscription.amountPaid;
-        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} (new price was 0)`);
+        subscriptionData.currency = 'GBP';
+        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} GBP (new price was 0)`);
       }
       
       await existingSubscription.update(subscriptionData);
@@ -972,10 +974,12 @@ const handleRenewal = async (event) => {
       if (existingSubscription.amountPaid === 0 && calculatedAmountPaid > 0) {
         console.log(`✅ Backfilling price from ${existingSubscription.amountPaid} to ${calculatedAmountPaid}`);
       }
-      // If renewal has 0 price but existing has a price, preserve existing price
+      // If renewal has 0 price but existing has a price, preserve existing price AND force GBP
+      // This prevents currency/amount mismatch (e.g. GBP amount stored with PKR currency)
       else if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
         subscriptionData.amountPaid = existingSubscription.amountPaid;
-        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} (renewal price was 0)`);
+        subscriptionData.currency = 'GBP';
+        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} GBP (renewal price was 0)`);
       }
       
       await existingSubscription.update(subscriptionData);
