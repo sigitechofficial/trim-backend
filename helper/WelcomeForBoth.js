@@ -8,7 +8,7 @@ const { footer } = require('./footer')
 
 module.exports = function (to, name, sentTo = 'salon') {
   let firstParagraph = `You've now signed up, next step is to make sure all your services and categories are up to date, so people know exactly what you can do.<br /><br />
-There's a lot of different tools to use in Trim Business, after a few bookings have a look at the Shop Performance section.<br/><br/>Your new window cling <br /><br /> If this is your first time signing up to Trim Business we will 
+There's a lot of different tools to use in Trim Business, after a few bookings have a look at the Shop Performance section.<br/><br/><strong>Your new window cling</strong><br /><br /> If this is your first time signing up to Trim Business we will 
 also be sending you a window cling (free) to put on your shop's window to show people they can book through Trim. <br /><br /> When you get your cling, you’ll need water to apply to the window and cling (ideally a spray) and a flat surface like a squeegee, or something a flat and soft to get out all the bubbles so it sticks. We have pulled together a quick how to below:`
 
   let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
@@ -279,7 +279,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
                               <tr>
                                 <td
                                   class="pad"
-                                  style="text-align: center; width: 100%"
+                                  style="text-align: left; width: 100%"
                                 >
                                   <h1
                                     style="
@@ -291,7 +291,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
                                       font-weight: 700;
                                       letter-spacing: normal;
                                       line-height: 120%;
-                                      text-align: center;
+                                      text-align: left;
                                       margin-top: 0;
                                       margin-bottom: 0;
                                     "
