@@ -94,8 +94,9 @@ const handleInvoicePayment = async (invoice, state, status) => {
     const metadata = subscribtionData.metadata || {};
     console.log("Subscription Metadata =====================>>>>", metadata);
 
-    // Step 3: Process the period data
+    // Step 3: Process the period data (add 3-day Stripe grace period)
     const periodEnd = new Date(subscribtionData?.current_period_end * 1000);
+    periodEnd.setDate(periodEnd.getDate() + 3);
     const periodStart = new Date(subscribtionData?.current_period_start * 1000);
     const priceId = subscribtionData?.items?.data?.[0]?.price?.id || null;
 

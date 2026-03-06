@@ -458,9 +458,9 @@ exports.choosePlan = async (req, res, next) => {
 
       periodStart = stripeSubscription.current_period_start
       
-      // Add 5 days grace period for Stripe
+      // Add 3 days grace period for Stripe
       const expiryDate = new Date(stripeSubscription.current_period_end * 1000)
-      expiryDate.setDate(expiryDate.getDate() + 5)
+      expiryDate.setDate(expiryDate.getDate() + 3)
       periodEnd = Math.floor(expiryDate.getTime() / 1000)
       
       subscriptionPlanId = stripeSubscription.id
