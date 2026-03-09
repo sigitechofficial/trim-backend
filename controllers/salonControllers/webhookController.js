@@ -76,7 +76,6 @@ const handleInvoicePayment = async (invoice, state, status) => {
   try {
     const subscriptionId = invoice.subscription;
     const customerId = invoice.customer;
-    const amountPaid = invoice.amount_paid / 100;
     const currency = invoice.currency;
     const name =
       invoice.lines?.data.length > 0
@@ -93,6 +92,11 @@ const handleInvoicePayment = async (invoice, state, status) => {
     // Step 2: Extract the metadata from the subscription
     const metadata = subscribtionData.metadata || {};
     console.log("Subscription Metadata =====================>>>>", metadata);
+
+    // Use real amount if paid, otherwise fall back to subscriptionPrice from metadata (e.g. free trial invoices have amount_paid = 0)
+    const amountPaid = invoice.amount_paid > 0
+      ? invoice.amount_paid / 100
+      : parseFloat(metadata?.subscriptionPrice || 0);
 
     // Step 3: Process the period data (add 3-day Stripe grace period)
     const periodEnd = new Date(subscribtionData?.current_period_end * 1000);

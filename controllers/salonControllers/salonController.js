@@ -2041,7 +2041,7 @@ exports.customerSubscription = async (req, res, next) => {
     const subscriptionRecord = await subscriptions.findOne({
       where: { salonDetailId: salonData.id },
       order: [['createdAt', 'DESC']],
-      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource'],
+      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource', 'currency'],
     });
 
     if (subscriptionRecord) {
@@ -2059,8 +2059,10 @@ exports.customerSubscription = async (req, res, next) => {
 
       const memberCount = extractMemberCount(subscriptionRecord.name);
 
-      // Update price from subscription record
+      // Update price, currency and name from subscription record
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
+      customerSubscription.currency = subscriptionRecord.currency || customerSubscription.currency || 'gbp';
+      customerSubscription.name = subscriptionRecord.name || customerSubscription.name || '';
 
       // Preserve existing metadata from Stripe (includes paymentMethodId)
       const existingMetaData = customerSubscription.metaData || {};
@@ -2316,7 +2318,9 @@ exports.updateSubscription = async (req, res, next) => {
       if (typeof latestInvoice === 'object' && latestInvoice.id) {
         invoiceId = latestInvoice.id
         invoicePdfUrl = latestInvoice.invoice_pdf || null
-        amountPaid = (latestInvoice.amount_paid || 0) / 100 // Convert from cents
+        amountPaid = latestInvoice.amount_paid > 0
+          ? latestInvoice.amount_paid / 100
+          : parseFloat(subscriptionPrice) || 0
         currency = latestInvoice.currency || currency
         
         // Extract VAT from invoice metadata or tax amounts
@@ -2336,7 +2340,9 @@ exports.updateSubscription = async (req, res, next) => {
           const retrievedInvoice = await stripe.invoices.retrieve(latestInvoice)
           if (retrievedInvoice) {
             invoicePdfUrl = retrievedInvoice.invoice_pdf || null
-            amountPaid = (retrievedInvoice.amount_paid || 0) / 100
+            amountPaid = retrievedInvoice.amount_paid > 0
+              ? retrievedInvoice.amount_paid / 100
+              : parseFloat(subscriptionPrice) || 0
             currency = retrievedInvoice.currency || currency
             
             // Extract VAT
