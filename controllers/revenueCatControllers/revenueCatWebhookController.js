@@ -505,12 +505,22 @@ const getSubscriptionDisplayName = (productId) => {
   if (!productId) return null;
   
   const productNameMap = {
+    // Apple App Store product IDs (underscores)
     'trimbiz_monthly_owner': 'Owner Only',
     'trimbiz_owner_one_staff': 'Owner + 1 staff member',
     'trimbiz_owner_two_staff': 'Owner + 2 staff members',
     'trimbiz_owner_three_staff': 'Owner + 3 staff members',
     'trimbiz_owner_four_staff': 'Owner + 4 staff members',
     'trimbiz_owner_five_staff': 'Owner + 5 staff members',
+    'trimbiz_owner_unlimited_staff': 'Owner + Unlimited staff',
+    // Google Play product IDs (format: subscription_id:base_plan_id with hyphens)
+    'trimbiz_monthly:trimbiz-monthly-owner': 'Owner Only',
+    'trimbiz_monthly:trimbiz-owner-one-staff': 'Owner + 1 staff member',
+    'trimbiz_monthly:trimbiz-owner-two-staff': 'Owner + 2 staff members',
+    'trimbiz_monthly:trimbiz-owner-three-staff': 'Owner + 3 staff members',
+    'trimbiz_monthly:trimbiz-owner-four-staff': 'Owner + 4 staff members',
+    'trimbiz_monthly:trimbiz-owner-five-staff': 'Owner + 5 staff members',
+    'trimbiz_monthly:trimbiz-owner-unlimited-staff': 'Owner + Unlimited staff',
   };
   
   // Return mapped name or fallback to product ID if not found
@@ -528,13 +538,22 @@ const getTeamSizeFromProductId = (productId) => {
   if (!productId) return 1; // Default to owner only
   
   const teamSizeMap = {
+    // Apple App Store product IDs (underscores)
     'trimbiz_monthly_owner': 1,               // Owner only
     'trimbiz_owner_one_staff': 2,             // Owner + 1 staff
     'trimbiz_owner_two_staff': 3,             // Owner + 2 staff
     'trimbiz_owner_three_staff': 4,           // Owner + 3 staff
     'trimbiz_owner_four_staff': 5,            // Owner + 4 staff
     'trimbiz_owner_five_staff': 6,            // Owner + 5 staff
-    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,  // Owner + unlimited staff
+    'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,
+    // Google Play product IDs (format: subscription_id:base_plan_id with hyphens)
+    'trimbiz_monthly:trimbiz-monthly-owner': 1,
+    'trimbiz_monthly:trimbiz-owner-one-staff': 2,
+    'trimbiz_monthly:trimbiz-owner-two-staff': 3,
+    'trimbiz_monthly:trimbiz-owner-three-staff': 4,
+    'trimbiz_monthly:trimbiz-owner-four-staff': 5,
+    'trimbiz_monthly:trimbiz-owner-five-staff': 6,
+    'trimbiz_monthly:trimbiz-owner-unlimited-staff': UNLIMITED_TEAM_SIZE,
   };
   
   return teamSizeMap[productId] || 1; // Default to 1 if not found
