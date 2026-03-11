@@ -981,6 +981,10 @@ exports.session = async (req, res, next) => {
     ],
   })
 
+  if (!User) {
+    return next(new appError('User not found', 200))
+  }
+
   if (!User.status) {
     return next(
       new appError(
