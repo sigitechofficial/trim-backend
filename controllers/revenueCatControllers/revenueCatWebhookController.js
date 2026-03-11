@@ -841,14 +841,8 @@ const handleInitialPurchase = async (event) => {
     });
 
     if (existingSubscription) {
-      // If new amountPaid is 0 but existing has a price, preserve the existing price AND force GBP
-      // This prevents currency/amount mismatch (e.g. GBP amount stored with PKR currency on re-subscribe)
-      if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
-        subscriptionData.amountPaid = existingSubscription.amountPaid;
-        subscriptionData.currency = 'GBP';
-        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} GBP (new price was 0)`);
-      }
-      
+      // Always use price and currency directly from the event payload — no DB fallback
+      console.log(`💰 INITIAL_PURCHASE saving → amountPaid: ${subscriptionData.amountPaid}, currency: ${subscriptionData.currency}`);
       await existingSubscription.update(subscriptionData);
       console.log(`✅ Updated subscription record: ${existingSubscription.id}`);
     } else {
@@ -989,18 +983,8 @@ const handleRenewal = async (event) => {
     });
 
     if (existingSubscription) {
-      // If existing subscription has 0 price but renewal has a price, update it
-      if (existingSubscription.amountPaid === 0 && calculatedAmountPaid > 0) {
-        console.log(`✅ Backfilling price from ${existingSubscription.amountPaid} to ${calculatedAmountPaid}`);
-      }
-      // If renewal has 0 price but existing has a price, preserve existing price AND force GBP
-      // This prevents currency/amount mismatch (e.g. GBP amount stored with PKR currency)
-      else if (calculatedAmountPaid === 0 && existingSubscription.amountPaid > 0) {
-        subscriptionData.amountPaid = existingSubscription.amountPaid;
-        subscriptionData.currency = 'GBP';
-        console.log(`⚠️ Preserving existing price ${existingSubscription.amountPaid} GBP (renewal price was 0)`);
-      }
-      
+      // Always use price and currency directly from the event payload — no DB fallback
+      console.log(`💰 RENEWAL saving → amountPaid: ${subscriptionData.amountPaid}, currency: ${subscriptionData.currency}`);
       await existingSubscription.update(subscriptionData);
       console.log(`✅ Updated renewal subscription record: ${existingSubscription.id}`);
     } else {
@@ -1475,61 +1459,20 @@ const handleProductChange = async (event) => {
     console.log(`📅 PRODUCT_CHANGE dates → start: ${periodStart.toISOString()}, end (with grace): ${periodEnd.toISOString()}`);
     const vatAmount = extractVAT(event);
 
-    // Always find existing subscription first to preserve price if needed
+    // Always use price and currency directly from the event payload — no API or DB fallback
+    const calculatedAmountPaid = price_in_purchased_currency > 0
+      ? price_in_purchased_currency
+      : (price || 0);
+    console.log(`💰 PRODUCT_CHANGE price from event → amountPaid: ${calculatedAmountPaid}, currency: ${currency}`);
+
+    // Find existing subscription to update
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
         subscriptionSource: 'revenuecat',
       },
-      order: [['createdAt', 'DESC']], // Get the latest one if multiple exist
+      order: [['createdAt', 'DESC']],
     });
-
-    // Calculate amount paid (RevenueCat sends prices in decimal format, not cents)
-    // Check both price_in_purchased_currency and price fields
-    let calculatedAmountPaid = 0;
-    
-    if (price_in_purchased_currency && price_in_purchased_currency > 0) {
-      calculatedAmountPaid = price_in_purchased_currency;
-      console.log(`✅ Using price_in_purchased_currency from event: ${calculatedAmountPaid}`);
-    } else if (price && price > 0) {
-      calculatedAmountPaid = price;
-      console.log(`✅ Using price from event: ${calculatedAmountPaid}`);
-    } else {
-      console.log(`⚠️ No price in PRODUCT_CHANGE event (price: ${price}, price_in_purchased_currency: ${price_in_purchased_currency})`);
-      
-      // Priority 1: Try to fetch from RevenueCat API
-      console.log(`🔍 Fetching product price from RevenueCat API for product: ${activeProductId}`);
-      const apiPrice = await fetchProductPriceFromRevenueCat(app_user_id, activeProductId);
-      
-      if (apiPrice && apiPrice > 0) {
-        calculatedAmountPaid = apiPrice;
-        console.log(`✅ Using price from RevenueCat API: ${calculatedAmountPaid}`);
-      } 
-      // Priority 2: Try to find from database
-      else {
-        const newProductSubscription = await subscriptions.findOne({
-          where: {
-            subscriptionId: activeProductId,
-            subscriptionSource: 'revenuecat',
-            amountPaid: { [Op.gt]: 0 }, // Only get subscriptions with valid prices
-          },
-          order: [['createdAt', 'DESC']], // Get the most recent one
-        });
-
-        if (newProductSubscription && newProductSubscription.amountPaid > 0) {
-          calculatedAmountPaid = newProductSubscription.amountPaid;
-          console.log(`✅ Found new product price from database: ${calculatedAmountPaid} for product ${activeProductId}`);
-        } 
-        // Priority 3: Preserve existing subscription price as fallback
-        else if (existingSubscription && existingSubscription.amountPaid > 0) {
-          calculatedAmountPaid = existingSubscription.amountPaid;
-          console.log(`⚠️ Preserving existing subscription price: ${calculatedAmountPaid} (new product price not found)`);
-        } else {
-          console.log(`⚠️ Product change has price 0 and no price found for product ${activeProductId}`);
-          console.log(`⚠️ The price will be updated when the RENEWAL event is received`);
-        }
-      }
-    }
 
     // Get display name for subscription (use NEW product ID)
     const subscriptionDisplayName = getSubscriptionDisplayName(activeProductId);
@@ -1568,7 +1511,6 @@ const handleProductChange = async (event) => {
       currency: subscriptionData.currency,
       price_in_purchased_currency,
       price,
-      existingPrice: existingSubscription ? existingSubscription.amountPaid : null,
       VAT: subscriptionData.VAT,
       salonDetailId: subscriptionData.salonDetailId
     });
