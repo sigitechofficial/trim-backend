@@ -1777,6 +1777,7 @@ exports.customerSubscription = async (req, res, next) => {
         'subscriptionPrice',
         'subscriptionLatestPaymentStatus',
         'metadata',
+        'teamSize',
       ],
     });
 
