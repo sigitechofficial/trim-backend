@@ -84,6 +84,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(),
       allowNull: true,
     },
+    // The real renewal price (used when subscription is on free trial and amountPaid = 0)
+    renewablePrice: {
+      type: DataTypes.DECIMAL(20, 2),
+      allowNull: true,
+      defaultValue: null,
+    },
   }, {
     paranoid: true,
     timestamps: true,

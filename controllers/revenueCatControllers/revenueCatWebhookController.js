@@ -775,6 +775,15 @@ const handleInitialPurchase = async (event) => {
     const initialStatus = isTrial ? 'trial' : 'payment_succeeded';
     console.log(`📋 INITIAL_PURCHASE period_type: ${period_type} → status: "${initialStatus}"`);
 
+    // For free trials (price = 0), fetch the real renewal price from RevenueCat API
+    // This is the price the user will be charged when the trial converts to paid
+    let renewablePrice = null;
+    if (isTrial) {
+      console.log(`🔍 Trial detected — fetching real renewal price from RevenueCat API for product: ${product_id}`);
+      renewablePrice = await fetchProductPriceFromRevenueCat(app_user_id, product_id);
+      console.log(`💰 Renewable price fetched: ${renewablePrice !== null ? renewablePrice : 'not found'}`);
+    }
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
@@ -791,6 +800,7 @@ const handleInitialPurchase = async (event) => {
       invoiceId: null,
       priceId: product_id, // Keep product ID here
       VAT: vatAmount,
+      renewablePrice: renewablePrice,
       // RevenueCat fields
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,

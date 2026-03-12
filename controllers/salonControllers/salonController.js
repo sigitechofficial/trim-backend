@@ -1849,6 +1849,7 @@ exports.customerSubscription = async (req, res, next) => {
           'revenueCatUserId',
           'revenueCatOriginalTransactionId',
           'revenueCatStore',
+          'renewablePrice',
         ],
       });
 
@@ -1903,6 +1904,7 @@ exports.customerSubscription = async (req, res, next) => {
         revenueCatStore: revenueCatSubscription.revenueCatStore,
         periodStart: revenueCatSubscription.periodStart,
         periodEnd: revenueCatSubscription.periodEnd,
+        renewablePrice: revenueCatSubscription.renewablePrice || null,
       };
       
       console.log('✅ RevenueCat subscription retrieved');
@@ -2041,7 +2043,7 @@ exports.customerSubscription = async (req, res, next) => {
     const subscriptionRecord = await subscriptions.findOne({
       where: { salonDetailId: salonData.id },
       order: [['createdAt', 'DESC']],
-      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource', 'currency'],
+      attributes: ['name', 'amountPaid', 'priceId', 'customerId', 'subscriptionSource', 'currency', 'renewablePrice'],
     });
 
     if (subscriptionRecord) {
@@ -2063,6 +2065,10 @@ exports.customerSubscription = async (req, res, next) => {
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
       customerSubscription.currency = subscriptionRecord.currency || customerSubscription.currency || 'gbp';
       customerSubscription.name = subscriptionRecord.name || customerSubscription.name || '';
+      // Renewable price: the real price user will be charged when trial converts to paid
+      if (subscriptionRecord.renewablePrice !== null && subscriptionRecord.renewablePrice !== undefined) {
+        customerSubscription.renewablePrice = subscriptionRecord.renewablePrice;
+      }
 
       // Preserve existing metadata from Stripe (includes paymentMethodId)
       const existingMetaData = customerSubscription.metaData || {};
