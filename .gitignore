@@ -1,3 +1,6 @@
+# Ignore Bruno API collection
+Trim/
+
 # Ignore env
 .env
 
