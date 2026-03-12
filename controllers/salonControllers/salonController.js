@@ -3533,7 +3533,6 @@ exports.fetchSubscriptionPrice = async (req, res, next) => {
               LIMIT 1
             ) 
             AND employees.status = true 
-            AND employees.isOwner = false 
             AND employees.deleted = false)`
         ),
         'teamSize',
