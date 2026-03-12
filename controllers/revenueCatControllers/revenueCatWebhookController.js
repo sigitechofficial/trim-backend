@@ -775,6 +775,15 @@ const handleInitialPurchase = async (event) => {
     const initialStatus = isTrial ? 'trial' : 'payment_succeeded';
     console.log(`📋 INITIAL_PURCHASE period_type: ${period_type} → status: "${initialStatus}"`);
 
+    // For free trials (price = 0), fetch the real renewal price from RevenueCat API
+    // This is the price the user will be charged when the trial converts to paid
+    let renewablePrice = null;
+    if (isTrial) {
+      console.log(`🔍 Trial detected — fetching real renewal price from RevenueCat API for product: ${product_id}`);
+      renewablePrice = await fetchProductPriceFromRevenueCat(app_user_id, product_id);
+      console.log(`💰 Renewable price fetched: ${renewablePrice !== null ? renewablePrice : 'not found'}`);
+    }
+
     // Prepare subscription data
     const subscriptionData = {
       salonDetailId: salon.id,
@@ -791,6 +800,7 @@ const handleInitialPurchase = async (event) => {
       invoiceId: null,
       priceId: product_id, // Keep product ID here
       VAT: vatAmount,
+      renewablePrice: renewablePrice,
       // RevenueCat fields
       revenueCatUserId: app_user_id,
       revenueCatOriginalTransactionId: event.original_transaction_id || null,
@@ -1123,6 +1133,71 @@ const handleBillingIssue = async (event) => {
  * @param {string} oldProductId - Previous product ID
  * @param {string} newProductId - New product ID
  */
+/**
+ * Block ALL employees (regular + rent a chair) of a given salon.
+ * Sets employee.status = false and user.status = false for every non-owner employee.
+ */
+const blockAllSalonEmployees = async (salon) => {
+  try {
+    const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
+
+    const allEmployees = await employee.findAll({
+      where: {
+        salonDetailId: salon.id,
+        isOwner: false,
+        deleted: false,
+        status: true, // only active ones
+      },
+      include: [{
+        model: user,
+        attributes: ['id', 'firstName', 'lastName', 'status'],
+        required: false,
+      }],
+    });
+
+    console.log(`🔒 Blocking all employees of salon ${salon.id}: ${allEmployees.length} found`);
+
+    for (const emp of allEmployees) {
+      const userId = emp.userId || emp.user?.id;
+      const empType = emp.isExternalEmployee ? 'External (Rent a Chair)' : 'Regular';
+      const empName = emp.user ? `${emp.user.firstName || ''} ${emp.user.lastName || ''}`.trim() : 'Unknown';
+
+      try {
+        // Block employee record
+        const empRecord = await employee.findByPk(emp.id);
+        if (empRecord) {
+          empRecord.status = false;
+          await empRecord.save();
+        }
+
+        // Block user record
+        if (userId) {
+          const userRecord = await user.findByPk(userId);
+          if (userRecord) {
+            userRecord.status = false;
+            await userRecord.save();
+          }
+
+          // Notify via socket
+          await blockEmployees(false, {
+            id: userId,
+            employeeId: emp.id,
+            isExternalEmployee: emp.isExternalEmployee || false,
+          });
+        }
+
+        console.log(`   ✅ Blocked ${empType} employee ${emp.id} (${empName}), user ${userId}`);
+      } catch (empError) {
+        console.error(`   ❌ Error blocking employee ${emp.id}:`, empError.message);
+      }
+    }
+
+    console.log(`✅ All employees of salon ${salon.id} have been blocked`);
+  } catch (error) {
+    console.error(`❌ Error in blockAllSalonEmployees for salon ${salon.id}:`, error.message);
+  }
+};
+
 const handleSubscriptionPlanChange = async (salon, oldProductId, newProductId) => {
   try {
     const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees');
@@ -1951,6 +2026,19 @@ const handleTransfer = async (event) => {
         await toSalon.save();
         console.log(`✅ Transferred subscription plan details to destination salon`);
       }
+
+      // Clean up source salon — it no longer owns the subscription
+      fromSalon.approvedByAdmin = false;
+      fromSalon.registrationExpiryDate = null;
+      fromSalon.registrationDate = null;
+      fromSalon.isOnline=false;
+      fromSalon.subscriptionLatestPaymentStatus = `transferred_to_${toSalon.id}`;
+      await fromSalon.save();
+      console.log(`✅ Source salon ${fromSalon.id} cleaned up after transfer to salon ${toSalon.id}`);
+
+      // Block all employees (regular + rent a chair) of the source salon
+      await blockAllSalonEmployees(fromSalon);
+
     } else {
       // Destination is anonymous ID - just update RevenueCat user ID on existing subscriptions
       // This allows future RENEWAL events to find the salon via subscription lookup
@@ -1958,6 +2046,17 @@ const handleTransfer = async (event) => {
       if (newRevenueCatUserId) {
         await updateSubscriptionsByRevenueCatUserIdForSalon(fromSalon.id, newRevenueCatUserId);
       }
+
+      // Clean up source salon — subscription moved to anonymous destination
+      fromSalon.approvedByAdmin = false;
+      fromSalon.registrationExpiryDate = null;
+      fromSalon.registrationDate = null;
+      fromSalon.subscriptionLatestPaymentStatus = 'transferred_to_anonymous';
+      await fromSalon.save();
+      console.log(`✅ Source salon ${fromSalon.id} cleaned up after transfer to anonymous destination`);
+
+      // Block all employees (regular + rent a chair) of the source salon
+      await blockAllSalonEmployees(fromSalon);
     }
 
     console.log(`✅ Transfer completed: Subscriptions updated for salon ${fromSalon.id}${toSalon ? ` to salon ${toSalon.id}` : ' (anonymous destination)'}`);
