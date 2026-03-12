@@ -1905,6 +1905,7 @@ exports.customerSubscription = async (req, res, next) => {
         periodStart: revenueCatSubscription.periodStart,
         periodEnd: revenueCatSubscription.periodEnd,
         renewablePrice: revenueCatSubscription.renewablePrice || null,
+        teamSize: salonData.teamSize || null,
       };
       
       console.log('✅ RevenueCat subscription retrieved');
