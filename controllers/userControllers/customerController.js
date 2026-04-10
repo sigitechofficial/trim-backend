@@ -531,7 +531,7 @@ exports.home = async (req, res, next) => {
       {
         registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
         subscriptionLatestPaymentStatus: {
-          [Op.notIn]: ['expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded'],
+          [Op.notIn]: ['expired','payment_failed', 'paused', 'refunded'],
         },
       },
     ],
