@@ -25,11 +25,7 @@ module.exports = function (OTP, data, type, to) {
 
     let subject = `Trim Business - OTP`
     const name = `${data.firstName} ${data.lastName}`
-    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
-    console.log(
-      '🚀 ~ sigidevelopers:',
-      attachment.footer.concat(attachment.security),
-    )
+    const to = [data.email]
     const otp = `${OTP}`
     transporter.sendMail(
       {
@@ -579,11 +575,7 @@ module.exports = function (OTP, data, type, to) {
       postOtpText = `If you didn’t request this, please ignore this email.`
     let subject = `Trim - OTP`
     const name = `${data.firstName} ${data.lastName}`
-    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'] //send mail data.email, 
-    console.log(
-      '🚀 ~ sigidevelopers:',
-      attachment.footer.concat(attachment.security),
-    )
+    const to = [data.email]
     const otp = `${OTP}`
     transporter.sendMail(
       {
@@ -1183,11 +1175,7 @@ module.exports = function (OTP, data, type, to) {
 
     let subject = `Trim - Reset Password`
     const name = `${data.firstName} ${data.lastName}`
-    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
-    console.log(
-      '🚀 ~ sigidevelopers:',
-      attachment.footer.concat(attachment.security),
-    )
+    const to = [data.email]
     const otp = `${OTP}`
     transporter.sendMail(
       {
@@ -1994,11 +1982,7 @@ module.exports = function (OTP, data, type, to) {
 
     let subject = `Trim - Cancel Account Deletion`
     const name = `${data.firstName} ${data.lastName}`
-    const to = ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'] //send mail data.email, 
-    console.log(
-      '🚀 ~ sigidevelopers:',
-      attachment.footer.concat(attachment.security),
-    )
+    const to = [data.email]
     
     // Generate recovery URL with token - Points to BACKEND API endpoint
     // The backend serves HTML directly from this endpoint

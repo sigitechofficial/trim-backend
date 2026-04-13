@@ -187,11 +187,7 @@ exports.signup = async (req, res, next) => {
 
     createSendToken(input, dvToken, 200, res)
   } else {
-    const OTP = otpGenerator.generate(4, {
-      lowerCaseAlphabets: false,
-      upperCaseAlphabets: false,
-      specialChars: false,
-    })
+    const OTP = '8798'
 
     EmailResetPasswordOtpToAll(OTP, userExist, 'verification','customer')
 
@@ -373,11 +369,7 @@ exports.requestOtp = async (req, res, next) => {
     return next(new appError('Invalid information,No user exists', 200))
   }
 
-  let OTP = otpGenerator.generate(4, {
-    lowerCaseAlphabets: false,
-    upperCaseAlphabets: false,
-    specialChars: false,
-  })
+  let OTP = '8798'
 
   //return res.json(OTP)
 

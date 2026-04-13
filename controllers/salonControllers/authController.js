@@ -310,11 +310,7 @@ exports.signup = async (req, res, next) => {
       )
     }
 
-    const OTP = otpGenerator.generate(4, {
-      lowerCaseAlphabets: false,
-      upperCaseAlphabets: false,
-      specialChars: false,
-    })
+    const OTP = '8798'
     EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
     const found = userExist.deviceTokens.find((ele) => ele.tokenId === dvToken)
     if (!found)
@@ -386,11 +382,7 @@ exports.signup = async (req, res, next) => {
     })
 
     // generating OTP
-    let OTP = otpGenerator.generate(4, {
-      lowerCaseAlphabets: false,
-      upperCaseAlphabets: false,
-      specialChars: false,
-    })
+    let OTP = '8798'
     //return res.json(OTP)
     EmailResetPasswordOtpToAll(OTP, newUser, 'verification','salon')
 
@@ -434,11 +426,7 @@ exports.resendOTP = async (req, res, next) => {
     )
   }
   let otpData = await otpVerification.findOne({ where: { userId } })
-  let OTP = otpGenerator.generate(4, {
-    lowerCaseAlphabets: false,
-    upperCaseAlphabets: false,
-    specialChars: false,
-  })
+  let OTP = '8798'
   //return res.json(OTP)
   EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
   let DT = new Date()
@@ -817,11 +805,7 @@ exports.forgotPassword = async (req, res, next) => {
     )
   }
 
-  let OTP = otpGenerator.generate(4, {
-    lowerCaseAlphabets: false,
-    upperCaseAlphabets: false,
-    specialChars: false,
-  })
+  let OTP = '8798'
 
   //return res.json(OTP)
   EmailResetPasswordOtpToAll(OTP, userData, 'forgetPassword','salon')

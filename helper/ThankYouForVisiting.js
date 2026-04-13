@@ -131,7 +131,7 @@ module.exports = function (to, input) {
   transporter.sendMail(
     {
       from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
-      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk','sigitest393@outlook.com'],
+      to: [to],
       replyTo: businessEmail,
       subject: ` Rate ${input?.salon?.salonName}.`,
       attachments: attachment.footer,

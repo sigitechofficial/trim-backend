@@ -157,7 +157,7 @@ module.exports = function (to, data, state = 'book') {
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: ['sigidevelopers@gmail.com','charlesblake520@hotmail.co.uk','sigitest393@outlook.com'], // list of receivers
+      to: [client.email],
 
       subject: subject,
       // Ensure attachments array has no undefined entries

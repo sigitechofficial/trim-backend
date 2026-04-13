@@ -18,7 +18,7 @@ module.exports = function (data) {
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME, // sender address
-      to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'], // list of receivers `${data.email}`
+      to: [`${data.email}`], // list of receivers
       subject: subject, // Subject line
       attachments: attachment.footer.concat(attachment.trim),
       html: `

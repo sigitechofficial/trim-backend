@@ -94,7 +94,7 @@ module.exports = function (data) {
   transporter.sendMail(
     {
       from: process.env.EMAIL_USERNAME,
-      to: [data.email, 'sigidevelopers@gmail.com', 'sigitest393@outlook.com'],
+      to: [data.email],
       subject,
       attachments: attachment.footer.concat(attachment.trim),
       html: `
