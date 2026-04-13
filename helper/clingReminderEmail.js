@@ -23,11 +23,7 @@ let description2 = `If you want to take a picture of your new window cling and s
     transporter.sendMail(
         {
             from: process.env.EMAIL_USERNAME, // sender address
-            to: [
-                'sigidevelopers@gmail.com',
-                'charlesblake520@hotmail.co.uk',
-                'sigitest393@outlook.com'
-            ], // list of receivers
+            to: [data.email], // list of receivers
     
             subject: subject,
             // Ensure attachments array has no undefined entries
