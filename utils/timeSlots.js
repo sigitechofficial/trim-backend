@@ -5,6 +5,7 @@ exports.getAvailableTimeSlots = (
   duration,
   busyTimes,
 ) => {
+  if (!duration || duration === 0) duration = 60
   const availableTimeSlots = []
 
   // Parse date, opening time, and closing time
