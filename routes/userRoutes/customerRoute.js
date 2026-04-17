@@ -41,6 +41,11 @@ const upload = multer().none()
 router.post('/email-testing', upload, catchAsync(appController.emailtesting))
 
 router.post(
+  '/template-preview',
+  catchAsync(appController.sendTemplatePreview),
+)
+
+router.post(
   '/notification-testing',
   catchAsync(appController.notificationTesting),
 )
