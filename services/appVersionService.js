@@ -33,13 +33,13 @@ async function fetchFromPlayStore(packageName) {
     const completed = releases.find((r) => r.status === 'completed')
 
     if (!completed) {
-      console.log('[AppVersion] [android] No completed release found in production track')
+      console.log(`[AppVersion] [android] [${packageName}] No completed release found in production track`)
       return null
     }
 
     return completed.name || null
   } catch (err) {
-    console.error('[AppVersion] [android] Play Store fetch failed:', err.message)
+    console.error(`[AppVersion] [android] [${packageName}] Play Store fetch failed:`, err.message)
     return null
   }
 }
@@ -52,37 +52,36 @@ async function fetchFromAppStore(bundleId) {
     const { data } = await axios.get(url, { timeout: 8000 })
 
     if (!data.results || data.results.length === 0) {
-      console.log('[AppVersion] [ios] Bundle not found on App Store')
+      console.log(`[AppVersion] [ios] [${bundleId}] Bundle not found on App Store`)
       return null
     }
 
     return data.results[0].version || null
   } catch (err) {
-    console.error('[AppVersion] [ios] App Store fetch failed:', err.message)
+    console.error(`[AppVersion] [ios] [${bundleId}] App Store fetch failed:`, err.message)
     return null
   }
 }
 
 // ─── Core: Compare + Update DB ───────────────────────────────────────────────
 
-async function checkAndUpdateVersion(platform, storeVersion) {
+async function checkAndUpdateVersion(appType, platform, storeVersion) {
   if (!storeVersion) {
-    console.log(`[AppVersion] [${platform}] No store version fetched, skipping`)
+    console.log(`[AppVersion] [${appType}] [${platform}] No store version fetched, skipping`)
     return
   }
 
-  const row = await db.appVersionConfig.findOne({ where: { platform } })
+  const row = await db.appVersionConfig.findOne({ where: { appType, platform } })
 
   if (!row) {
-    console.log(`[AppVersion] [${platform}] No DB row found, skipping`)
+    console.log(`[AppVersion] [${appType}] [${platform}] No DB row found, skipping`)
     return
   }
 
   const dbVersion = row.latestVersion
-  const currentMinimum = row.minimumSupportedVersion
 
   if (storeVersion === dbVersion) {
-    console.log(`[AppVersion] [${platform}] No change (${dbVersion})`)
+    console.log(`[AppVersion] [${appType}] [${platform}] No change (${dbVersion})`)
     return
   }
 
@@ -92,7 +91,7 @@ async function checkAndUpdateVersion(platform, storeVersion) {
   if (newV.major > oldV.major) {
     // MAJOR bump → force update: both latest and minimum bump to new version
     console.log(
-      `[AppVersion] [${platform}] MAJOR bump ${dbVersion} → ${storeVersion} (force update)`,
+      `[AppVersion] [${appType}] [${platform}] MAJOR bump ${dbVersion} → ${storeVersion} (force update)`,
     )
     await row.update({
       latestVersion: storeVersion,
@@ -101,17 +100,19 @@ async function checkAndUpdateVersion(platform, storeVersion) {
   } else if (newV.minor > oldV.minor) {
     // MINOR bump → soft update: only latest bumps, minimum stays
     console.log(
-      `[AppVersion] [${platform}] MINOR bump ${dbVersion} → ${storeVersion} (soft update)`,
+      `[AppVersion] [${appType}] [${platform}] MINOR bump ${dbVersion} → ${storeVersion} (soft update)`,
     )
     await row.update({ latestVersion: storeVersion })
   } else if (newV.patch > oldV.patch) {
     // PATCH bump → silent update: only latest bumps, no user prompt
     console.log(
-      `[AppVersion] [${platform}] PATCH bump ${dbVersion} → ${storeVersion} (no prompt)`,
+      `[AppVersion] [${appType}] [${platform}] PATCH bump ${dbVersion} → ${storeVersion} (no prompt)`,
     )
     await row.update({ latestVersion: storeVersion })
   } else {
-    console.log(`[AppVersion] [${platform}] Store version (${storeVersion}) is not newer than DB (${dbVersion}), skipping`)
+    console.log(
+      `[AppVersion] [${appType}] [${platform}] Store version (${storeVersion}) is not newer than DB (${dbVersion}), skipping`,
+    )
   }
 }
 

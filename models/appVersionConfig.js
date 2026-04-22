@@ -2,10 +2,13 @@ module.exports = (sequelize, DataTypes) => {
   const appVersionConfig = sequelize.define(
     'appVersionConfig',
     {
+      appType: {
+        type: DataTypes.ENUM('client', 'business'),
+        allowNull: false,
+      },
       platform: {
         type: DataTypes.ENUM('android', 'ios'),
         allowNull: false,
-        unique: true,
       },
       latestVersion: {
         type: DataTypes.STRING(20),
@@ -28,6 +31,12 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       timestamps: true,
+      indexes: [
+        {
+          unique: true,
+          fields: ['appType', 'platform'],
+        },
+      ],
     },
   )
 
