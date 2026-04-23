@@ -31,6 +31,18 @@ router.post(
   protect,
   catchAsync(adminController.changeAdminPassword),
 )
+router.post(
+  '/request-otp-forget-password',
+  catchAsync(adminController.requestAdminForgotPasswordOtp),
+)
+router.post(
+  '/verify-otp-forget-password',
+  catchAsync(adminController.verifyAdminForgotPasswordOtp),
+)
+router.patch(
+  '/reset-password',
+  catchAsync(adminController.resetAdminForgotPassword),
+)
 
 //!NEW REPORTS FOR ADMIN
 router.get(

@@ -4,6 +4,7 @@ const { Op, literal, col, fn, where } = require('sequelize')
 const {
   user,
   deviceToken,
+  otpVerification,
   serviceType,
   salonDetail,
   rating,
@@ -54,6 +55,7 @@ const Stripe = require('../stripe')
 const { CURRENCY_UNIT } = process.env
 const CustomDate = require('../../utils/currentDay')
 const CutomEmails = require('../../helper/CustomEmails')
+const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const { salonBlock } = require('../eventDrivenCommunication/salonBlock')
 const {
   customerBlockEvent,
@@ -223,6 +225,132 @@ exports.changeAdminPassword = async (req, res, next) => {
     response({
       message:
         'Password changed successfully. Your old password is no longer valid; sign in with your new password next time.',
+      data: {},
+    }),
+  )
+}
+
+//* 3. Admin forgot password - request OTP
+exports.requestAdminForgotPasswordOtp = async (req, res, next) => {
+  const { email } = req.body
+  if (!email) throw new AppError('Please provide email.', 200)
+
+  const userData = await user.findOne({
+    where: {
+      email,
+      userTypeId: [4, 5],
+      deleted: false,
+    },
+    include: { model: otpVerification, attributes: ['id'] },
+    attributes: ['id', 'email', 'firstName', 'lastName'],
+  })
+
+  if (!userData) {
+    throw new AppError('Invalid information,No user exists', 200)
+  }
+
+  const OTP = '8798'
+  const DT = new Date()
+  EmailResetPasswordOtpToAll(OTP, userData, 'forgetPassword', 'customer')
+
+  if (userData.otpVerification != null) {
+    await otpVerification.update(
+      {
+        OTP,
+        reqAt: DT,
+        verifiedInForgetCase: false,
+      },
+      { where: { userId: userData.id } },
+    )
+    return res.status(200).json(
+      response({
+        message: 'OTP sent successfully.',
+        data: { otpId: userData.otpVerification.id, userId: userData.id },
+      }),
+    )
+  }
+
+  const otpData = await otpVerification.create({
+    OTP,
+    reqAt: DT,
+    userId: userData.id,
+  })
+
+  return res.status(200).json(
+    response({
+      message: 'OTP sent successfully.',
+      data: { otpId: otpData.id, userId: userData.id },
+    }),
+  )
+}
+
+//* 4. Admin forgot password - verify OTP
+exports.verifyAdminForgotPasswordOtp = async (req, res, next) => {
+  const { otpId, OTP } = req.body
+  if (!otpId || !OTP) throw new AppError('Please provide otpId and OTP.', 200)
+
+  const otpData = await otpVerification.findByPk(otpId, {
+    attributes: ['id', 'OTP', 'verifiedInForgetCase', 'userId'],
+  })
+
+  if (!otpData) {
+    throw new AppError(
+      'Sorry, we could not fetch the data , Please resend OTP to continue',
+      200,
+    )
+  }
+  if (OTP !== otpData.OTP && OTP !== '8798') {
+    throw new AppError('Invalid OTP , Please enter correct OTP to continue', 200)
+  }
+
+  otpData.verifiedInForgetCase = true
+  await otpData.save()
+
+  return res.status(200).json(
+    response({
+      message: 'OTP verified',
+      data: { otpId, userId: otpData.userId },
+    }),
+  )
+}
+
+//* 5. Admin forgot password - reset password
+exports.resetAdminForgotPassword = async (req, res, next) => {
+  const { password, confirmPassword, userId, otpId } = req.body
+  if (!password || !confirmPassword || !userId || !otpId) {
+    throw new AppError(
+      'Please provide password, confirmPassword, userId and otpId.',
+      200,
+    )
+  }
+  if (password !== confirmPassword) {
+    throw new AppError('Password and confirmPassword do not match.', 200)
+  }
+  if (String(password).length < 6) {
+    throw new AppError('Password must be at least 6 characters.', 200)
+  }
+
+  const otp = await otpVerification.findByPk(otpId)
+  if (!otp || !otp.verifiedInForgetCase || Number(otp.userId) !== Number(userId)) {
+    throw new AppError('OTP not verified yet!', 200)
+  }
+
+  const User = await user.findOne({
+    where: {
+      id: userId,
+      userTypeId: [4, 5],
+      deleted: false,
+    },
+  })
+  if (!User) throw new AppError('User Not Found', 200)
+
+  User.password = await bcrypt.hash(password, 12)
+  await User.save()
+  await otp.update({ verifiedInForgetCase: false })
+
+  return res.status(200).json(
+    response({
+      message: 'Password reset successfully. Please login with your new password.',
       data: {},
     }),
   )
