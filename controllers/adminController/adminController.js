@@ -69,6 +69,9 @@ const formatDate = (date) => {
 
 const { salonDetails } = require('../userControllers/customerController')
 
+const OTP_PURPOSE_FORGOT_PASSWORD = 'FORGOT_PASSWORD'
+const OTP_PURPOSE_ADMIN_2FA_LOGIN = 'ADMIN_2FA_LOGIN'
+
 // console.log('🚀 ~ ', currentDateOnly);
 //! Return Function
 const response = ({ status, message, data, error, currencyUnit }) => {
@@ -110,6 +113,7 @@ const createSendToken = (
       joinOn: user.createdAt,
       userType: userType,
       features: features,
+      twoFactor: false,
     },
   })
 }
@@ -142,6 +146,47 @@ exports.login = async (req, res, next) => {
     return next(new AppError('Incorrect Password.', 200))
   }
 
+  if (User.adminTwoFactorEnabled === true) {
+    const OTP = '8798'
+    const DT = new Date()
+    EmailResetPasswordOtpToAll(OTP, User, 'verification', 'admin')
+
+    const existingOtp = await otpVerification.findOne({
+      where: { userId: User.id },
+    })
+    let otpRecord
+    if (existingOtp) {
+      await existingOtp.update({
+        OTP,
+        reqAt: DT,
+        verifiedInForgetCase: false,
+        otpPurpose: OTP_PURPOSE_ADMIN_2FA_LOGIN,
+      })
+      otpRecord = existingOtp
+    } else {
+      otpRecord = await otpVerification.create({
+        OTP,
+        reqAt: DT,
+        userId: User.id,
+        verifiedInForgetCase: false,
+        otpPurpose: OTP_PURPOSE_ADMIN_2FA_LOGIN,
+      })
+    }
+
+    return res.status(200).json({
+      status: '1',
+      message:
+        'Two-factor authentication is enabled. An OTP has been sent to your email. Verify it to complete sign-in.',
+      data: {
+        twoFactor: true,
+        otpId: otpRecord.id,
+        userId: User.id,
+        email: User.email,
+      },
+      error: '',
+    })
+  }
+
   const features = await feature.findAll({
     attributes: [`id`, `title`, `key`,
       [
@@ -171,6 +216,100 @@ exports.login = async (req, res, next) => {
     userType = userRole ? userRole.name : 'employee'
   }
   createSendToken(User, userType, features, dvToken, 200, res)
+}
+
+//* 1b. Admin login — verify 2FA OTP (returns same payload as successful login)
+exports.verifyAdminLoginTwoFactor = async (req, res, next) => {
+  const { otpId, OTP, dvToken } = req.body
+  if (!otpId || !OTP || !dvToken) {
+    throw new AppError('Please provide otpId, OTP, and dvToken.', 200)
+  }
+
+  const otpData = await otpVerification.findByPk(otpId, {
+    attributes: ['id', 'OTP', 'userId', 'otpPurpose'],
+  })
+  if (!otpData || otpData.otpPurpose !== OTP_PURPOSE_ADMIN_2FA_LOGIN) {
+    throw new AppError(
+      'Invalid or expired verification. Please sign in again with your password.',
+      200,
+    )
+  }
+  if (OTP !== otpData.OTP && String(OTP) !== '8798') {
+    throw new AppError('Invalid OTP , Please enter correct OTP to continue', 200)
+  }
+
+  const User = await user.findOne({
+    where: {
+      id: otpData.userId,
+      userTypeId: [4, 5],
+    },
+    include: [{ model: deviceToken, required: false, attributes: ['tokenId'] }],
+  })
+  if (!User) throw new AppError('User not found.', 200)
+  if (User.status == false) throw new AppError('Blocked by admin.', 200)
+  if (User.adminTwoFactorEnabled !== true) {
+    throw new AppError('Two-factor authentication is not enabled for this account.', 200)
+  }
+
+  await otpData.destroy()
+
+  const features = await feature.findAll({
+    attributes: [`id`, `title`, `key`,
+      [
+        literal(
+          `(SELECT permissionType FROM permissions WHERE permissions.featureId = feature.id &&  permissions.roleId = ${User?.roleId || 0} LIMIT 1)`,
+        ),
+        'access',
+      ]
+    ],
+  })
+
+  const found = User.deviceTokens.find((ele) => ele.tokenId === dvToken)
+  if (!found)
+    await deviceToken.create({
+      tokenId: dvToken,
+      status: true,
+      userId: User.id,
+    })
+
+  let userType = 'Admin'
+  if (User.userTypeId == 5 && User.roleId) {
+    const userRole = await role.findOne({
+      where: { id: User.roleId, deletedAt: { [Op.is]: null } },
+      attributes: ['name'],
+    })
+    userType = userRole ? userRole.name : 'employee'
+  }
+
+  createSendToken(User, userType, features, dvToken, 200, res)
+}
+
+//* 1c. Admin — enable / disable two-factor (logged-in admin only)
+exports.updateAdminTwoFactorSetting = async (req, res, next) => {
+  const { enabled } = req.body
+  if (enabled !== true && enabled !== false) {
+    throw new AppError('Please provide enabled as true or false.', 200)
+  }
+
+  const User = await user.findOne({
+    where: {
+      id: req.user.id,
+      userTypeId: [4, 5],
+    },
+  })
+  if (!User) throw new AppError('Admin user not found.', 200)
+
+  User.adminTwoFactorEnabled = Boolean(enabled)
+  await User.save()
+
+  return res.status(200).json(
+    response({
+      message: enabled
+        ? 'Two-factor authentication has been enabled for your account.'
+        : 'Two-factor authentication has been disabled for your account.',
+      data: { adminTwoFactorEnabled: User.adminTwoFactorEnabled },
+    }),
+  )
 }
 
 //* 2. Admin change password (must send current + new + confirm)
@@ -259,6 +398,7 @@ exports.requestAdminForgotPasswordOtp = async (req, res, next) => {
         OTP,
         reqAt: DT,
         verifiedInForgetCase: false,
+        otpPurpose: OTP_PURPOSE_FORGOT_PASSWORD,
       },
       { where: { userId: userData.id } },
     )
@@ -274,6 +414,7 @@ exports.requestAdminForgotPasswordOtp = async (req, res, next) => {
     OTP,
     reqAt: DT,
     userId: userData.id,
+    otpPurpose: OTP_PURPOSE_FORGOT_PASSWORD,
   })
 
   return res.status(200).json(
@@ -290,7 +431,7 @@ exports.verifyAdminForgotPasswordOtp = async (req, res, next) => {
   if (!otpId || !OTP) throw new AppError('Please provide otpId and OTP.', 200)
 
   const otpData = await otpVerification.findByPk(otpId, {
-    attributes: ['id', 'OTP', 'verifiedInForgetCase', 'userId'],
+    attributes: ['id', 'OTP', 'verifiedInForgetCase', 'userId', 'otpPurpose'],
   })
 
   if (!otpData) {
@@ -301,6 +442,16 @@ exports.verifyAdminForgotPasswordOtp = async (req, res, next) => {
   }
   if (OTP !== otpData.OTP && OTP !== '8798') {
     throw new AppError('Invalid OTP , Please enter correct OTP to continue', 200)
+  }
+
+  if (
+    otpData.otpPurpose &&
+    otpData.otpPurpose !== OTP_PURPOSE_FORGOT_PASSWORD
+  ) {
+    throw new AppError(
+      'This OTP is for admin sign-in verification, not password reset.',
+      200,
+    )
   }
 
   otpData.verifiedInForgetCase = true
@@ -334,6 +485,12 @@ exports.resetAdminForgotPassword = async (req, res, next) => {
   if (!otp || !otp.verifiedInForgetCase || Number(otp.userId) !== Number(userId)) {
     throw new AppError('OTP not verified yet!', 200)
   }
+  if (
+    otp.otpPurpose &&
+    otp.otpPurpose !== OTP_PURPOSE_FORGOT_PASSWORD
+  ) {
+    throw new AppError('Invalid OTP session for password reset.', 200)
+  }
 
   const User = await user.findOne({
     where: {
@@ -346,7 +503,7 @@ exports.resetAdminForgotPassword = async (req, res, next) => {
 
   User.password = await bcrypt.hash(password, 12)
   await User.save()
-  await otp.update({ verifiedInForgetCase: false })
+  await otp.update({ verifiedInForgetCase: false, otpPurpose: null })
 
   return res.status(200).json(
     response({

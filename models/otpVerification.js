@@ -23,6 +23,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: false,
     },
+    /** Distinguishes admin 2FA login OTP from forgot-password flow */
+    otpPurpose: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
   })
 
   return otpVerification

@@ -27,6 +27,15 @@ const { createDestinationDirectory } = require('../../utils/customFunctions')
 
 router.post('/auth/login', catchAsync(adminController.login))
 router.post(
+  '/auth/verify-login-two-factor',
+  catchAsync(adminController.verifyAdminLoginTwoFactor),
+)
+router.put(
+  '/toggle-admin-two-factor',
+  protect,
+  catchAsync(adminController.updateAdminTwoFactorSetting),
+)
+router.post(
   '/change-admin-password',
   protect,
   catchAsync(adminController.changeAdminPassword),

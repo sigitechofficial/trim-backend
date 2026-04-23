@@ -569,11 +569,14 @@ module.exports = function (OTP, data, type, to) {
 
   }
 
-  if (type && type == 'verification' && to === 'customer') {
+  if (type && type == 'verification' && (to === 'customer' || to === 'admin')) {
       subText = 'OTP Verification'
       preOtpText = `Use the below code in the App to verify your account.`
       postOtpText = `If you didn’t request this, please ignore this email.`
     let subject = `Trim - OTP`
+    if (to === 'admin') {
+      subject = 'Trim Admin - OTP'
+    }
     const name = `${data.firstName} ${data.lastName}`
     const to = [data.email]
     const otp = `${OTP}`

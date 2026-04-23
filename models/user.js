@@ -94,7 +94,13 @@ module.exports = (sequelize) => {
         type: DataTypes.BOOLEAN,
         allowNull: true,
         defaultValue: false,
-      }
+      },
+      /** When true, admin login requires email OTP after password check */
+      adminTwoFactorEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      },
     },
     {
       primaryKey: true,
