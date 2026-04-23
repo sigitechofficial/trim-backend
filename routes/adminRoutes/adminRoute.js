@@ -26,6 +26,12 @@ const {
 const { createDestinationDirectory } = require('../../utils/customFunctions')
 
 router.post('/auth/login', catchAsync(adminController.login))
+router.post(
+  '/change-admin-password',
+  protect,
+  catchAsync(adminController.changeAdminPassword),
+)
+
 //!NEW REPORTS FOR ADMIN
 router.get(
   '/overall-report/busiest-vs-quietest/:basedOn',
@@ -412,6 +418,33 @@ router.get(
   '/fetch-active-fetures',
   catchAsync(adminController.fetchActiveFeatures),
 )
+
+router.post(
+  '/add-features',
+  protect,
+  catchAsync(adminController.addFeatures),
+)
+router.get(
+  '/fetch-features',
+  protect,
+  catchAsync(adminController.fetchAllFeaturesCatalog),
+)
+router.put(
+  '/update-feature/:id',
+  protect,
+  catchAsync(adminController.updateFeature),
+)
+router.put(
+  '/restore-feature/:id',
+  protect,
+  catchAsync(adminController.restoreFeature),
+)
+router.delete(
+  '/delete-feature/:id',
+  protect,
+  catchAsync(adminController.softDeleteFeature),
+)
+
 router.put(
   '/role-change-status/:id',
   protect,

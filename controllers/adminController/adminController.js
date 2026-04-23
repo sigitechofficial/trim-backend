@@ -171,6 +171,63 @@ exports.login = async (req, res, next) => {
   createSendToken(User, userType, features, dvToken, 200, res)
 }
 
+//* 2. Admin change password (must send current + new + confirm)
+exports.changeAdminPassword = async (req, res, next) => {
+  const { oldPassword, newPassword, confirmNewPassword } = req.body
+  if (!oldPassword || !newPassword || !confirmNewPassword) {
+    throw new AppError(
+      'Please provide your current password, new password, and confirm new password.',
+      200,
+    )
+  }
+  if (newPassword !== confirmNewPassword) {
+    throw new AppError(
+      'New password and confirm new password do not match. Please re-enter both fields.',
+      200,
+    )
+  }
+  if (oldPassword === newPassword) {
+    throw new AppError(
+      'New password must be different from your current password.',
+      200,
+    )
+  }
+  if (String(newPassword).length < 6) {
+    throw new AppError('New password must be at least 6 characters.', 200)
+  }
+
+  const User = await user.findOne({
+    where: {
+      id: req.user.id,
+      userTypeId: [4, 5],
+    },
+  })
+  if (!User) throw new AppError('Admin user not found.', 200)
+  if (!User.password) {
+    throw new AppError(
+      'This account has no password set; use password reset instead.',
+      200,
+    )
+  }
+  if (!(await bcrypt.compare(oldPassword, User.password))) {
+    throw new AppError(
+      'Your current password is incorrect. Enter the correct current password before setting a new one.',
+      200,
+    )
+  }
+
+  User.password = await bcrypt.hash(newPassword, 12)
+  await User.save()
+
+  return res.status(200).json(
+    response({
+      message:
+        'Password changed successfully. Your old password is no longer valid; sign in with your new password next time.',
+      data: {},
+    }),
+  )
+}
+
 //! 2.SERVICES TYPES -------------------------------------------------------------------------------
 
 //^ 1.Add servies Types ----------------------------
@@ -1903,6 +1960,119 @@ exports.fetchActiveFeatures = async (req, res, next) => {
   return res.json(
     response({
       data: { employeePermissions },
+    }),
+  )
+}
+
+//* 2b.Features catalog — add (bulk) -----------------
+
+exports.addFeatures = async (req, res, next) => {
+  const { features: featureList } = req.body
+  if (!Array.isArray(featureList) || featureList.length === 0) {
+    throw new AppError('Please provide a non-empty features array', 200)
+  }
+  const rows = featureList.map((f) => {
+    if (f == null || typeof f !== 'object') {
+      throw new AppError(
+        'Each feature must be an object with title, key, or both',
+        200,
+      )
+    }
+    return {
+      title: f.title != null ? String(f.title) : '',
+      key: f.key != null ? String(f.key) : '',
+      status: f.status === false ? false : true,
+    }
+  })
+  const created = await feature.bulkCreate(rows)
+  return res.status(201).json(
+    response({
+      message: 'Features created',
+      data: { features: created },
+    }),
+  )
+}
+
+//* 2c.Features catalog — list all (optionally including soft-deleted) -----------------
+
+exports.fetchAllFeaturesCatalog = async (req, res, next) => {
+  const includeDeleted =
+    req.query.includeDeleted === 'true' || req.query.includeDeleted === '1'
+  const attributes = [
+    'id',
+    'title',
+    'key',
+    'status',
+    'createdAt',
+    'updatedAt',
+  ]
+  if (includeDeleted) attributes.push('deletedAt')
+  const featureData = await feature.findAll({
+    attributes,
+    paranoid: !includeDeleted,
+    order: [['id', 'ASC']],
+  })
+  return res.json(
+    response({
+      data: { features: featureData },
+    }),
+  )
+}
+
+//* 2c1.Features catalog — update one -----------------
+
+exports.updateFeature = async (req, res, next) => {
+  const id = req.params.id
+  if (!id) throw new AppError('Invalid request format', 200)
+  const row = await feature.findByPk(id)
+  if (!row) throw new AppError('Feature not found', 200)
+  const { title, key, status } = req.body
+  if (title !== undefined) row.title = String(title)
+  if (key !== undefined) row.key = String(key)
+  if (status !== undefined) row.status = Boolean(status)
+  await row.save()
+  return res.status(200).json(
+    response({
+      message: 'Feature updated',
+      data: { feature: row },
+    }),
+  )
+}
+
+//* 2d.Features catalog — soft delete -----------------
+
+exports.softDeleteFeature = async (req, res, next) => {
+  const id = req.params.id
+  if (!id) throw new AppError('Invalid request format', 200)
+  const row = await feature.findByPk(id)
+  if (!row) throw new AppError('Feature not found', 200)
+  await row.destroy()
+  return res.status(200).json(
+    response({
+      message: 'Feature removed',
+      data: { id: String(row.id) },
+    }),
+  )
+}
+
+//* 2e.Features catalog — restore soft-deleted -----------------
+
+exports.restoreFeature = async (req, res, next) => {
+  const id = req.params.id
+  if (!id) throw new AppError('Invalid request format', 200)
+  const row = await feature.findOne({
+    where: { id },
+    paranoid: false,
+  })
+  if (!row) throw new AppError('Feature not found', 200)
+  if (!row.deletedAt) {
+    throw new AppError('Feature is not deleted', 200)
+  }
+  await row.restore()
+  return res.status(200).json(
+    response({
+      message: 'Feature restored',
+      data: { id: String(row.id) },
     }),
   )
 }

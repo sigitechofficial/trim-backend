@@ -57,10 +57,17 @@ const { response } = require('../../utils/response')
 const { sendEvent } = require('../../socket_io')
 
 const EmailAppointmentToSalon = require('../../helper/AppointmentEmailsToSalon')
+const EmailAppointmentToCustomer = require('../../helper/AppointmentEmailsToCustomer')
 const testing = require('../../helper/testing')
 const tankyou = require('../../helper/ThankYouForVisiting')
 const DEMO = require('../../helper/demo')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
+const WelcomeForBoth = require('../../helper/WelcomeForBoth')
+const InviteEmployeeEmail = require('../../helper/inviteEmployee')
+const ClingReminderEmail = require('../../helper/clingReminderEmail')
+const PayoutBlockedEmail = require('../../helper/PayoutBlockedEmail')
+const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
+const CustomEmails = require('../../helper/CustomEmails')
 const otpGenerator = require('otp-generator')
 const CustomDateNew =require('../../utils/customDateNew')
 const {
@@ -173,6 +180,340 @@ async function sendSequentialRequests(
 exports.emailtesting = async (req, res, next) => {
 Communication.online(1167, 0, 5)
   return res.status(200).json(response({ data: {} }))
+}
+
+//* DEMO. Email Template Preview ----------------------
+// Sends a real email to the provided address using any of the existing
+// helper templates, populated with realistic dummy data so you can see
+// exactly how the template will render in an inbox.
+//
+// POST /customer/template-preview
+// Body: {
+//   to: "you@example.com",                   // required - target inbox
+//   template: "bookingCustomer",             // required - template key (see list below)
+//   state: "book" | "cancel" | "reschudle",  // optional - only for appointment templates
+//   overrides: { ... }                       // optional - partial object deep-merged into the dummy data
+// }
+//
+// Available template keys:
+//   welcomeCustomer, welcomeSalon,
+//   otpSalonVerification, otpCustomerVerification,
+//   forgetPasswordCustomer, forgetPasswordSalon,
+//   deleteAccount, recoverAccount,
+//   bookingCustomer, bookingSalon,
+//   thankYou, inviteEmployee, clingReminder,
+//   payoutBlocked, incompleteRegistration, customEmail,
+//   demo
+exports.sendTemplatePreview = async (req, res, next) => {
+  try {
+    const { to, template, state, overrides = {}, html } = req.body || {}
+
+    if (!to || typeof to !== 'string') {
+      return res
+        .status(400)
+        .json(response({ status: 'Error', statusCode: 400, message: '`to` (email) is required' }))
+    }
+    if (!template || typeof template !== 'string') {
+      return res
+        .status(400)
+        .json(
+          response({
+            status: 'Error',
+            statusCode: 400,
+            message: '`template` is required (see controller for the list of valid keys)',
+          }),
+        )
+    }
+
+    const merge = (base, extra) => {
+      if (!extra || typeof extra !== 'object') return base
+      const out = Array.isArray(base) ? [...base] : { ...base }
+      for (const key of Object.keys(extra)) {
+        const bv = out[key]
+        const ev = extra[key]
+        if (
+          bv &&
+          ev &&
+          typeof bv === 'object' &&
+          typeof ev === 'object' &&
+          !Array.isArray(bv) &&
+          !Array.isArray(ev)
+        ) {
+          out[key] = merge(bv, ev)
+        } else {
+          out[key] = ev
+        }
+      }
+      return out
+    }
+
+    // Shared dummy appointment payload used by the booking / thankYou templates.
+    const buildAppointmentDummy = () =>
+      merge(
+        {
+          id: 999001,
+          on: new Date().toISOString().split('T')[0],
+          startTime: '10:00 AM',
+          endTime: '11:00 AM',
+          total: 45,
+          duration: 60,
+          user: {
+            firstName: 'John',
+            lastName: 'Doe',
+            email: to,
+            countryCode: '+44',
+            phoneNum: '7123456789',
+          },
+          salonDetail: {
+            id: 1,
+            salonName: 'Trim Demo Salon',
+            businessEmail: 'salon-demo@trimworldwide.com',
+            user: { email: 'salon-demo@trimworldwide.com' },
+            addressDB: {
+              streetAddress: '221B Baker Street',
+              province: 'London',
+              country: 'United Kingdom',
+            },
+          },
+          jobs: [
+            {
+              total: 25,
+              duration: 30,
+              on: new Date().toISOString().split('T')[0],
+              startTime: '10:00 AM',
+              endTime: '10:30 AM',
+              service: { serviceName: 'Haircut' },
+              employee: { user: { firstName: 'Alex', lastName: 'Stylist' } },
+            },
+            {
+              total: 20,
+              duration: 30,
+              on: new Date().toISOString().split('T')[0],
+              startTime: '10:30 AM',
+              endTime: '11:00 AM',
+              service: { serviceName: 'Beard Trim' },
+              employee: { user: { firstName: 'Alex', lastName: 'Stylist' } },
+            },
+          ],
+        },
+        overrides,
+      )
+
+    const stateValue = state || 'book'
+    const key = String(template).trim()
+
+    switch (key) {
+      case 'welcomeCustomer': {
+        const name = overrides?.name || 'John'
+        WelcomeForBoth(to, name, 'customer')
+        break
+      }
+      case 'welcomeSalon': {
+        const name = overrides?.name || 'Trim Demo Salon'
+        WelcomeForBoth(to, name, 'salon')
+        break
+      }
+
+      case 'otpSalonVerification': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'verification', 'salon')
+        break
+      }
+      case 'otpCustomerVerification': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'verification', 'customer')
+        break
+      }
+      case 'forgetPasswordCustomer': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'forgetPassword', 'customer')
+        break
+      }
+      case 'forgetPasswordSalon': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'forgetPassword', 'salon')
+        break
+      }
+      case 'deleteAccount': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'deleteAccount', 'customer')
+        break
+      }
+      case 'recoverAccount': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        EmailResetPasswordOtpToAll('123456', payload, 'recoverAccount', 'customer')
+        break
+      }
+
+      case 'bookingCustomer': {
+        const payload = buildAppointmentDummy()
+        EmailAppointmentToCustomer(to, payload, stateValue)
+        break
+      }
+      case 'bookingSalon': {
+        const payload = buildAppointmentDummy()
+        EmailAppointmentToSalon(to, payload, stateValue)
+        break
+      }
+
+      case 'thankYou': {
+        const payload = {
+          appointment: buildAppointmentDummy(),
+          salon: { salonName: 'Trim Demo Salon' },
+        }
+        tankyou(to, merge(payload, overrides))
+        break
+      }
+
+      case 'inviteEmployee': {
+        const payload = merge(
+          {
+            name: 'Jane Barber',
+            salonName: 'Trim Demo Salon',
+            email: to,
+          },
+          overrides,
+        )
+        InviteEmployeeEmail([to], payload)
+        break
+      }
+
+      case 'clingReminder': {
+        const payload = merge(
+          { firstName: 'John', lastName: 'Doe', email: to },
+          overrides,
+        )
+        ClingReminderEmail(payload)
+        break
+      }
+
+      case 'payoutBlocked': {
+        const payload = merge(
+          {
+            email: to,
+            firstName: 'John',
+            lastName: 'Doe',
+            salonName: 'Trim Demo Salon',
+            disabledReason: 'requirements.past_due',
+            capabilityStatus: 'inactive',
+          },
+          overrides,
+        )
+        PayoutBlockedEmail(payload)
+        break
+      }
+
+      case 'incompleteRegistration': {
+        const payload = merge(
+          {
+            email: to,
+            firstName: 'John',
+            lastName: 'Doe',
+            profileCompletion: {
+              hasBusinessDetails: true,
+              hasBusinessAddress: true,
+              hasServiceList: false,
+              hasWorkingHours: true,
+              hasTeamMembers: false,
+              hasSubscription: false,
+              accountConnected: false,
+            },
+          },
+          overrides,
+        )
+        IncompleteRegistrationReminder(payload)
+        break
+      }
+
+      case 'customEmail': {
+        const payload = merge(
+          {
+            email: to,
+            greetings: 'Hi John!',
+            content:
+              'This is a custom email preview. You can override the `greetings` and `content` fields via the overrides object.',
+          },
+          overrides,
+        )
+        CustomEmails(payload)
+        break
+      }
+
+      case 'demo': {
+        const htmlBody =
+          (typeof html === 'string' && html) ||
+          overrides?.html ||
+          '<h1>Demo template preview</h1><p>This is a demo email sent through the template-preview endpoint.</p>'
+        DEMO(htmlBody)
+        break
+      }
+
+      default:
+        return res.status(400).json(
+          response({
+            status: 'Error',
+            statusCode: 400,
+            message: `Unknown template key: "${key}"`,
+            data: {
+              validTemplates: [
+                'welcomeCustomer',
+                'welcomeSalon',
+                'otpSalonVerification',
+                'otpCustomerVerification',
+                'forgetPasswordCustomer',
+                'forgetPasswordSalon',
+                'deleteAccount',
+                'recoverAccount',
+                'bookingCustomer',
+                'bookingSalon',
+                'thankYou',
+                'inviteEmployee',
+                'clingReminder',
+                'payoutBlocked',
+                'incompleteRegistration',
+                'customEmail',
+                'demo',
+              ],
+            },
+          }),
+        )
+    }
+
+    return res.status(200).json(
+      response({
+        message: `Template "${key}" dispatched to ${to}`,
+        data: { template: key, to, state: stateValue },
+      }),
+    )
+  } catch (error) {
+    console.error('sendTemplatePreview failed:', error)
+    return res.status(500).json(
+      response({
+        status: 'Error',
+        statusCode: 500,
+        message: 'Failed to send template preview',
+        data: { error: error.message },
+      }),
+    )
+  }
 }
 
 //* DEMO. Notification Testing ----------------------

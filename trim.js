@@ -84,6 +84,40 @@ initializeWebSocket(server)
 
 app.use(Sentry.Handlers.errorHandler());
 
+// ─── Public: App Version Config (no auth) ────────────────────────────────────
+app.get('/app-config.json', async (req, res) => {
+  try {
+    const rows = await db.appVersionConfig.findAll()
+
+    // Build nested structure: { client: { android: {...}, ios: {...} }, business: { android: {...}, ios: {...} } }
+    const config = {}
+    rows.forEach((row) => {
+      if (!config[row.appType]) config[row.appType] = {}
+      config[row.appType][row.platform] = {
+        latest_version: row.latestVersion,
+        minimum_supported_version: row.minimumSupportedVersion,
+        ...(row.forceUpdateMessage && { force_update_message: row.forceUpdateMessage }),
+        ...(row.softUpdateMessage && { soft_update_message: row.softUpdateMessage }),
+      }
+    })
+
+    return res.status(200).json(config)
+  } catch (err) {
+    console.error('[AppVersion] /app-config.json error:', err.message)
+    // Always return 200 with safe fallback so Flutter is never blocked by a DB issue
+    return res.status(200).json({
+      client: {
+        android: { latest_version: '1.0.15', minimum_supported_version: '1.0.15' },
+        ios: { latest_version: '1.0.15', minimum_supported_version: '1.0.15' },
+      },
+      business: {
+        android: { latest_version: '1.0.28', minimum_supported_version: '1.0.28' },
+        ios: { latest_version: '2.0.2', minimum_supported_version: '2.0.2' },
+      },
+    })
+  }
+})
+
 // Handle undefined routes
 app.use((req, res, next) => {
   const error = new Error(`Route not found ~ ${req.url}`)
@@ -167,5 +201,8 @@ server.listen(serverPort, (err) => {
 })
 
 
+
+// ─── App Version Cron (hourly store version check) ───────────────────────────
+require('./jobs/appVersionCron')
 
 // hello
