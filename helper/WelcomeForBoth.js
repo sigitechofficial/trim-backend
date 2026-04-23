@@ -7,6 +7,7 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (to, name, sentTo = 'salon') {
+  const isCustomer = sentTo === 'customer'
   let firstParagraph = `You've now signed up, next step is to make sure all your services and categories are up to date, so people know exactly what you can do.<br /><br />
 There's a lot of different tools to use in Trim Business, after a few bookings have a look at the Shop Performance section.<br/><br/><strong>Your new window cling</strong><br /><br /> If this is your first time signing up to Trim Business we will 
 also be sending you a window cling (free) to put on your shop's window to show people they can book through Trim. <br /><br /> When you get your cling, you’ll need water to apply to the window and cling (ideally a spray) and a flat surface like a squeegee, or something a flat and soft to get out all the bubbles so it sticks. We have pulled together a quick how to below:`
@@ -16,7 +17,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
   let greetings = `Hi ${name}!`
 
   let subject = `Welcome to Trim`
-  if (sentTo == 'customer') {
+  if (isCustomer) {
     firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!<br /> <br />`
 
     secondParagraph = `Thank you for choosing Trim! We're here to make your salon experience enjoyable and effortless.`
@@ -28,7 +29,9 @@ also be sending you a window cling (free) to put on your shop's window to show p
       from: process.env.EMAIL_USERNAME, // sender address
       to: [to],
       subject: subject, // Subject line
-      attachments: attachment.footer.concat(attachment.trim, attachment.cling),
+      attachments: isCustomer
+        ? attachment.footer.concat(attachment.trim)
+        : attachment.footer.concat(attachment.trim, attachment.cling),
       html: `
 <!DOCTYPE html>
 
@@ -518,7 +521,10 @@ also be sending you a window cling (free) to put on your shop's window to show p
                                   </div>
                                 </td>
                               </tr>
-
+                              ${
+                                isCustomer
+                                  ? ''
+                                  : `
                                 <tr>
                                 <td>
                                   <div
@@ -553,7 +559,8 @@ also be sending you a window cling (free) to put on your shop's window to show p
                                     Make sure you keep this email saved for when your cling arrives.
                                   </div>
                                 </td>
-                              </tr>
+                              </tr>`
+                              }
                             </table>
                           </td>
                         </tr>

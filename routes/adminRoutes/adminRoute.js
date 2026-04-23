@@ -27,9 +27,30 @@ const { createDestinationDirectory } = require('../../utils/customFunctions')
 
 router.post('/auth/login', catchAsync(adminController.login))
 router.post(
+  '/auth/verify-login-two-factor',
+  catchAsync(adminController.verifyAdminLoginTwoFactor),
+)
+router.put(
+  '/toggle-admin-two-factor',
+  protect,
+  catchAsync(adminController.updateAdminTwoFactorSetting),
+)
+router.post(
   '/change-admin-password',
   protect,
   catchAsync(adminController.changeAdminPassword),
+)
+router.post(
+  '/request-otp-forget-password',
+  catchAsync(adminController.requestAdminForgotPasswordOtp),
+)
+router.post(
+  '/verify-otp-forget-password',
+  catchAsync(adminController.verifyAdminForgotPasswordOtp),
+)
+router.patch(
+  '/reset-password',
+  catchAsync(adminController.resetAdminForgotPassword),
 )
 
 //!NEW REPORTS FOR ADMIN
