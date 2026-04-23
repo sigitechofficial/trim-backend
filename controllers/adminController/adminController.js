@@ -113,7 +113,7 @@ const createSendToken = (
       joinOn: user.createdAt,
       userType: userType,
       features: features,
-      twoFactor: false,
+      twoFactor: `${user.adminTwoFactorEnabled}`,
     },
   })
 }
