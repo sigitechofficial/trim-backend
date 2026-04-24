@@ -15,6 +15,11 @@ module.exports = (sequelize, DataTypes) =>{
           allowNull: true,
           defaultValue: "",
       },
+      tabId: {
+          type: DataTypes.STRING(),
+          allowNull: true,
+          defaultValue: "",
+      },
   },{
     paranoid: true,  
     timestamps: true,

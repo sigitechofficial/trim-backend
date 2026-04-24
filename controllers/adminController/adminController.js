@@ -2239,7 +2239,7 @@ exports.fetchRolesList = async (req, res, next) => {
 exports.fetchActiveFeatures = async (req, res, next) => {
   const featureData = await feature.findAll({
     where: { status: true },
-    attributes: ['id', 'title'],
+    attributes: ['id', 'title', 'tabId'],
   })
   let permissionType = ['create', 'read', 'update', 'delete']
   const employeePermissions = FormatPermissions(featureData, [], permissionType)
@@ -2267,6 +2267,7 @@ exports.addFeatures = async (req, res, next) => {
     return {
       title: f.title != null ? String(f.title) : '',
       key: f.key != null ? String(f.key) : '',
+      tabId: f.tabId != null ? String(f.tabId) : '',
       status: f.status === false ? false : true,
     }
   })
@@ -2288,6 +2289,7 @@ exports.fetchAllFeaturesCatalog = async (req, res, next) => {
     'id',
     'title',
     'key',
+    'tabId',
     'status',
     'createdAt',
     'updatedAt',
@@ -2312,9 +2314,10 @@ exports.updateFeature = async (req, res, next) => {
   if (!id) throw new AppError('Invalid request format', 200)
   const row = await feature.findByPk(id)
   if (!row) throw new AppError('Feature not found', 200)
-  const { title, key, status } = req.body
+  const { title, key, tabId, status } = req.body
   if (title !== undefined) row.title = String(title)
   if (key !== undefined) row.key = String(key)
+  if (tabId !== undefined) row.tabId = String(tabId)
   if (status !== undefined) row.status = Boolean(status)
   await row.save()
   return res.status(200).json(
