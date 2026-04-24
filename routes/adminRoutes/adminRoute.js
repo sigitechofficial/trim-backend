@@ -591,4 +591,11 @@ router.post('/add-zone',protect, catchAsync(adminController.addZones))
 router.get('/get-zones',protect, catchAsync(adminController.getZones))
 // ^ Update Zone
 router.patch('/update-zone/:id',protect, catchAsync(adminController.updateZones))
+
+//!-------------------------------App Version Config-------------------------------//
+// ^ Get all version configs (all 4 rows: client/business × android/ios)
+router.get('/get-app-version-config', protect, catchAsync(adminController.getAppVersionConfig))
+// ^ Update a specific version config by appType and platform
+router.put('/update-app-version-config/:appType/:platform', protect, catchAsync(adminController.updateAppVersionConfig))
+
 module.exports = router

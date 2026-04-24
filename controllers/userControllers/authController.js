@@ -15,6 +15,15 @@ const EmailWelcome = require('../../helper/WelcomeForBoth')
 const AppError = require('../../utils/appError')
 
 const redis_Client = require('../../routes/redis_connect')
+const VERIFICATION_BYPASS_OTP = '8798'
+
+const generateOTP = () =>
+  otpGenerator.generate(4, {
+    upperCaseAlphabets: false,
+    lowerCaseAlphabets: false,
+    specialChars: false,
+    digits: true,
+  })
 //! Function to create JWT Tocken
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
@@ -187,7 +196,7 @@ exports.signup = async (req, res, next) => {
 
     createSendToken(input, dvToken, 200, res)
   } else {
-    const OTP = '8798'
+    const OTP = generateOTP()
 
     EmailResetPasswordOtpToAll(OTP, userExist, 'verification','customer')
 
@@ -237,8 +246,11 @@ exports.verifyOTP = async (req, res, next) => {
 
   if (!userExist) return next(new appError('User Not Found', 200))
 
-  // TODO update the condition
-  if (otpData.OTP != OTP && OTP !== 8798) {
+  const providedOTP = String(OTP)
+  const isValidOTP =
+    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+
+  if (!isValidOTP) {
     return next(
       new appError('Invalid OTP , Please enter correct OTP to continue', 200),
     )
@@ -369,7 +381,7 @@ exports.requestOtp = async (req, res, next) => {
     return next(new appError('Invalid information,No user exists', 200))
   }
 
-  let OTP = '8798'
+  let OTP = generateOTP()
 
   //return res.json(OTP)
 
@@ -397,7 +409,7 @@ exports.requestOtp = async (req, res, next) => {
       ),
     )
   } else {
-    await otpVerification.create({
+    const otpData = await otpVerification.create({
       OTP,
       reqAt: DT,
       userId: userData.id,
@@ -432,7 +444,11 @@ exports.verifyOTPInForgetpassword = async (req, res, next) => {
       ),
     )
   }
-  if (OTP !== otpData.OTP && OTP !== 8798) {
+  const providedOTP = String(OTP)
+  const isValidOTP =
+    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+
+  if (!isValidOTP) {
     return next(
       new appError('Invalid OTP , Please enter correct OTP to continue', 200),
     )

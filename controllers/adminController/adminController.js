@@ -40,7 +40,8 @@ const {
   salaryPayout,
   countries,
   cities,
-  zones
+  zones,
+  appVersionConfig,
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -2238,7 +2239,7 @@ exports.fetchRolesList = async (req, res, next) => {
 exports.fetchActiveFeatures = async (req, res, next) => {
   const featureData = await feature.findAll({
     where: { status: true },
-    attributes: ['id', 'title'],
+    attributes: ['id', 'title', 'tabId'],
   })
   let permissionType = ['create', 'read', 'update', 'delete']
   const employeePermissions = FormatPermissions(featureData, [], permissionType)
@@ -2266,6 +2267,7 @@ exports.addFeatures = async (req, res, next) => {
     return {
       title: f.title != null ? String(f.title) : '',
       key: f.key != null ? String(f.key) : '',
+      tabId: f.tabId != null ? String(f.tabId) : '',
       status: f.status === false ? false : true,
     }
   })
@@ -2287,6 +2289,7 @@ exports.fetchAllFeaturesCatalog = async (req, res, next) => {
     'id',
     'title',
     'key',
+    'tabId',
     'status',
     'createdAt',
     'updatedAt',
@@ -2311,9 +2314,10 @@ exports.updateFeature = async (req, res, next) => {
   if (!id) throw new AppError('Invalid request format', 200)
   const row = await feature.findByPk(id)
   if (!row) throw new AppError('Feature not found', 200)
-  const { title, key, status } = req.body
+  const { title, key, tabId, status } = req.body
   if (title !== undefined) row.title = String(title)
   if (key !== undefined) row.key = String(key)
+  if (tabId !== undefined) row.tabId = String(tabId)
   if (status !== undefined) row.status = Boolean(status)
   await row.save()
   return res.status(200).json(
@@ -3229,4 +3233,56 @@ exports.updateZones = async (req, res, next) => {
 exports.getZones = async (req, res, next) => {
   const data = await zones.findAll()
   return res.status(200).json(response({ data: { zones: data } }))
+}
+
+//!-------------------------------App Version Config-------------------------------//
+
+// ^ Get all app version config rows (all appTypes + platforms)
+exports.getAppVersionConfig = async (req, res, next) => {
+  const data = await appVersionConfig.findAll({
+    order: [['appType', 'ASC'], ['platform', 'ASC']],
+  })
+  return res.status(200).json(response({ data: { appVersionConfig: data } }))
+}
+
+// ^ Update a specific app version config row by appType + platform
+exports.updateAppVersionConfig = async (req, res, next) => {
+  const { appType, platform } = req.params
+  const { latestVersion, minimumSupportedVersion, forceUpdateMessage, softUpdateMessage } = req.body
+
+  const validAppTypes = ['client', 'business']
+  const validPlatforms = ['android', 'ios']
+
+  if (!validAppTypes.includes(appType)) {
+    return next(new appError(`Invalid appType. Must be one of: ${validAppTypes.join(', ')}`, 400))
+  }
+
+  if (!validPlatforms.includes(platform)) {
+    return next(new appError(`Invalid platform. Must be one of: ${validPlatforms.join(', ')}`, 400))
+  }
+
+  if (!latestVersion && !minimumSupportedVersion && forceUpdateMessage === undefined && softUpdateMessage === undefined) {
+    return next(new appError('At least one field is required to update', 400))
+  }
+
+  const row = await appVersionConfig.findOne({ where: { appType, platform } })
+
+  if (!row) {
+    return next(new appError(`No config found for appType: ${appType}, platform: ${platform}`, 404))
+  }
+
+  const updateFields = {}
+  if (latestVersion) updateFields.latestVersion = latestVersion
+  if (minimumSupportedVersion) updateFields.minimumSupportedVersion = minimumSupportedVersion
+  if (forceUpdateMessage !== undefined) updateFields.forceUpdateMessage = forceUpdateMessage || null
+  if (softUpdateMessage !== undefined) updateFields.softUpdateMessage = softUpdateMessage || null
+
+  await row.update(updateFields)
+
+  return res.status(200).json(
+    response({
+      message: `App version config updated for ${appType} / ${platform}`,
+      data: { appVersionConfig: row },
+    }),
+  )
 }
