@@ -30,6 +30,15 @@ const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
 const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
 const redis_Client = require('../../routes/redis_connect')
+const VERIFICATION_BYPASS_OTP = '8798'
+
+const generateOTP = () =>
+  otpGenerator.generate(4, {
+    upperCaseAlphabets: false,
+    lowerCaseAlphabets: false,
+    specialChars: false,
+    digits: true,
+  })
 
 //! Function to create JWT Tocken
 const signTocken = (id, dvToken) => {
@@ -310,7 +319,7 @@ exports.signup = async (req, res, next) => {
       )
     }
 
-    const OTP = '8798'
+    const OTP = generateOTP()
     EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
     const found = userExist.deviceTokens.find((ele) => ele.tokenId === dvToken)
     if (!found)
@@ -382,7 +391,7 @@ exports.signup = async (req, res, next) => {
     })
 
     // generating OTP
-    let OTP = '8798'
+    let OTP = generateOTP()
     //return res.json(OTP)
     EmailResetPasswordOtpToAll(OTP, newUser, 'verification','salon')
 
@@ -426,12 +435,12 @@ exports.resendOTP = async (req, res, next) => {
     )
   }
   let otpData = await otpVerification.findOne({ where: { userId } })
-  let OTP = '8798'
+  let OTP = generateOTP()
   //return res.json(OTP)
   EmailResetPasswordOtpToAll(OTP, userExist, 'verification','salon')
   let DT = new Date()
   if (!otpData) {
-    await otpVerification.create({
+    otpData = await otpVerification.create({
       OTP,
       reqAt: DT,
       verifiedInForgetCase: false,
@@ -474,8 +483,11 @@ exports.verifyOTP = async (req, res, next) => {
     return next(
       new appError('OTP Data not available,Please try sending OTP again', 200),
     )
-  // TODO update the condition
-  if (otpData.OTP != OTP && OTP !== '8798')
+  const providedOTP = String(OTP)
+  const isValidOTP =
+    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+
+  if (!isValidOTP)
     return next(
       new appError('Invalid OTP , Please enter correct OTP to continue', 200),
     )
@@ -805,7 +817,7 @@ exports.forgotPassword = async (req, res, next) => {
     )
   }
 
-  let OTP = '8798'
+  let OTP = generateOTP()
 
   //return res.json(OTP)
   EmailResetPasswordOtpToAll(OTP, userData, 'forgetPassword','salon')
@@ -857,7 +869,11 @@ exports.verifyPasswordOtp = async (req, res, next) => {
       ),
     )
   }
-  if (OTP !== otpData.OTP && OTP !== '8798') {
+  const providedOTP = String(OTP)
+  const isValidOTP =
+    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+
+  if (!isValidOTP) {
     return next(
       new appError(
         'The OTP entered is incorrect. Please double-check and try again.',
