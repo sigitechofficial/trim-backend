@@ -22,14 +22,24 @@ async function fetchFromPlayStore(packageName) {
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
     })
 
-    const androidpublisher = google.androidpublisher({ version: 'v3', auth })
+    const authClient = await auth.getClient()
+    const androidpublisher = google.androidpublisher({ version: 'v3', auth: authClient })
 
-    const response = await androidpublisher.tracks.get({
+    // Create a temporary edit to read track info (edits.tracks works across all googleapis versions)
+    const editResponse = await androidpublisher.edits.insert({ packageName })
+    const editId = editResponse.data.id
+
+    // Read production track within the edit
+    const trackResponse = await androidpublisher.edits.tracks.get({
       packageName,
+      editId,
       track: 'production',
     })
 
-    const releases = response.data.releases || []
+    // Delete the edit immediately — we only needed it to read the track
+    await androidpublisher.edits.delete({ packageName, editId }).catch(() => {})
+
+    const releases = trackResponse.data.releases || []
     const completed = releases.find((r) => r.status === 'completed')
 
     if (!completed) {
