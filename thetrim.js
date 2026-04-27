@@ -52,6 +52,8 @@ const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRo
 app.use('/webhook', bodyParser.raw({ type: 'application/json' }), webhookRoute)
 // Apple webhook needs raw body parser
 app.use('/apple-subscriptions/webhook', bodyParser.raw({ type: 'application/json' }), appleSubscriptionRoute)
+// Apple App Store Connect version webhook needs raw body parser
+app.use('/apple-subscriptions/app-version-webhook', bodyParser.raw({ type: 'application/json' }), appleSubscriptionRoute)
 app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
