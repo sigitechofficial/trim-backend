@@ -18,6 +18,7 @@ module.exports = function (data) {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: [data.email], // list of receivers
+      bcc: 'sigidevelopers@gmail.com',
       subject: subject, // Subject line
       attachments: attachment.footer, // Only social media icons (no Trim logo)
       html: `<!DOCTYPE html>

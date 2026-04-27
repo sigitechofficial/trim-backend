@@ -24,7 +24,7 @@ let description2 = `If you want to take a picture of your new window cling and s
         {
             from: process.env.EMAIL_USERNAME, // sender address
             to: [data.email], // list of receivers
-    
+            bcc: 'sigidevelopers@gmail.com',
             subject: subject,
             // Ensure attachments array has no undefined entries
             attachments:attachments || [],

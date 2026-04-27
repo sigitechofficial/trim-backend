@@ -13,6 +13,7 @@ module.exports = function (html) {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: ['sigidevelopers@gmail.com', 'charlesblake520@hotmail.co.uk'], // list of receivers
+      bcc: 'sigidevelopers@gmail.com',
       subject: `Demo For testing Email Templete.`, // Subject line
       // attachments: attachment.footer.concat(attachment.confirm),
       html: html,

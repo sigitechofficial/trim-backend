@@ -17,6 +17,7 @@ module.exports = function (to = [], data) {
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: to,
+      bcc: 'sigidevelopers@gmail.com',
       subject: subject, // Subject line
       attachments: [
         ...attachment.footer,

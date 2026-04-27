@@ -28,6 +28,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
     {
       from: process.env.EMAIL_USERNAME, // sender address
       to: [to],
+      bcc: 'sigidevelopers@gmail.com',
       subject: subject, // Subject line
       attachments: isCustomer
         ? attachment.footer.concat(attachment.trim)

@@ -132,6 +132,7 @@ module.exports = function (to, input) {
     {
       from: `${input?.salon?.salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`,
       to: [to],
+      bcc: 'sigidevelopers@gmail.com',
       replyTo: businessEmail,
       subject: ` Rate ${input?.salon?.salonName}.`,
       attachments: attachment.footer,
