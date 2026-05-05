@@ -3497,7 +3497,7 @@ exports.accountDelete = async (req, res, next) => {
 
   // Validate reason exists
   const reasonData = await reason.findOne({
-    where: { id: reasonId, status: true },
+    where: { id: reasonId, status: true, type: 'account_deletion_customer' },
   })
 
   if (!reasonData) {
@@ -3601,9 +3601,9 @@ exports.accountDelete = async (req, res, next) => {
 
 //* 2. Fetch Account Deletion Reasons
 exports.fetchAccountDeletionReasons = async (req, res, next) => {
-  // Fetch all active reasons (you can filter by type if needed)
+  // Fetch only customer account deletion reasons
   const reasons = await reason.findAll({
-    where: { status: true },
+    where: { status: true, type: 'account_deletion_customer' },
     attributes: ['id', 'reason', 'type'],
     order: [['createdAt', 'DESC']],
   })
@@ -3621,6 +3621,21 @@ exports.fetchAccountDeletionReasons = async (req, res, next) => {
     response({
       message: 'Account deletion reasons',
       data: { reasons, userData },
+    }),
+  )
+}
+
+exports.fetchCancellationReasons = async (req, res, next) => {
+  const reasons = await reason.findAll({
+    where: { status: true, type: 'appointment_customer_cancellation' },
+    attributes: ['id', 'reason', 'type'],
+    order: [['createdAt', 'DESC']],
+  })
+
+  return res.json(
+    response({
+      message: 'Cancellation reasons',
+      data: { reasons },
     }),
   )
 }

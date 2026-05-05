@@ -116,6 +116,11 @@ router.patch(
   protect,
   catchAsync(appController.cancelAppointment),
 )
+router.get(
+  '/cancellation-reasons',
+  protect,
+  catchAsync(appController.fetchCancellationReasons),
+)
 
 router.get(
   '/appointments',

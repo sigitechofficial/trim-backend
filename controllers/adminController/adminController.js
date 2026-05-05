@@ -2829,8 +2829,38 @@ exports.delete = (Model) => async (req, res, next) => {
 
 //^ 1.Add Reasons  ----------------------------
 
+const VALID_REASON_TYPES = [
+  'subscription',
+  'appointment_customer_cancellation',
+  'appointment_salon_owner_cancellation',
+  'appointment_employee_cancellation',
+  'account_deletion_customer',
+  'account_deletion_salon',
+]
+
+const LEGACY_REASON_TYPE_MAP = {
+  appointment: 'appointment_customer_cancellation',
+}
+
+const normalizeReasonType = (type) => LEGACY_REASON_TYPE_MAP[type] || type
+
+const appointmentTypeByActor = {
+  customer: 'appointment_customer_cancellation',
+  salon_owner: 'appointment_salon_owner_cancellation',
+  employee: 'appointment_employee_cancellation',
+}
+
+const ensureValidReasonType = (type) => {
+  const normalizedType = normalizeReasonType(type)
+  if (!VALID_REASON_TYPES.includes(normalizedType)) {
+    throw new AppError('Invalid reason type', 200)
+  }
+  return normalizedType
+}
+
 exports.addReasons = async (req, res, next) => {
-  req.body.type = req.params.type
+  const normalizedType = ensureValidReasonType(req.params.type)
+  req.body.type = normalizedType
   const data = await reason.create(req.body)
 
   return res.status(200).json(
@@ -2844,7 +2874,18 @@ exports.addReasons = async (req, res, next) => {
 //^ 2.Fetch Reasons  ----------------------------
 
 exports.fetchReasons = async (req, res, next) => {
-    const whereCondition = req.params?.type ? { type: req.params.type } : {};
+    const whereCondition = {}
+    if (req.params?.type) {
+      if (req.params.type === 'appointment' && req.query?.actor) {
+        const actorType = appointmentTypeByActor[req.query.actor]
+        if (!actorType) {
+          throw new AppError('Invalid actor for appointment reasons', 200)
+        }
+        whereCondition.type = actorType
+      } else {
+        whereCondition.type = ensureValidReasonType(req.params.type)
+      }
+    }
 
     const data = await reason.findAll({
       where: whereCondition,
@@ -2863,9 +2904,10 @@ exports.fetchReasons = async (req, res, next) => {
 //^ 2.Update Reasons  ----------------------------
 
 exports.updateReasons = async (req, res, next) => {
+  const normalizedType = ensureValidReasonType(req.params?.type)
   const record = await reason.findOne({
     where: {
-      type: req.params?.type,
+      type: normalizedType,
       id: req.params?.id
     }
   })
@@ -2877,12 +2919,14 @@ exports.updateReasons = async (req, res, next) => {
   await reason.update(
     { 
         reason: req.body?.reason,
-        type: req.body?.type,
+        type: req.body?.type
+          ? ensureValidReasonType(req.body?.type)
+          : normalizedType,
         
     },
     {
       where: {
-        type: req.params?.type,
+        type: normalizedType,
         id: req.params?.id
       }
     },
@@ -2899,9 +2943,10 @@ exports.updateReasons = async (req, res, next) => {
 //^ 3.Update Status  ----------------------------
 
 exports.changeReasonStatus = async (req, res, next) => {
+  const normalizedType = ensureValidReasonType(req.params?.type)
   const data=await reason.update(
     { status: req.body?.status },
-    { where: { type: req.params?.type, id: req.params?.id } },
+    { where: { type: normalizedType, id: req.params?.id } },
   )
 
   return res.status(200).json(
@@ -2915,7 +2960,10 @@ exports.changeReasonStatus = async (req, res, next) => {
 //^ 4.Delete Reasons  ----------------------------
 
 exports.deleteReasons = async (req, res, next) => {
-  const data = await reason.destroy({ where: { id: req.params?.id } })
+  const normalizedType = ensureValidReasonType(req.params?.type)
+  const data = await reason.destroy({
+    where: { id: req.params?.id, type: normalizedType },
+  })
 
   return res.status(200).json(
     response({

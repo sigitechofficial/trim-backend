@@ -7,9 +7,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       type: {
-        type: DataTypes.ENUM('subscription', 'appointment'),
+        type: DataTypes.ENUM(
+          'subscription',
+          'appointment_customer_cancellation',
+          'appointment_salon_owner_cancellation',
+          'appointment_employee_cancellation',
+          'account_deletion_customer',
+          'account_deletion_salon',
+        ),
         allowNull: false,
-        defaultValue: 'appointment',
+        defaultValue: 'appointment_customer_cancellation',
       },
       status: {
         type: DataTypes.BOOLEAN,
