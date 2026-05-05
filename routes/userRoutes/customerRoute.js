@@ -197,6 +197,7 @@ router.get('/check-subscription', catchAsync(appController.checkSubscription))
 // Account Deletion Routes
 router.get(
   '/account-deletion-reasons',
+  publicProtected,
   catchAsync(appController.fetchAccountDeletionReasons),
 )
 

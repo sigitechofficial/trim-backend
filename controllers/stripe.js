@@ -245,8 +245,10 @@ async function createPaymentIntendForUpFrontPayments(
   console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ accountId:', accountId)
   console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ customerId ====================================>>>>>>>>>>NEWNEW:', customerId)
   try {
+    // Fixed surcharge on upfront PaymentIntent (GBP). Set non-zero when product wants a platform top-up (was 0.50).
+    const upfrontPaymentSurchargeGbp = 0
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: convertToCents(amount + 0.50),
+      amount: convertToCents(amount + upfrontPaymentSurchargeGbp),
       currency: 'gbp',
       //customer: customerId,
       //payment_method: 'pm_1RpnnUCwrlf25ZndWHZGWJ3B',

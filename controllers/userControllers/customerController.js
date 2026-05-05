@@ -3608,10 +3608,19 @@ exports.fetchAccountDeletionReasons = async (req, res, next) => {
     order: [['createdAt', 'DESC']],
   })
 
+  // If accessToken is sent and valid (via publicProtected), include user email.
+  let userData = null
+  if (req.user?.id) {
+    userData = await user.findOne({
+      where: { id: req.user.id, status: true },
+      attributes: ['firstName', 'lastName', 'email'],
+    })
+  }
+
   return res.json(
     response({
       message: 'Account deletion reasons',
-      data: { reasons },
+      data: { reasons, userData },
     }),
   )
 }
@@ -4848,11 +4857,12 @@ exports.testing = async (req, res, next) => {
 
 
 /*
-* Transfer 0.50 Amouunt from To Admin Stripe
-*/
+ * Transfer fixed fee from connected account to platform (admin Stripe).
+ * Amount is GBP; set via fixedFeeTransferGbp below when you want a non-zero fee (was 0.50).
+ */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
     const { connectedAccountId } = req.body;
-    const feeAmount = 0.50;
+    const fixedFeeTransferGbp = 0;
 
     // 1. Fetch booking with relations
     // const appointment = await booking.findOne({
@@ -4888,7 +4898,7 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
 
     // 3. Call Stripe transfer
     const result = await Stripe.transferToPlatform(
-      feeAmount,
+      fixedFeeTransferGbp,
       connectedAccountId,
     );
 
