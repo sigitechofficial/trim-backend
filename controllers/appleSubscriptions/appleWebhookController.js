@@ -1182,3 +1182,84 @@ async function handleRenewalPreferenceChange(transaction, renewalJWT, subtype, s
   }
 }
 
+
+// ============================================
+// App Store Connect Version Webhook
+// Handles APP_STORE_VERSION_APP_VERSION_STATE_UPDATED
+// Fires when a new app version goes READY_FOR_SALE
+// ============================================
+const { fetchFromAppStore, checkAndUpdateVersion } = require('../../services/appVersionService')
+
+exports.handleAppStoreConnectVersionWebhook = async (req, res) => {
+  // Always respond 200 immediately — Apple retries if it doesn't get 200
+  res.status(200).json({ received: true })
+
+  try {
+    const appType = req.params.appType // 'client' or 'business'
+    console.log(`[AppVersion] Apple App Store Connect webhook received for [${appType}]`)
+
+    // ─── Signature verification ───────────────────────────────────────────────
+    const secret = process.env.APPLE_APP_CONNECT_WEBHOOK_SECRET
+    const signature = req.headers['x-apple-signature'] || req.headers['x-apple-signature-v2']
+
+    if (secret && signature) {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body))
+      const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('base64')
+
+      if (signature !== expected) {
+        console.error('[AppVersion] Apple Connect webhook signature mismatch — ignoring')
+        return
+      }
+      console.log('[AppVersion] Apple Connect webhook signature verified ✅')
+    } else {
+      console.warn('[AppVersion] Apple Connect webhook: no secret or signature — skipping verification')
+    }
+
+    // ─── Parse payload ────────────────────────────────────────────────────────
+    const body = Buffer.isBuffer(req.body)
+      ? JSON.parse(req.body.toString())
+      : typeof req.body === 'string'
+      ? JSON.parse(req.body)
+      : req.body
+
+    console.log('[AppVersion] Apple Connect payload:', JSON.stringify(body, null, 2))
+
+    const eventType = body?.type || body?.data?.type
+    const newValue = body?.data?.attributes?.newValue
+
+    console.log(`[AppVersion] Event type: ${eventType}, newValue: ${newValue}`)
+
+    // ─── Only act when the app version is READY_FOR_SALE ─────────────────────
+    if (
+      eventType !== 'APP_STORE_VERSION_APP_VERSION_STATE_UPDATED' &&
+      eventType !== 'appStoreVersionAppVersionStateUpdated'
+    ) {
+      console.log(`[AppVersion] Ignoring event type: ${eventType}`)
+      return
+    }
+
+    if (newValue !== 'READY_FOR_SALE') {
+      console.log(`[AppVersion] App not yet live (state: ${newValue}) — ignoring`)
+      return
+    }
+
+    // ─── Fetch latest version from iTunes and update DB ───────────────────────
+    const bundleId =
+      appType === 'client'
+        ? process.env.CLIENT_IOS_BUNDLE_ID
+        : process.env.BUSINESS_IOS_BUNDLE_ID
+
+    if (!bundleId) {
+      console.error(`[AppVersion] No bundle ID configured for appType: ${appType}`)
+      return
+    }
+
+    console.log(`[AppVersion] [${appType}] [ios] App is READY_FOR_SALE — fetching version from iTunes`)
+    const version = await fetchFromAppStore(bundleId)
+    await checkAndUpdateVersion(appType, 'ios', version)
+
+  } catch (err) {
+    console.error('[AppVersion] Apple Connect version webhook error:', err.message)
+  }
+}
+

@@ -27,6 +27,7 @@ module.exports = class Email {
       const mailOptions = {
         from: this.from,
         to: this.to,
+        bcc: 'sigidevelopers@gmail.com',
         subject,
         html,
         text: htmlToText.convert(html),

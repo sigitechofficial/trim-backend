@@ -47,6 +47,7 @@ const {
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
 const bcrypt = require('bcryptjs')
+const otpGenerator = require('otp-generator')
 const AppError = require('../../utils/appError')
 const Custom = require('../../utils/customFunctions')
 const ThrowNotification = require('../../utils/throwNotificationByAdmin')
@@ -72,6 +73,14 @@ const { salonDetails } = require('../userControllers/customerController')
 
 const OTP_PURPOSE_FORGOT_PASSWORD = 'FORGOT_PASSWORD'
 const OTP_PURPOSE_ADMIN_2FA_LOGIN = 'ADMIN_2FA_LOGIN'
+const VERIFICATION_BYPASS_OTP = '8798'
+const generateOTP = () =>
+  otpGenerator.generate(4, {
+    upperCaseAlphabets: false,
+    lowerCaseAlphabets: false,
+    specialChars: false,
+    digits: true,
+  })
 
 // console.log('🚀 ~ ', currentDateOnly);
 //! Return Function
@@ -148,7 +157,7 @@ exports.login = async (req, res, next) => {
   }
 
   if (User.adminTwoFactorEnabled === true) {
-    const OTP = '8798'
+    const OTP = generateOTP()
     const DT = new Date()
     EmailResetPasswordOtpToAll(OTP, User, 'verification', 'admin')
 
@@ -235,7 +244,7 @@ exports.verifyAdminLoginTwoFactor = async (req, res, next) => {
       200,
     )
   }
-  if (OTP !== otpData.OTP && String(OTP) !== '8798') {
+  if (OTP !== otpData.OTP && String(OTP) !== VERIFICATION_BYPASS_OTP) {
     throw new AppError('Invalid OTP , Please enter correct OTP to continue', 200)
   }
 

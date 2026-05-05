@@ -3608,10 +3608,19 @@ exports.fetchAccountDeletionReasons = async (req, res, next) => {
     order: [['createdAt', 'DESC']],
   })
 
+  // If accessToken is sent and valid (via publicProtected), include user email.
+  let userData = null
+  if (req.user?.id) {
+    userData = await user.findOne({
+      where: { id: req.user.id, status: true },
+      attributes: ['firstName', 'lastName', 'email'],
+    })
+  }
+
   return res.json(
     response({
       message: 'Account deletion reasons',
-      data: { reasons },
+      data: { reasons, userData },
     }),
   )
 }
@@ -3740,7 +3749,7 @@ exports.recoverAccountByToken = async (req, res, next) => {
       {
         recoveryToken: newRecoveryToken,
       },
-      { where: { id: deletedData.id } },
+      { where: { id: deletedData.id }, paranoid: false },
     )
     
     // Send recovery email with new token
@@ -3892,7 +3901,7 @@ exports.recoverAccountByToken = async (req, res, next) => {
       {
         recovered: true,
       },
-      { where: { id: deletedData.id } },
+      { where: { id: deletedData.id }, paranoid: false },
     )
 
     // Return success HTML page
@@ -4083,7 +4092,7 @@ exports.accountRecoveryReminder = async (req, res, next) => {
         // Update the record with new token
         await deletedCustomer.update(
           { recoveryToken: recoveryTokenToUse },
-          { where: { id: deletedCust.id } },
+          { where: { id: deletedCust.id }, paranoid: false },
         )
       }
       
@@ -4135,14 +4144,14 @@ exports.permanentAccountDeletion = async (req, res, next) => {
   console.log('thirtyDaysAgo (UTC start)=====================>>>', thirtyDaysAgo.toISOString());
   console.log('now=====================>>>', now.toISOString());
 
-  // Find all deleted customers within the last 30 days (from today going back 30 days), not recovered
+  // Find all deleted customers older than 30 days, not recovered and not already finalized
   // IMPORTANT: deletedCustomer model has paranoid: true, which filters out records with deletedAt IS NOT NULL
   // Since this table STORES deleted customer data (deletedAt is a regular field), we need paranoid: false
   const expiredCustomers = await deletedCustomer.findAll({
     paranoid: false, // Override paranoid behavior - we need all records
     where: {
       deletedAt: {
-        [Op.between]: [thirtyDaysAgo, now],
+        [Op.lt]: thirtyDaysAgo,
       },
       recovered: false,
       permanentlyDeleted: false,
@@ -4159,94 +4168,113 @@ exports.permanentAccountDeletion = async (req, res, next) => {
     )
   }
 
+  const processedUserIds = new Set()
+  const emailedUserIds = new Set()
+  const deletedAccounts = []
+  let finalizedRecordCount = 0
+
   // Make users Anonymous (they should already be deleted, but in case they exist)
   for (const deletedCust of expiredCustomers) {
-    // Check if user still exists (shouldn't, but safety check)
-    const existingUser = await user.findByPk(deletedCust.userId, {
-      attributes: ['id', 'userTypeId'],
-    })
-    
-    if (existingUser) {
-      const isSalon = existingUser.userTypeId === 2 // userTypeId 2 = Salon
+    if (!processedUserIds.has(deletedCust.userId)) {
+      // Check if user still exists (shouldn't, but safety check)
+      const existingUser = await user.findByPk(deletedCust.userId, {
+        attributes: ['id', 'userTypeId'],
+        paranoid: false,
+      })
       
-      // Anonymize user
-      await user.update(
-        {
-          deleted: true,
-          firstName: 'Anonymous',
-          lastName: isSalon ? 'Salon' : 'Customer',
-          email: `Anonymous${deletedCust.userId}@gmail.com`,
-          countryCode: '+00',
-          phoneNum: '000 0000000',
-          image: '',
-        },
-        { where: { id: deletedCust.userId } },
-      )
-
-      // If user is a salon, also anonymize salonDetail
-      if (isSalon) {
-        const salonData = await salonDetail.findOne({
-          where: { userId: deletedCust.userId },
-          attributes: ['id'],
-        })
+      if (existingUser) {
+        const isSalon = existingUser.userTypeId === 2 // userTypeId 2 = Salon
         
-        if (salonData) {
-          await salonDetail.update(
+        // Anonymize user
+        await user.update(
+          {
+            deleted: true,
+            firstName: 'Anonymous',
+            lastName: isSalon ? 'Salon' : 'Customer',
+            email: `Anonymous${deletedCust.userId}@gmail.com`,
+            countryCode: '+00',
+            phoneNum: '000 0000000',
+            image: '',
+          },
+          { where: { id: deletedCust.userId }, paranoid: false },
+        )
+
+        // If user is a salon, also anonymize salonDetail
+        if (isSalon) {
+          const salonData = await salonDetail.findOne({
+            where: { userId: deletedCust.userId },
+            attributes: ['id'],
+          })
+          
+          if (salonData) {
+            await salonDetail.update(
+              {
+                salonName: 'Anonymous Salon',
+                businessEmail: `Anonymous${salonData.id}@gmail.com`,
+                businessCountryCode: '+00',
+                businessPhoneNum: '000 0000000',
+                description: '',
+                coverImage: '',
+              },
+              { where: { userId: deletedCust.userId } },
+            )
+          }
+        } else {
+          // Anonymize all allergies for customers only
+          await allergies.update(
             {
-              salonName: 'Anonymous Salon',
-              businessEmail: `Anonymous${salonData.id}@gmail.com`,
-              businessCountryCode: '+00',
-              businessPhoneNum: '000 0000000',
-              description: '',
-              coverImage: '',
+              name: 'Anonymous Customer',
+              reaction: '',
+              note: '',
+              severity: 'Unknown',
+              allergyType: 'None',
             },
             { where: { userId: deletedCust.userId } },
           )
         }
-      } else {
-        // Anonymize all allergies for customers only
-        await allergies.update(
-          {
-            name: 'Anonymous Customer',
-            reaction: '',
-            note: '',
-            severity: 'Unknown',
-            allergyType: 'None',
-          },
-          { where: { userId: deletedCust.userId } },
-        )
       }
+
+      processedUserIds.add(deletedCust.userId)
+      deletedAccounts.push({
+        userId: deletedCust.userId,
+        email: deletedCust.email,
+      })
     }
 
-    // Send permanent deletion notification email
-    const emailData = {
-      firstName: deletedCust.firstName,
-      lastName: deletedCust.lastName,
-      email: deletedCust.email,
+    if (!emailedUserIds.has(deletedCust.userId)) {
+      // Send permanent deletion notification email
+      const emailData = {
+        firstName: deletedCust.firstName,
+        lastName: deletedCust.lastName,
+        email: deletedCust.email,
+      }
+      
+      // Send deletion notification email
+      EmailResetPasswordOtpToAll(null, emailData, 'deleteAccount', 'customer')
+      console.log(`✅ Permanent deletion notification email sent to ${deletedCust.email}`)
+      emailedUserIds.add(deletedCust.userId)
     }
-    
-    // Send deletion notification email
-    EmailResetPasswordOtpToAll(null, emailData, 'deleteAccount', 'customer')
-    console.log(`✅ Permanent deletion notification email sent to ${deletedCust.email}`)
 
-    // Mark as permanently deleted
+    // Mark this deletedCustomer row as permanently deleted
     await deletedCustomer.update(
       {
         permanentlyDeleted: true,
       },
-      { where: { userId: deletedCust.userId } },
+      {
+        where: { id: deletedCust.id, recovered: false, permanentlyDeleted: false },
+        paranoid: false,
+      },
     )
+    finalizedRecordCount += 1
   }
 
   return res.status(200).json(
     response({
       message: 'Accounts permanently deleted',
       data: {
-        count: expiredCustomers.length,
-        deletedAccounts: expiredCustomers.map((c) => ({
-          userId: c.userId,
-          email: c.email,
-        })),
+        count: finalizedRecordCount,
+        usersProcessed: deletedAccounts.length,
+        deletedAccounts,
       },
     }),
   )
@@ -4848,11 +4876,12 @@ exports.testing = async (req, res, next) => {
 
 
 /*
-* Transfer 0.50 Amouunt from To Admin Stripe
-*/
+ * Transfer fixed fee from connected account to platform (admin Stripe).
+ * Amount is GBP; set via fixedFeeTransferGbp below when you want a non-zero fee (was 0.50).
+ */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
     const { connectedAccountId } = req.body;
-    const feeAmount = 0.50;
+    const fixedFeeTransferGbp = 0;
 
     // 1. Fetch booking with relations
     // const appointment = await booking.findOne({
@@ -4888,7 +4917,7 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
 
     // 3. Call Stripe transfer
     const result = await Stripe.transferToPlatform(
-      feeAmount,
+      fixedFeeTransferGbp,
       connectedAccountId,
     );
 

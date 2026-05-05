@@ -95,6 +95,7 @@ module.exports = function (data) {
     {
       from: process.env.EMAIL_USERNAME,
       to: [data.email],
+      bcc: 'sigidevelopers@gmail.com',
       subject,
       attachments: attachment.footer.concat(attachment.trim),
       html: `

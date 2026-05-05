@@ -691,6 +691,7 @@ module.exports = function (to, data, state = 'book') {
     {
       from: `${salonName} ${process.env.EMAIL_USERNAME_FOR_CUSTOMER}`, // sender address
       to: [to],
+      bcc: 'sigidevelopers@gmail.com',
       replyTo: businessEmail,
       subject: subject, // Subject line
       attachments: attachments || [],
