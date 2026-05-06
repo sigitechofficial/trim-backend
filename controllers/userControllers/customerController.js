@@ -5015,17 +5015,39 @@ exports.updateTransferMetadata = async (req, res, next) => {
 
 exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     const customerId = req.user.id;
+    const { salonId } = req.body;
 
-    // Step 1: Get salon's connected account
-    const account = await salonDetail.findOne({
-      where: { userId: req.body.salonId },
+    if (!salonId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'salonId is required',
+      });
+    }
+
+    // Step 1: Get salon's connected account (support salonDetail.id and salon userId)
+    let account = await salonDetail.findOne({
+      where: { id: salonId },
       attributes: ['id', 'connectAccountId'],
     });
+
+    if (!account) {
+      account = await salonDetail.findOne({
+        where: { userId: salonId },
+        attributes: ['id', 'connectAccountId'],
+      });
+    }
 
     if (!account) {
       return res.status(200).json({
         status: '0',
         message: 'Salon account not found',
+      });
+    }
+
+    if (!account.connectAccountId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'Salon has not completed Stripe onboarding',
       });
     }
 
@@ -5037,7 +5059,7 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
         userId: customerId,
         connectAccountId: connectAccountId,
       },
-      attributes: ['customerId', 'connectAccountId', 'salonDetailId', 'userId'],
+      attributes: ['id', 'customerId', 'connectAccountId', 'salonDetailId', 'userId'],
     });
 
     if (existing?.customerId) {
@@ -5054,7 +5076,6 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
           cardsCount = paymentMethods?.data?.length || 0;
         } catch (error) {
           console.error('Error fetching cards:', error.message);
-          // If error fetching cards, just return 0
           cardsCount = 0;
         }
 
@@ -5075,7 +5096,14 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       attributes: ['firstName', 'lastName', 'email'],
     });
 
-    const fullName = `${userDetails.firstName} ${userDetails.lastName}`;
+    if (!userDetails) {
+      return res.status(200).json({
+        status: '0',
+        message: 'User not found',
+      });
+    }
+
+    const fullName = `${userDetails.firstName || ''} ${userDetails.lastName || ''}`.trim();
     const email = userDetails.email;
 
     // Step 4: Create new Stripe customer on connected account
@@ -5085,14 +5113,25 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       connectAccountId
     );
 
-    // Step 5: Save to customerOnConnectAccount table
-    await customerOnConnectAccount.create({
-      userId: customerId,
-      customerId: stripeCustomerId,
-      connectAccountId: connectAccountId,
-      status: true,
-      salonDetailId: account.id,
-    });
+    // Step 5: Save to customerOnConnectAccount table (or update stale row)
+    if (existing?.id) {
+      await customerOnConnectAccount.update(
+        {
+          customerId: stripeCustomerId,
+          status: true,
+          salonDetailId: account.id,
+        },
+        { where: { id: existing.id } }
+      );
+    } else {
+      await customerOnConnectAccount.create({
+        userId: customerId,
+        customerId: stripeCustomerId,
+        connectAccountId: connectAccountId,
+        status: true,
+        salonDetailId: account.id,
+      });
+    }
 
     // Step 6: Update user table with stripeCustomerId
     await user.update({ stripeCustomerId }, { where: { id: customerId } });
@@ -5104,7 +5143,6 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       cardsCount = paymentMethods?.data?.length || 0;
     } catch (error) {
       console.error('Error fetching cards:', error.message);
-      // If error fetching cards, just return 0
       cardsCount = 0;
     }
 
