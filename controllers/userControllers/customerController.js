@@ -45,6 +45,7 @@ const {
   reason,
   subscriptions,
   allergies,
+  helpSupport,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -3617,10 +3618,18 @@ exports.fetchAccountDeletionReasons = async (req, res, next) => {
     })
   }
 
+  const supportContact = await helpSupport.findOne({
+    attributes: ['email'],
+  })
+
   return res.json(
     response({
       message: 'Account deletion reasons',
-      data: { reasons, userData },
+      data: {
+        reasons,
+        userData,
+        support: { email: supportContact?.email || null },
+      },
     }),
   )
 }
