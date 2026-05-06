@@ -4896,7 +4896,7 @@ exports.testing = async (req, res, next) => {
  */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
     const { connectedAccountId } = req.body;
-    const fixedFeeTransferGbp = 0;
+    const fixedFeeTransferGbp = Number(req.body.amount ?? 0);
 
     // 1. Fetch booking with relations
     // const appointment = await booking.findOne({
@@ -4930,13 +4930,36 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
     //   customerId: appointment.user?.id.toString() || "",
     // };
 
-    // 3. Call Stripe transfer
+    // 3. Skip Stripe transfer when there is no amount to transfer
+    if (fixedFeeTransferGbp <= 0) {
+      return res.json(
+        response({
+          status: "1",
+          message: "No admin fee to transfer right now (currently free).",
+          data: { transferId: null, transferredAmount: fixedFeeTransferGbp },
+        })
+      );
+    }
+
+    if (!connectedAccountId) {
+      return res
+        .status(200)
+        .json(response({ status: "0", message: "connectedAccountId is required when amount is greater than 0" }));
+    }
+
+    // 4. Call Stripe transfer only for positive amount
     const result = await Stripe.transferToPlatform(
       fixedFeeTransferGbp,
       connectedAccountId,
     );
 
-    return res.json(response({ status: "1", message: "Amount Transferred",data:{transferId:result.transferId} }));
+    return res.json(
+      response({
+        status: "1",
+        message: "Admin fee transferred successfully.",
+        data: { transferId: result.transferId, transferredAmount: fixedFeeTransferGbp },
+      })
+    );
 };
 
 
