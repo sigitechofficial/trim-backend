@@ -3203,10 +3203,19 @@ exports.fetchFAQs = async (req, res, next) => {
     where: condition,
     attributes: { exclude: ['updatedAt'] },
   })
+  const support = await helpSupport.findOne({
+    attributes: ['email'],
+    order: [['createdAt', 'DESC']],
+  })
 
   return res.status(200).json(
     response({
-      data: { reasons: data.reverse() },
+      data: {
+        reasons: data.reverse(),
+        support: {
+          email: support?.email || '',
+        },
+      },
     }),
   )
 }
