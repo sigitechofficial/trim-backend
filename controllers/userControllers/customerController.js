@@ -45,6 +45,7 @@ const {
   reason,
   subscriptions,
   allergies,
+  helpSupport,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -3497,7 +3498,7 @@ exports.accountDelete = async (req, res, next) => {
 
   // Validate reason exists
   const reasonData = await reason.findOne({
-    where: { id: reasonId, status: true },
+    where: { id: reasonId, status: true, type: 'account_deletion_customer' },
   })
 
   if (!reasonData) {
@@ -3601,9 +3602,9 @@ exports.accountDelete = async (req, res, next) => {
 
 //* 2. Fetch Account Deletion Reasons
 exports.fetchAccountDeletionReasons = async (req, res, next) => {
-  // Fetch all active reasons (you can filter by type if needed)
+  // Fetch only customer account deletion reasons
   const reasons = await reason.findAll({
-    where: { status: true },
+    where: { status: true, type: 'account_deletion_customer' },
     attributes: ['id', 'reason', 'type'],
     order: [['createdAt', 'DESC']],
   })
@@ -3617,10 +3618,33 @@ exports.fetchAccountDeletionReasons = async (req, res, next) => {
     })
   }
 
+  const supportContact = await helpSupport.findOne({
+    attributes: ['email'],
+  })
+
   return res.json(
     response({
       message: 'Account deletion reasons',
-      data: { reasons, userData },
+      data: {
+        reasons,
+        userData,
+        support: { email: supportContact?.email || null },
+      },
+    }),
+  )
+}
+
+exports.fetchCancellationReasons = async (req, res, next) => {
+  const reasons = await reason.findAll({
+    where: { status: true, type: 'appointment_customer_cancellation' },
+    attributes: ['id', 'reason', 'type'],
+    order: [['createdAt', 'DESC']],
+  })
+
+  return res.json(
+    response({
+      message: 'Cancellation reasons',
+      data: { reasons },
     }),
   )
 }
@@ -4881,7 +4905,7 @@ exports.testing = async (req, res, next) => {
  */
 exports.transferFixedFeeToAdmin = async (req, res, next) => {
     const { connectedAccountId } = req.body;
-    const fixedFeeTransferGbp = 0;
+    const fixedFeeTransferGbp = Number(req.body.amount ?? 0);
 
     // 1. Fetch booking with relations
     // const appointment = await booking.findOne({
@@ -4915,13 +4939,36 @@ exports.transferFixedFeeToAdmin = async (req, res, next) => {
     //   customerId: appointment.user?.id.toString() || "",
     // };
 
-    // 3. Call Stripe transfer
+    // 3. Skip Stripe transfer when there is no amount to transfer
+    if (fixedFeeTransferGbp <= 0) {
+      return res.json(
+        response({
+          status: "1",
+          message: "No admin fee to transfer right now (currently free).",
+          data: { transferId: null, transferredAmount: fixedFeeTransferGbp },
+        })
+      );
+    }
+
+    if (!connectedAccountId) {
+      return res
+        .status(200)
+        .json(response({ status: "0", message: "connectedAccountId is required when amount is greater than 0" }));
+    }
+
+    // 4. Call Stripe transfer only for positive amount
     const result = await Stripe.transferToPlatform(
       fixedFeeTransferGbp,
       connectedAccountId,
     );
 
-    return res.json(response({ status: "1", message: "Amount Transferred",data:{transferId:result.transferId} }));
+    return res.json(
+      response({
+        status: "1",
+        message: "Admin fee transferred successfully.",
+        data: { transferId: result.transferId, transferredAmount: fixedFeeTransferGbp },
+      })
+    );
 };
 
 
@@ -5000,17 +5047,39 @@ exports.updateTransferMetadata = async (req, res, next) => {
 
 exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     const customerId = req.user.id;
+    const { salonId } = req.body;
 
-    // Step 1: Get salon's connected account
-    const account = await salonDetail.findOne({
-      where: { userId: req.body.salonId },
+    if (!salonId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'salonId is required',
+      });
+    }
+
+    // Step 1: Get salon's connected account (support salonDetail.id and salon userId)
+    let account = await salonDetail.findOne({
+      where: { id: salonId },
       attributes: ['id', 'connectAccountId'],
     });
+
+    if (!account) {
+      account = await salonDetail.findOne({
+        where: { userId: salonId },
+        attributes: ['id', 'connectAccountId'],
+      });
+    }
 
     if (!account) {
       return res.status(200).json({
         status: '0',
         message: 'Salon account not found',
+      });
+    }
+
+    if (!account.connectAccountId) {
+      return res.status(200).json({
+        status: '0',
+        message: 'Salon has not completed Stripe onboarding',
       });
     }
 
@@ -5022,7 +5091,7 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
         userId: customerId,
         connectAccountId: connectAccountId,
       },
-      attributes: ['customerId', 'connectAccountId', 'salonDetailId', 'userId'],
+      attributes: ['id', 'customerId', 'connectAccountId', 'salonDetailId', 'userId'],
     });
 
     if (existing?.customerId) {
@@ -5039,7 +5108,6 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
           cardsCount = paymentMethods?.data?.length || 0;
         } catch (error) {
           console.error('Error fetching cards:', error.message);
-          // If error fetching cards, just return 0
           cardsCount = 0;
         }
 
@@ -5060,7 +5128,14 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       attributes: ['firstName', 'lastName', 'email'],
     });
 
-    const fullName = `${userDetails.firstName} ${userDetails.lastName}`;
+    if (!userDetails) {
+      return res.status(200).json({
+        status: '0',
+        message: 'User not found',
+      });
+    }
+
+    const fullName = `${userDetails.firstName || ''} ${userDetails.lastName || ''}`.trim();
     const email = userDetails.email;
 
     // Step 4: Create new Stripe customer on connected account
@@ -5070,14 +5145,25 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       connectAccountId
     );
 
-    // Step 5: Save to customerOnConnectAccount table
-    await customerOnConnectAccount.create({
-      userId: customerId,
-      customerId: stripeCustomerId,
-      connectAccountId: connectAccountId,
-      status: true,
-      salonDetailId: account.id,
-    });
+    // Step 5: Save to customerOnConnectAccount table (or update stale row)
+    if (existing?.id) {
+      await customerOnConnectAccount.update(
+        {
+          customerId: stripeCustomerId,
+          status: true,
+          salonDetailId: account.id,
+        },
+        { where: { id: existing.id } }
+      );
+    } else {
+      await customerOnConnectAccount.create({
+        userId: customerId,
+        customerId: stripeCustomerId,
+        connectAccountId: connectAccountId,
+        status: true,
+        salonDetailId: account.id,
+      });
+    }
 
     // Step 6: Update user table with stripeCustomerId
     await user.update({ stripeCustomerId }, { where: { id: customerId } });
@@ -5089,7 +5175,6 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
       cardsCount = paymentMethods?.data?.length || 0;
     } catch (error) {
       console.error('Error fetching cards:', error.message);
-      // If error fetching cards, just return 0
       cardsCount = 0;
     }
 

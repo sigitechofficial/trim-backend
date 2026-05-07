@@ -1036,8 +1036,14 @@ exports.bookingDetails = async (req, res, next) => {
       ________________________________________
 */
 exports.reasons = async (req, res, next) => {
+  const actorReasonType =
+    req.user?.userTypeId === 3
+      ? 'appointment_employee_cancellation'
+      : 'appointment_salon_owner_cancellation'
+
   const reasons = await reason.findAll({
-    attributes: ['id', 'reason'],
+    where: { status: true, type: actorReasonType },
+    attributes: ['id', 'reason', 'type'],
   })
   return res.json(
     returnFunction('1', 'Booking cancelled reasons', { reasons }, ''),
@@ -1160,9 +1166,19 @@ exports.cancelBooking = async (req, res, next) => {
 
   await jobs.update({ status: 'cancel' }, { where: { bookingId } });
 
-  const Reason = await reason.findByPk(reasonId, {
-    attributes: ['id', 'reason'],
+  const actorReasonType =
+    req.user?.userTypeId === 3
+      ? 'appointment_employee_cancellation'
+      : 'appointment_salon_owner_cancellation';
+
+  const Reason = await reason.findOne({
+    where: { id: reasonId, status: true, type: actorReasonType },
+    attributes: ['id', 'reason', 'type'],
   });
+
+  if (!Reason) {
+    throw new AppError('Invalid reason for this user type', 200);
+  }
 
   await cancelledBooking.create({
     reasonText: reasonText ?? Reason.reason,
