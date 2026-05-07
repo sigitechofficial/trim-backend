@@ -982,7 +982,16 @@ exports.session = async (req, res, next) => {
   })
 
   if (!User) {
-    return next(new appError('User not found', 200))
+    console.warn('🚨 session: user missing, forcing re-auth', {
+      userId,
+      dvToken: req.user?.dvToken,
+    })
+    return res.status(200).json({
+      status: '0',
+      message: 'Session expired. Please login again',
+      data: {},
+      error: 'You are not authorized to access it',
+    })
   }
 
   if (!User.status) {

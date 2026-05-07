@@ -19,7 +19,7 @@ module.exports = async function validateToken(req, res, next) {
       next()
     } else {
       const check = await deviceToken.findOne({
-        where: { tokenId: req.user.dvToken },
+        where: { tokenId: req.user.dvToken, userId: req.user.id },
         attributes: ['id'],
         include: { model: user, where: { status: true }, attributes: [] },
         //not working for employee cause we pass salon id in employee accessToken ,userId: req.user.id
@@ -30,6 +30,11 @@ module.exports = async function validateToken(req, res, next) {
         console.log('🚀 ~ validateToken ~ check:')
         next()
       } else {
+        console.warn('🚨 accessCheck: token-user mismatch or revoked token', {
+          url: req.url,
+          userId: req.user?.id,
+          dvToken: req.user?.dvToken,
+        })
         return res.json({
           status: '0',
           message: 'Access Denied',
@@ -39,6 +44,10 @@ module.exports = async function validateToken(req, res, next) {
       }
     }
   } catch (error) {
+    console.warn('🚨 accessCheck: token validation failed', {
+      url: req.url,
+      reason: error?.message,
+    })
     return res.json({
       status: '0',
       message: 'Access Denied',
