@@ -53,7 +53,7 @@ router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 router.get('/session', protect, catchAsync(appController.session))
 router.post('/home', publicProtected, catchAsync(appController.home))
 router.get('/service-types', publicProtected, catchAsync(fetchServiceTypes))
-router.post('/search', publicProtected, catchAsync(appController.home))
+router.post('/search', publicProtected, catchAsync(appController.searchSalons))
 router.get('/favorites/:favorite', protect, catchAsync(appController.home))
 
 router.get(
