@@ -1088,6 +1088,404 @@ exports.home = async (req, res, next) => {
   return res.status(200).json(response(payload));
 };
 
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+]
+
+/**
+ * Maps YYYY-MM-DD to weekday name matching models/time.js (UTC noon preserves calendar date).
+ */
+function dayNameFromDateOnly(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null
+  const m = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const d = Number(m[3])
+  if (!Number.isFinite(y) || mo < 0 || mo > 11 || d < 1 || d > 31) return null
+  const dt = new Date(Date.UTC(y, mo, d, 12, 0, 0))
+  if (dt.getUTCMonth() !== mo || dt.getUTCDate() !== d) return null
+  return WEEKDAY_NAMES[dt.getUTCDay()]
+}
+
+/**
+ * Escape %, _, and \ for use inside SQL LIKE patterns (MySQL default ESCAPE '\\').
+ */
+function escapeSqlLikeMetacharacters(input) {
+  return String(input)
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+}
+
+exports.searchSalons = async (req, res, next) => {
+  const AVAILABILITY_FILTER_ENABLED = process.env.AVAILABILITY_FILTER === 'true'
+  try {
+    const sequelize = salonDetail.sequelize
+    const currentDay = CustomDate.currentDay()
+
+    const targetLat = req.body?.targetLat
+    const targetLng = req.body?.targetLng
+    const latNum = Number(targetLat)
+    const lngNum = Number(targetLng)
+    const hasCoords =
+      targetLat !== undefined &&
+      targetLng !== undefined &&
+      Number.isFinite(latNum) &&
+      Number.isFinite(lngNum)
+
+    const rangeRaw = req.body?.rangeInKm ?? 15
+    const rangeParsed = Number(rangeRaw)
+    const rangeInKm =
+      Number.isFinite(rangeParsed) && rangeParsed > 0 ? rangeParsed : 15
+
+    const page = Math.max(1, parseInt(req.body?.page, 10) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.body?.limit, 10) || 20))
+    const offset = (page - 1) * limit
+
+    const searchDate = req.body?.date || null
+
+    const bodyDay =
+      req.body?.day && typeof req.body.day === 'string' ? req.body.day.trim() : null
+    const dayFromDate = searchDate ? dayNameFromDateOnly(searchDate) : null
+    const effectiveDay = dayFromDate || bodyDay
+
+    const rawSearch =
+      typeof req.body?.search === 'string' ? req.body.search.trim() : ''
+    const searchActive = rawSearch.length > 0
+    const likePattern = searchActive
+      ? `%${escapeSqlLikeMetacharacters(rawSearch)}%`
+      : ''
+    const searchLit = searchActive
+      ? sequelize.escape(likePattern)
+      : null
+
+    const baseSalonFilter = {
+      [Op.or]: [
+        {
+          isExternalEmployee: true,
+          parentSalonId: {
+            [Op.in]: literal(`(
+            SELECT id FROM salonDetails
+            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
+            AND (
+              subscriptionLatestPaymentStatus IS NULL
+              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
+            )
+          )`),
+          },
+        },
+        {
+          registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
+          subscriptionLatestPaymentStatus: {
+            [Op.notIn]: ['expired', 'payment_failed', 'paused', 'refunded'],
+          },
+        },
+      ],
+      approvedByAdmin: true,
+      status: 1,
+      deleted: 0,
+    }
+
+    const andFragments = [baseSalonFilter]
+
+    if (searchActive) {
+      andFragments.push({
+        [Op.or]: [
+          { salonName: { [Op.like]: likePattern } },
+          {
+            id: {
+              [Op.in]: literal(
+                `(SELECT DISTINCT salonDetailId FROM services WHERE serviceName LIKE ${searchLit})`,
+              ),
+            },
+          },
+          {
+            id: {
+              [Op.in]: literal(
+                `(SELECT DISTINCT salonDetailId FROM categories WHERE categoryName LIKE ${searchLit})`,
+              ),
+            },
+          },
+          {
+            id: {
+              [Op.in]: literal(
+                `(SELECT DISTINCT s.salonDetailId FROM services s INNER JOIN serviceTypes st ON s.serviceTypeId = st.id WHERE st.typeName LIKE ${searchLit})`,
+              ),
+            },
+          },
+        ],
+      })
+    }
+
+    const serviceTypeRaw = req.body?.serviceType
+    const serviceTypeId =
+      serviceTypeRaw !== undefined && serviceTypeRaw !== null && serviceTypeRaw !== ''
+        ? parseInt(serviceTypeRaw, 10)
+        : NaN
+    if (!Number.isNaN(serviceTypeId) && serviceTypeId > 0) {
+      andFragments.push({
+        id: {
+          [Op.in]: literal(`(
+          SELECT DISTINCT services.salonDetailId
+          FROM services
+          WHERE services.salonDetailId = salonDetail.id
+            AND services.serviceTypeId = ${serviceTypeId}
+        )`),
+        },
+      })
+    }
+
+    // Day + time range filter (weekday from req.body.date when YYYY-MM-DD, else req.body.day).
+    // With only a day: require at least one open times row; with start/end: also require hours to cover the window.
+    const hasDay = Boolean(effectiveDay)
+    const rawStart = req.body?.startTime || null
+    const rawEnd = req.body?.endTime || null
+
+    if (hasDay && rawStart && rawEnd) {
+      const dayEsc = sequelize.escape(effectiveDay)
+
+      // Normalize endTime: treat "00:00" or "00:00:00" as "23:59"
+      // because Evening preset sends endTime "00:00" meaning midnight
+      const normalizedEnd =
+        rawEnd === '00:00' || rawEnd === '00:00:00' ? '23:59' : rawEnd
+
+      const startEsc = sequelize.escape(rawStart)
+      const endEsc = sequelize.escape(normalizedEnd)
+
+      andFragments.push({
+        id: {
+          [Op.in]: literal(`(
+            SELECT DISTINCT times.salonDetailId
+            FROM times
+            WHERE times.salonDetailId = salonDetail.id
+              AND times.day = ${dayEsc}
+              AND times.status = true
+              AND times.active = true
+              AND times.openingTime <= ${endEsc}
+              AND times.closingTime >= ${startEsc}
+          )`),
+        },
+      })
+      if (AVAILABILITY_FILTER_ENABLED && searchDate) {
+        const dateEsc = sequelize.escape(searchDate)
+        andFragments.push({
+          id: {
+            [Op.in]: literal(`(
+              SELECT DISTINCT e.salonDetailId
+              FROM employees e
+              INNER JOIN times t ON t.employeeId = e.id
+              WHERE e.salonDetailId = salonDetail.id
+                AND e.status = true
+                AND e.deleted = false
+                AND t.day = ${dayEsc}
+                AND t.status = true
+                AND t.active = true
+                AND t.openingTime < ${endEsc}
+                AND t.closingTime > ${startEsc}
+                AND (
+                  /* Check if the start of the window is free */
+                  NOT EXISTS (
+                    SELECT 1 FROM jobs j
+                    INNER JOIN bookings b ON j.bookingId = b.id
+                    WHERE j.employeeId = e.id
+                      AND j.on = ${dateEsc}
+                      AND b.status IN ('pending', 'book')
+                      AND j.startTime <= GREATEST(t.openingTime, ${startEsc})
+                      AND j.endTime > GREATEST(t.openingTime, ${startEsc})
+                  )
+                  OR
+                  /* OR check if any booking ends inside the window with a free moment after */
+                  EXISTS (
+                    SELECT 1 FROM jobs j3
+                    INNER JOIN bookings b3 ON j3.bookingId = b3.id
+                    WHERE j3.employeeId = e.id
+                      AND j3.on = ${dateEsc}
+                      AND b3.status IN ('pending', 'book')
+                      AND j3.endTime < LEAST(t.closingTime, ${endEsc})
+                      AND j3.endTime >= GREATEST(t.openingTime, ${startEsc})
+                      AND NOT EXISTS (
+                        SELECT 1 FROM jobs j4
+                        INNER JOIN bookings b4 ON j4.bookingId = b4.id
+                        WHERE j4.employeeId = e.id
+                          AND j4.on = ${dateEsc}
+                          AND b4.status IN ('pending', 'book')
+                          AND j4.startTime <= j3.endTime
+                          AND j4.endTime > j3.endTime
+                      )
+                  )
+                )
+            )`),
+          },
+        })
+      }
+    } else if (hasDay && rawStart && !rawEnd) {
+      // Fallback: only startTime provided, use single point check
+      const dayEsc = sequelize.escape(effectiveDay)
+      const timeEsc = sequelize.escape(rawStart)
+      andFragments.push({
+        id: {
+          [Op.in]: literal(`(
+            SELECT DISTINCT times.salonDetailId
+            FROM times
+            WHERE times.salonDetailId = salonDetail.id
+              AND times.day = ${dayEsc}
+              AND times.status = true
+              AND times.active = true
+              AND times.openingTime <= ${timeEsc}
+              AND times.closingTime >= ${timeEsc}
+          )`),
+        },
+      })
+    } else if (hasDay) {
+      // Day only (from date or day, no time window): exclude salons with no open times row for that weekday
+      const dayEsc = sequelize.escape(effectiveDay)
+      andFragments.push({
+        id: {
+          [Op.in]: literal(`(
+            SELECT DISTINCT times.salonDetailId
+            FROM times
+            WHERE times.salonDetailId = salonDetail.id
+              AND times.day = ${dayEsc}
+              AND times.status = true
+              AND times.active = true
+          )`),
+        },
+      })
+    }
+
+    const formula = `(6371 *
+    acos(
+      cos(radians(${latNum})) * cos(radians(lat)) *
+      cos(radians(lng) - radians(${lngNum})) +
+      sin(radians(${latNum})) * sin(radians(lat))
+    )
+  )`
+
+    const finalWhere =
+      andFragments.length === 1 ? andFragments[0] : { [Op.and]: andFragments }
+
+    const attributes = [
+      'id',
+      'salonName',
+      'coverImage',
+      'isExternalEmployee',
+      'isOnline',
+      [
+        literal(`(
+          SELECT FORMAT(AVG(ratings.value), 1)
+          FROM ratings
+          WHERE ratings.salonDetailId = salonDetail.id
+        )`),
+        'salonAverageRating',
+      ],
+      [
+        literal(`(
+          SELECT COUNT(ratings.id)
+          FROM ratings
+          WHERE ratings.salonDetailId = salonDetail.id
+        )`),
+        'ratingCount',
+      ],
+    ]
+
+    const queryBody = {
+      where: finalWhere,
+      attributes,
+      include: [
+        {
+          model: addressDBS,
+          required: true,
+          attributes: [
+            'id',
+            'streetAddress',
+            'city',
+            'district',
+            'province',
+            'country',
+            'lat',
+            'lng',
+            'building',
+            'postalCode',
+            'zoneId',
+          ],
+        },
+        {
+          model: service,
+          required: true,
+          attributes: ['id', 'serviceName', 'price', 'discount'],
+        },
+        {
+          model: user,
+          where: { status: true, deleted: 0 },
+          required: true,
+          attributes: ['id'],
+        },
+      ],
+      offset,
+      limit,
+    }
+
+    if (hasCoords) {
+      queryBody.attributes = [...attributes, [literal(`${formula}`), 'distance']]
+      queryBody.having = literal(`${formula} <= ${rangeInKm}`)
+      queryBody.order = [[literal('distance'), 'ASC']]
+    } else {
+      queryBody.order = [['salonName', 'ASC']]
+    }
+
+    const rows = await salonDetail.findAll(queryBody)
+    const count = await salonDetail.count({
+      where: finalWhere,
+      include: [
+        {
+          model: service,
+          required: true,
+        },
+        {
+          model: user,
+          where: { status: true, deleted: 0 },
+          required: true,
+        },
+      ],
+      distinct: true,
+    })
+
+    let salons = JSON.parse(JSON.stringify(rows))
+
+    const payload = {
+      status: '1',
+      message: 'Search results fetched successfully',
+      data: {
+        salons,
+        pagination: {
+          page,
+          limit,
+          total: count,
+        },
+      },
+    }
+
+    return res.status(200).json(payload)
+  } catch (err) {
+    const payload = {
+      status: '0',
+      message: 'Something went wrong',
+      data: {},
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      payload.error = err.message
+    }
+    return res.status(500).json(payload)
+  }
+}
+
 
 //* 2.Get Salon Details -------------Modified----
 
