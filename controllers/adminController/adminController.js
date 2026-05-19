@@ -854,6 +854,8 @@ exports.fecthSalons = async (req, res, next) => {
       'coverImage',
       'metadata',
       'stickerSent',
+      'createdAt',
+      'updatedAt',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -884,6 +886,66 @@ exports.fecthSalons = async (req, res, next) => {
           `(SELECT salonName FROM salonDetails WHERE id = salonDetail.parentSalonId)`,
         ),
         'ownerSalonName',
+      ],
+      [
+        literal(`(
+          SELECT CONCAT(u.firstName, '-', u.lastName)
+          FROM salonDetails sd
+          INNER JOIN users u ON u.id = sd.userId
+          WHERE sd.id = salonDetail.parentSalonId
+          LIMIT 1
+        )`),
+        'parentOwnerName',
+      ],
+      [
+        literal(`(
+          SELECT revenueCatUserId
+          FROM subscriptions
+          WHERE subscriptions.salonDetailId = salonDetail.id
+            AND subscriptions.subscriptionSource = 'revenuecat'
+            AND subscriptions.deletedAt IS NULL
+          ORDER BY subscriptions.createdAt DESC
+          LIMIT 1
+        )`),
+        'revenueCatUserId',
+      ],
+      [
+        literal(`(
+          SELECT COALESCE(
+            (
+              SELECT subscriptions.status
+              FROM subscriptions
+              WHERE subscriptions.salonDetailId = salonDetail.id
+                AND subscriptions.deletedAt IS NULL
+              ORDER BY subscriptions.createdAt DESC
+              LIMIT 1
+            ),
+            salonDetail.subscriptionLatestPaymentStatus
+          )
+        )`),
+        'subscriptionStatus',
+      ],
+      [
+        literal(`(
+          SELECT subscriptions.revenueCatStore
+          FROM subscriptions
+          WHERE subscriptions.salonDetailId = salonDetail.id
+            AND subscriptions.deletedAt IS NULL
+          ORDER BY subscriptions.createdAt DESC
+          LIMIT 1
+        )`),
+        'revenueCatStore',
+      ],
+      [
+        literal(`(
+          SELECT subscriptions.name
+          FROM subscriptions
+          WHERE subscriptions.salonDetailId = salonDetail.id
+            AND subscriptions.deletedAt IS NULL
+          ORDER BY subscriptions.createdAt DESC
+          LIMIT 1
+        )`),
+        'subscriptionTier',
       ],
       // AND employees.isOwner = false
     ],
