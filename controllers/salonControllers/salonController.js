@@ -3743,6 +3743,10 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
     else if (clientType === 'Recent clients') req.body.clientType = 'recent'
     else if (clientType === 'Frequent clients') req.body.clientType = 'frequent'
     else if (clientType === 'Custom clients') req.body.clientType = 'custom'
+    else if (clientType === 'All customers') req.body.clientType = 'all'
+    else if (clientType === 'Recent customers') req.body.clientType = 'recent'
+    else if (clientType === 'Frequent customers') req.body.clientType = 'frequent'
+    else if (clientType === 'Custom customers') req.body.clientType = 'custom'
   }
   if (
     req.params?.audienceType == 'client' &&
