@@ -964,7 +964,7 @@ exports.home = async (req, res, next) => {
       ],
       [
         literal(`(
-          SELECT COUNT(ratings.id)
+          SELECT COUNT(DISTINCT ratings.bookingId)
           FROM ratings
           WHERE ratings.salonDetailId = salonDetail.id
         )`),
@@ -1387,7 +1387,7 @@ exports.searchSalons = async (req, res, next) => {
       ],
       [
         literal(`(
-          SELECT COUNT(ratings.id)
+          SELECT COUNT(DISTINCT ratings.bookingId)
           FROM ratings
           WHERE ratings.salonDetailId = salonDetail.id
         )`),
