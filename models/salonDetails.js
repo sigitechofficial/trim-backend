@@ -163,6 +163,11 @@ module.exports = (sequelize, DataTypes) => {
     salonDetail.hasMany(models.time)
     models.time.belongsTo(salonDetail)
 
+    salonDetail.hasMany(models.breakTime, {
+      foreignKey: 'salonDetailId',
+      as: 'breaks',
+    })
+
     salonDetail.hasMany(models.favorite)
     models.favorite.belongsTo(salonDetail)
 

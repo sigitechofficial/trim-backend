@@ -5,6 +5,7 @@ const {
   coupon,
   employee,
   time,
+  breakTime,
   category,
   service,
   booking,
@@ -1438,6 +1439,22 @@ exports.employeeAvailability = async (req, res, next) => {
         attributes: ['startTime', 'endTime'],
       })
       : []
+
+  const employeeBreaks = await breakTime.findAll({
+    where: {
+      employeeId,
+      day: dateDay,
+      status: true,
+      deletedAt: null,
+    },
+  })
+
+  for (const br of employeeBreaks) {
+    busyTimes.push({
+      startTime: br.breakStart,
+      endTime: br.breakEnd,
+    })
+  }
 
   console.log('TIMES BUSY', JSON.parse(JSON.stringify(busyTimes)))
 

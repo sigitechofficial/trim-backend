@@ -15,6 +15,7 @@ const {
   salonImage,
   employee,
   time,
+  breakTime,
   employeeService,
   jobs,
   booking,
@@ -1935,6 +1936,24 @@ exports.employeeAvailability = async (req, res, next) => {
     where: { status: 'assign', employeeId: req.params.employee, on: jobDate },
     attributes: ['startTime', 'endTime'],
   })
+
+  const dateDay = DateManupulation.dayOnDate(new Date(jobDate))
+
+  const employeeBreaks = await breakTime.findAll({
+    where: {
+      employeeId: req.params.employee,
+      day: dateDay,
+      status: true,
+      deletedAt: null,
+    },
+  })
+
+  for (const br of employeeBreaks) {
+    busyTimes.push({
+      startTime: br.breakStart,
+      endTime: br.breakEnd,
+    })
+  }
 
   const availableTimeSlots = Slot.getAvailableTimeSlots(
     jobDate,

@@ -72,6 +72,11 @@ module.exports = (sequelize, DataTypes) => {
 
     employee.hasMany(models.rentCollection)
     models.rentCollection.belongsTo(employee)
+
+    employee.hasMany(models.breakTime, {
+      foreignKey: 'employeeId',
+      as: 'breaks',
+    })
   }
 
   return employee
