@@ -148,7 +148,7 @@ exports.addSalonDetail = async (req, res, next) => {
     vatType,
   });
 
-  await employee.create({
+  const ownerEmployee = await employee.create({
     position: 'Owner',
     userId,
     salonDetailId: newEntry.id,
@@ -203,7 +203,10 @@ exports.addSalonDetail = async (req, res, next) => {
   //await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
 
   return res.json(
-    returnFunction('1', 'Salon details added successfully!', newEntry, ''),
+    returnFunction('1', 'Salon details added successfully!', {
+      ...newEntry.get({ plain: true }),
+      ownerEmployeeId: ownerEmployee.id,
+    }, ''),
   );
 };
 
