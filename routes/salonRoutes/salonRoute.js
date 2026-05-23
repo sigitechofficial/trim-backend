@@ -143,6 +143,16 @@ router.patch(
   '/updateSalonTimings',
   catchAsync(salonController.updateSalonTimings),
 )
+router.post('/breaks', catchAsync(salonController.saveBreaks))
+router.get(
+  '/breaks/salon/:salonDetailId',
+  catchAsync(salonController.getSalonBreaks),
+)
+router.get(
+  '/breaks/:employeeId',
+  catchAsync(salonController.getEmployeeBreaks),
+)
+router.delete('/breaks/:id', catchAsync(salonController.deleteBreak))
 // Update Address
 router.patch(
   '/updateSalonAddress',

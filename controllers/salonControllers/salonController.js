@@ -8,6 +8,7 @@ const {
   serviceImage,
   employee,
   time,
+  breakTime,
   category,
   service,
   salonImage,
@@ -1256,6 +1257,203 @@ exports.updateSalonTimings = async (req, res, next) => {
   return res.json(
     returnFunction('1', 'Salon timings updated successfully!', {}, ''),
   )
+}
+
+const BREAK_DAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
+function normalizeBreakTime(timeStr) {
+  if (!timeStr) return null
+  if (/AM|PM/i.test(timeStr)) {
+    const t24 = Convert.convertTo24HourFormat(timeStr.trim())
+    return t24.length === 5 ? `${t24}:00` : t24
+  }
+  const parts = timeStr.trim().split(':')
+  if (parts.length === 2) {
+    return `${String(parts[0]).padStart(2, '0')}:${String(parts[1]).padStart(2, '0')}:00`
+  }
+  return timeStr
+}
+
+function breakTimeToMinutes(timeStr) {
+  const normalized = normalizeBreakTime(timeStr)
+  const [hours, minutes] = normalized.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function emptyBreaksByDay() {
+  return BREAK_DAYS.reduce((acc, day) => {
+    acc[day] = []
+    return acc
+  }, {})
+}
+
+/*
+            4.Save Employee Breaks
+    ________________________________________
+*/
+exports.saveBreaks = async (req, res, next) => {
+  const { employeeId, salonDetailId, day, breaks } = req.body
+
+  if (!employeeId || !salonDetailId || !day) {
+    return res.json(
+      returnFunction(
+        '0',
+        'employeeId, salonDetailId, and day are required',
+        {},
+        '',
+      ),
+    )
+  }
+
+  if (!Array.isArray(breaks)) {
+    return res.json(
+      returnFunction('0', 'breaks must be an array', {}, ''),
+    )
+  }
+
+  if (!BREAK_DAYS.includes(day)) {
+    return res.json(returnFunction('0', 'Invalid day', {}, ''))
+  }
+
+  for (const br of breaks) {
+    if (!br?.breakStart || !br?.breakEnd) {
+      return res.json(
+        returnFunction('0', 'Each break requires breakStart and breakEnd', {}, ''),
+      )
+    }
+    if (breakTimeToMinutes(br.breakStart) >= breakTimeToMinutes(br.breakEnd)) {
+      return res.json(
+        returnFunction('0', 'breakStart must be before breakEnd', {}, ''),
+      )
+    }
+  }
+
+  await breakTime.destroy({
+    where: {
+      employeeId,
+      day,
+    },
+  })
+
+  let savedBreaks = []
+  if (breaks.length > 0) {
+    const now = new Date()
+    const rows = breaks.map((br) => ({
+      employeeId,
+      salonDetailId,
+      day,
+      breakStart: normalizeBreakTime(br.breakStart),
+      breakEnd: normalizeBreakTime(br.breakEnd),
+      status: true,
+      createdAt: now,
+      updatedAt: now,
+    }))
+    savedBreaks = await breakTime.bulkCreate(rows)
+  }
+
+  return res.json(
+    returnFunction('1', 'Breaks saved successfully', { breaks: savedBreaks }, ''),
+  )
+}
+
+/*
+            4.Get Employee Breaks
+    ________________________________________
+*/
+exports.getEmployeeBreaks = async (req, res, next) => {
+  const { employeeId } = req.params
+
+  const employeeBreaks = await breakTime.findAll({
+    where: {
+      employeeId,
+      status: true,
+      deletedAt: null,
+    },
+    attributes: ['id', 'day', 'breakStart', 'breakEnd'],
+    order: [
+      ['day', 'ASC'],
+      ['breakStart', 'ASC'],
+    ],
+  })
+
+  const data = emptyBreaksByDay()
+  employeeBreaks.forEach((br) => {
+    data[br.day].push({
+      id: br.id,
+      breakStart: br.breakStart,
+      breakEnd: br.breakEnd,
+    })
+  })
+
+  return res.json(returnFunction('1', 'Success', data, ''))
+}
+
+/*
+            4.Delete Break
+    ________________________________________
+*/
+exports.deleteBreak = async (req, res, next) => {
+  const { id } = req.params
+
+  const existingBreak = await breakTime.findOne({
+    where: {
+      id,
+      deletedAt: null,
+    },
+  })
+
+  if (!existingBreak) {
+    return res.json(returnFunction('0', 'Break not found', {}, ''))
+  }
+
+  await existingBreak.destroy()
+
+  return res.json(returnFunction('1', 'Break deleted successfully', {}, ''))
+}
+
+/*
+            4.Get Salon Breaks
+    ________________________________________
+*/
+exports.getSalonBreaks = async (req, res, next) => {
+  const { salonDetailId } = req.params
+
+  const salonBreaks = await breakTime.findAll({
+    where: {
+      salonDetailId,
+      status: true,
+      deletedAt: null,
+    },
+    attributes: ['id', 'employeeId', 'day', 'breakStart', 'breakEnd'],
+    order: [
+      ['employeeId', 'ASC'],
+      ['day', 'ASC'],
+      ['breakStart', 'ASC'],
+    ],
+  })
+
+  const data = {}
+  salonBreaks.forEach((br) => {
+    const empKey = String(br.employeeId)
+    if (!data[empKey]) {
+      data[empKey] = emptyBreaksByDay()
+    }
+    data[empKey][br.day].push({
+      id: br.id,
+      breakStart: br.breakStart,
+      breakEnd: br.breakEnd,
+    })
+  })
+
+  return res.json(returnFunction('1', 'Success', data, ''))
 }
 /*
             4.Update Salon Timings
