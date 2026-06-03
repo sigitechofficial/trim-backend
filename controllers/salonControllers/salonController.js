@@ -642,7 +642,7 @@ exports.accountAdded = async (req, res, next) => {
 
   let salonData = await salonDetail.findOne({
     where: { userId: userId },
-    atrributes: ['connectAccountId', 'id'],
+    attributes: ['connectAccountId', 'id'],
   })
 
   let msg = 'Information Incomplete account not added.'
@@ -657,10 +657,13 @@ exports.accountAdded = async (req, res, next) => {
   )
 
   if (isConnectAccountComplete) {
-    await wallet.update(
-      { accountConnected: true },
-      { where: { salonDetailId: salonData.id } },
-    )
+    const [walletRecord] = await wallet.findOrCreate({
+      where: { salonDetailId: salonData.id },
+      defaults: { salonDetailId: salonData.id, accountConnected: true },
+    });
+    if (!walletRecord.accountConnected) {
+      await walletRecord.update({ accountConnected: true });
+    }
 
     await salonProfiles.update(
       {

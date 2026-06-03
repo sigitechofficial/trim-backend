@@ -646,6 +646,16 @@ exports.login = async (req, res, next) => {
     response.data.businessCountryCode = salon?.businessCountryCode;
     response.data.businessPhoneNum = salon?.businessPhoneNum;
 
+    // Get external employee's own employeeId
+    let externalEmployeeId = null;
+    if (User.isExternalEmployee) {
+      const extEmployee = await employee.findOne({
+        where: { userId: User.id, isExternalEmployee: true },
+        attributes: ['id'],
+      });
+      externalEmployeeId = extEmployee ? extEmployee.id : null;
+    }
+
     if (!salon || User.verifiedAt === null) {
       response.status = User.verifiedAt === null ? '3' : '2';
       response.message = User.verifiedAt === null ? 'Please Verify First!' : 'Login successful';
@@ -660,6 +670,7 @@ exports.login = async (req, res, next) => {
         hasTeamMembers: false,
         hasSubscription: false,
         accountConnected: false,
+        employeeId: externalEmployeeId,
       };
     } else {
       const isAllDataAvailable =
@@ -682,6 +693,7 @@ exports.login = async (req, res, next) => {
         hasTeamMembers: salon.employees.length !== 0,
         hasSubscription: salon.approvedByAdmin,
         accountConnected: salon?.wallet?.accountConnected ? true : false,
+        employeeId: externalEmployeeId,
       };
 
       // 🔹 Live Stripe check
@@ -691,6 +703,12 @@ exports.login = async (req, res, next) => {
 
         if (salon.wallet) {
           await salon.wallet.update({ accountConnected: isConnected });
+        } else if (isConnected) {
+          await wallet.create({
+            salonDetailId: salon.id,
+            accountConnected: true,
+          });
+          salon.wallet = await wallet.findOne({ where: { salonDetailId: salon.id } });
         }
 
         response.data.profileCompletion.accountConnected = isConnected;
@@ -744,6 +762,20 @@ exports.login = async (req, res, next) => {
       where: { id: employeeDetails.salonDetailId },
       attributes: ['userId'],
     });
+
+    // Staff JWT uses salon owner id; device token must match for validateToken
+    if (salon?.userId) {
+      const ownerDeviceToken = await deviceToken.findOne({
+        where: { tokenId: dvToken, userId: salon.userId },
+      });
+      if (!ownerDeviceToken) {
+        await deviceToken.create({
+          tokenId: dvToken,
+          status: true,
+          userId: salon.userId,
+        });
+      }
+    }
 
     token = signTocken(salon.userId, dvToken);
     redis_Client.hSet(`trim${salon.userId}`, dvToken, token);
@@ -1072,6 +1104,17 @@ exports.session = async (req, res, next) => {
   }
 
   const salon = User.salonDetails[0]
+
+  // Get external employee's own employeeId
+  let externalEmployeeId = null;
+  if (User.isExternalEmployee) {
+    const extEmployee = await employee.findOne({
+      where: { userId: User.id, isExternalEmployee: true },
+      attributes: ['id'],
+    });
+    externalEmployeeId = extEmployee ? extEmployee.id : null;
+  }
+
   let stripeRestrictions = null
   let subscriptionStatus = null
 
@@ -1083,6 +1126,12 @@ exports.session = async (req, res, next) => {
       stripeRestrictions = { reason, currentlyDue }
       if (salon.wallet) {
         await salon.wallet.update({ accountConnected: isConnected })
+      } else if (isConnected) {
+        await wallet.create({
+          salonDetailId: salon.id,
+          accountConnected: true,
+        })
+        salon.wallet = await wallet.findOne({ where: { salonDetailId: salon.id } })
       }
     } catch (err) {
       console.error("❌ Stripe check in session failed:", err.message)
@@ -1149,6 +1198,7 @@ exports.session = async (req, res, next) => {
         hasSubscription: isSubscription,
         accountConnected: salon?.wallet?.accountConnected ? true : false,
         subscriptionStatus: subscriptionStatus, // Subscription status (e.g., 'active', 'canceled', 'cancelled', etc.)
+        employeeId: externalEmployeeId,
       },
       ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
     },

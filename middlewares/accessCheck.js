@@ -1,6 +1,6 @@
 require('dotenv').config()
 const { verify } = require('jsonwebtoken')
-const { deviceToken, user } = require('../models')
+const { deviceToken, user, employee, salonDetail } = require('../models')
 
 module.exports = async function validateToken(req, res, next) {
   try {
@@ -24,12 +24,50 @@ module.exports = async function validateToken(req, res, next) {
     if (req.url == '/logout') {
       next()
     } else {
-      const check = await deviceToken.findOne({
+      let check = await deviceToken.findOne({
         where: { tokenId: req.user.dvToken, userId: req.user.id },
         attributes: ['id'],
         include: { model: user, where: { status: true }, attributes: [] },
-        //not working for employee cause we pass salon id in employee accessToken ,userId: req.user.id
       })
+
+      // Staff JWT carries salon owner id; device token may still be on employee user
+      if (!check && req.user?.dvToken) {
+        const employeeDevice = await deviceToken.findOne({
+          where: { tokenId: req.user.dvToken },
+          attributes: ['id', 'userId'],
+          include: {
+            model: user,
+            where: { status: true, userTypeId: 3 },
+            attributes: [],
+            required: true,
+          },
+        })
+
+        if (employeeDevice) {
+          const staffEmployee = await employee.findOne({
+            where: { userId: employeeDevice.userId },
+            attributes: ['id', 'salonDetailId'],
+          })
+
+          if (staffEmployee) {
+            const salon = await salonDetail.findOne({
+              where: {
+                id: staffEmployee.salonDetailId,
+                userId: req.user.id,
+              },
+              attributes: ['id'],
+            })
+
+            if (salon) {
+              await deviceToken.findOrCreate({
+                where: { tokenId: req.user.dvToken, userId: req.user.id },
+                defaults: { status: true },
+              })
+              check = employeeDevice
+            }
+          }
+        }
+      }
       console.log('🚀 ~ validateToken ~ check:', check)
 
       if (check) {

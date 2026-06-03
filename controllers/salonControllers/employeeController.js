@@ -510,6 +510,7 @@ exports.employeeDetail = async (req, res, next) => {
     include: [
       {
         model: user,
+        required: false,
         attributes: [
           'id',
           'firstName',
@@ -523,7 +524,12 @@ exports.employeeDetail = async (req, res, next) => {
       // { model: salonDetail, attributes: ['coverImage'] },
       {
         model: employeeWagesMethod,
-        include: { model: wagesMethod, attributes: ['methodName'] },
+        required: false,
+        include: {
+          model: wagesMethod,
+          required: false,
+          attributes: ['methodName'],
+        },
         attributes: [
           'id',
           'value',

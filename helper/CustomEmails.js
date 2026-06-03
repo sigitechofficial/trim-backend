@@ -10,10 +10,14 @@ module.exports = function (data) {
   console.log('🚀 ~ data:', data)
   let firstParagraph = `${data.content}`
 
-  let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your shop success.`
+  // let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your shop success.`
 
   let greetings = `${data.greetings}`
   let subject = `${data.greetings}`
+
+  // const supportEmail = 'support@trimworldwide.com'
+  // const supportNumber = '017874854624'
+  // const customerServiceParagraph = `If you have any questions or need assistance with providing your delivery details or the payment process, please don't hesitate to contact our customer service team at <a href="mailto:${supportEmail}" style="color: #12466f; text-decoration: none;">${supportEmail}</a> or <a href="tel:${supportNumber}" style="color: #12466f; text-decoration: none;">${supportNumber}</a>. We're here to assist you throughout the process.`
 
   transporter.sendMail(
     {
@@ -508,96 +512,6 @@ module.exports = function (data) {
                                   >
                                     <p style="margin: 0">
                                      ${firstParagraph}
-                                    </p>
-                                  </div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            <table
-              align="center"
-              border="0"
-              cellpadding="0"
-              cellspacing="0"
-              class="row row-6"
-              role="presentation"
-              width="100%"
-            >
-              <tbody>
-                <tr>
-                  <td>
-                    <table
-                      align="center"
-                      border="0"
-                      cellpadding="0"
-                      cellspacing="0"
-                      class="row-content stack"
-                      role="presentation"
-                      style="
-                        border-radius: 0;
-                        color: #000;
-                        width: 500px;
-                        margin: 0 auto;
-                      "
-                      width="500"
-                    >
-                      <tbody>
-                        <tr>
-                          <td
-                            class="column column-1"
-                            style="
-                              font-weight: 400;
-                              text-align: left;
-                              vertical-align: top;
-                              border-top: 0px;
-                              border-right: 0px;
-                              border-bottom: 0px;
-                              border-left: 0px;
-                            "
-                            width="100%"
-                          >
-                            <div
-                              class="spacer_block block-1"
-                              style="
-                                height: 20px;
-                                line-height: 30px;
-                                font-size: 1px;
-                              "
-                            >
-                               
-                            </div>
-                            <table
-                              border="0"
-                              cellpadding="10"
-                              cellspacing="0"
-                              class="paragraph_block block-1"
-                              role="presentation"
-                              style="word-break: break-word"
-                              width="100%"
-                            >
-                              <tr>
-                                <td>
-                                  <div
-                                    style="
-                                      color: #000000cc;
-                                      direction: ltr;
-                                      font-family: Chivo, sans-serif;
-                                      font-size: 20px;
-                                      font-weight: 500;
-                                      letter-spacing: 0px;
-                                      text-align: left;
-                                    "
-                                  >
-                                    <p style="margin: 0">
-                                      ${secondParagraph}
                                     </p>
                                   </div>
                                 </td>

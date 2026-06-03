@@ -318,6 +318,7 @@ exports.calendarAppointments = async (req, res, next) => {
   })
   console.log(req.body)
   let parentSalonName = ''
+  let subscriptionSalon = salon
   const JobAttributes = [
     'id',
     'on',
@@ -369,11 +370,14 @@ exports.calendarAppointments = async (req, res, next) => {
 
   if (salon?.parentSalonId) {
     const parentSalon = await salonDetail.findOne({
-      where: { id: salon?.parentSalonId },
-      attributes: ['id', 'salonName'],
+      where: { id: salon.parentSalonId },
+      attributes: ['id', 'salonName', 'registrationExpiryDate', 'registrationDate'],
     })
 
-    parentSalonName = parentSalon?.salonName
+    if (parentSalon) {
+      parentSalonName = parentSalon.salonName
+      subscriptionSalon = parentSalon
+    }
   }
   if (!salon) {
     throw new AppError('Resource not found', 404)
@@ -514,10 +518,11 @@ exports.calendarAppointments = async (req, res, next) => {
     results.push(unassign)
   }
 
-  // Check salon subscription status
+  // Check salon subscription status (parent salon for rent-a-chair / external employees)
   let subscriptionExpire = false
+  const subscriptionSalonId = subscriptionSalon?.id ?? salon?.id
   const salonSubscription = await subscriptions.findOne({
-    where: { salonDetailId: salon?.id },
+    where: { salonDetailId: subscriptionSalonId },
     attributes: ['subscriptionId', 'status', 'subscriptionSource'],
     order: [['createdAt', 'DESC']], // Get the latest subscription
   })
@@ -546,8 +551,8 @@ exports.calendarAppointments = async (req, res, next) => {
       parentSalonName,
       onlinePayments: salon?.onlinePayments ?? true,
       subscriptionExpire,
-      registrationExpiryDate: salon?.registrationExpiryDate,
-      registrationDate: salon?.registrationDate,
+      registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
+      registrationDate: subscriptionSalon?.registrationDate,
     },
   })
 

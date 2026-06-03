@@ -1921,11 +1921,54 @@ exports.employeesWithAllServices = async (req, res, next) => {
   return res.status(200).json(output)
 }
 
+async function resolveBookingEmployee(employeeParam) {
+  let bookingEmployee = await employee.findByPk(employeeParam, {
+    attributes: ['id', 'parentEmployeeId'],
+  })
+  if (!bookingEmployee) {
+    bookingEmployee = await employee.findOne({
+      where: { userId: employeeParam, deleted: false, status: true },
+      attributes: ['id', 'parentEmployeeId'],
+    })
+  }
+  return bookingEmployee
+}
+
+async function getLinkedEmployeeIdsForBreaks(bookingEmployee) {
+  const ids = new Set([bookingEmployee.id])
+  if (bookingEmployee.parentEmployeeId) {
+    ids.add(bookingEmployee.parentEmployeeId)
+  }
+  const children = await employee.findAll({
+    where: { parentEmployeeId: bookingEmployee.id },
+    attributes: ['id'],
+  })
+  children.forEach((child) => ids.add(child.id))
+  return [...ids]
+}
+
+function formatBusyTime(timeVal) {
+  if (!timeVal) return ''
+  const str = String(timeVal)
+  const parts = str.split(':')
+  if (parts.length === 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:00`
+  }
+  return str
+}
+
 //* 2.Check Employees availability -----------------
 
 exports.employeeAvailability = async (req, res, next) => {
   let { openingTime, closingTime, jobDate, duration } = req.body
   console.log('ðŸš€ ~ exports.employeeAvailability= ~ req.body:', req.body)
+
+  const bookingEmployee = await resolveBookingEmployee(req.params.employee)
+  if (!bookingEmployee) {
+    return next(new AppError('Employee not found', 404))
+  }
+
+  const bookingEmployeeId = bookingEmployee.id
 
   if (openingTime == '00:00' || openingTime == '00:00:00')
     openingTime = '00:00:01'
@@ -1933,15 +1976,21 @@ exports.employeeAvailability = async (req, res, next) => {
     closingTime = '24:00:00'
 
   const busyTimes = await jobs.findAll({
-    where: { status: 'assign', employeeId: req.params.employee, on: jobDate },
+    where: {
+      status: 'assign',
+      employeeId: bookingEmployeeId,
+      on: jobDate,
+    },
     attributes: ['startTime', 'endTime'],
   })
 
   const dateDay = DateManupulation.dayOnDate(new Date(jobDate))
 
+  const breakEmployeeIds = await getLinkedEmployeeIdsForBreaks(bookingEmployee)
+
   const employeeBreaks = await breakTime.findAll({
     where: {
-      employeeId: req.params.employee,
+      employeeId: { [Op.in]: breakEmployeeIds },
       day: dateDay,
       status: true,
       deletedAt: null,
@@ -1950,8 +1999,8 @@ exports.employeeAvailability = async (req, res, next) => {
 
   for (const br of employeeBreaks) {
     busyTimes.push({
-      startTime: br.breakStart,
-      endTime: br.breakEnd,
+      startTime: formatBusyTime(br.breakStart),
+      endTime: formatBusyTime(br.breakEnd),
     })
   }
 
