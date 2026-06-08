@@ -281,6 +281,15 @@ router.get(
   catchAsync(salonController.salonLiveStatus),
 )
 
+router.get(
+  '/rent-chair-advertisement-status',
+  catchAsync(salonController.getRentChairAdvertisementStatus),
+)
+router.post(
+  '/rent-chair-advertisement',
+  catchAsync(salonController.updateRentChairAdvertisement),
+)
+
 //! Salon online Offline
 router.post(
   '/active-block-customer',
@@ -300,6 +309,10 @@ router.get('/announcements', catchAsync(salonController.fetchAnnouncements))
 
 //! Client Feed Back
 router.get('/notifications', catchAsync(salonController.fetchNotifications))
+router.get(
+  '/rent-chair-advertisement-enquiry/:enquiryId',
+  catchAsync(salonController.getRentChairAdvertisementEnquiryDetail),
+)
 
 router.get(
   '/client-feedback/salon/:salon',

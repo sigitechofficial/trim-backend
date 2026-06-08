@@ -47,6 +47,7 @@ const {
   subscriptions,
   allergies,
   helpSupport,
+  rentChairAdvertisementEnquiry,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -1511,6 +1512,8 @@ exports.salonDetails = async (req, res, next) => {
       'isVATRegistered',
       'vatType',
       'platformFee',
+      'rentChairAdvertisementChairCount',
+      'rentChairAdvertisementStatus',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
@@ -1712,6 +1715,205 @@ exports.salonDetails = async (req, res, next) => {
         currencyUnit: CURRENCY_UNIT,
         feedbackCount,
       },
+    }),
+  )
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
+  const {
+    salonDetailId,
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    notes,
+  } = req.body
+
+  const salonId = Number(salonDetailId)
+  if (!Number.isInteger(salonId) || salonId <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'salonDetailId is required and must be a valid integer',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const trimmedFirstName =
+    typeof firstName === 'string' ? firstName.trim() : ''
+  const trimmedLastName = typeof lastName === 'string' ? lastName.trim() : ''
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedPhone =
+    typeof phoneNumber === 'string' ? phoneNumber.trim() : ''
+  const trimmedNotes =
+    notes === undefined || notes === null
+      ? ''
+      : typeof notes === 'string'
+        ? notes.trim()
+        : null
+
+  if (!trimmedFirstName || trimmedFirstName.length > 100) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'firstName is required and must be at most 100 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedLastName || trimmedLastName.length > 100) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'lastName is required and must be at most 100 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedEmail || trimmedEmail.length > 255 || !EMAIL_REGEX.test(trimmedEmail)) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'A valid email is required and must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedPhone || trimmedPhone.length > 72) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'phoneNumber is required and must be at most 72 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedNotes === null) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'notes must be a string when provided',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedNotes.length > 2000) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'notes must be at most 2000 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { id: salonId },
+    attributes: [
+      'id',
+      'salonName',
+      'userId',
+      'rentChairAdvertisementStatus',
+      'rentChairAdvertisementChairCount',
+    ],
+    include: {
+      model: user,
+      attributes: ['id'],
+      include: { model: deviceToken, attributes: ['tokenId'] },
+    },
+  })
+
+  if (!salon) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Salon not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!salon.rentChairAdvertisementStatus) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'This salon is not accepting chair rental enquiries',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if ((salon.rentChairAdvertisementChairCount ?? 0) <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'This salon has no chairs available to rent',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const customerUserId = req.user?.id ?? null
+
+  const enquiry = await rentChairAdvertisementEnquiry.create({
+    salonDetailId: salon.id,
+    customerUserId,
+    firstName: trimmedFirstName,
+    lastName: trimmedLastName,
+    email: trimmedEmail,
+    phoneNumber: trimmedPhone,
+    notes: trimmedNotes || null,
+    status: 0,
+  })
+
+  const ownerTokens =
+    salon.user?.deviceTokens
+      ?.map((token) => token?.tokenId)
+      .filter(Boolean) ?? []
+
+  const notificationData = {
+    enquiryId: String(enquiry.id),
+    salonDetailId: String(salon.id),
+    type: 'rentChairAdvertisementEnquiry',
+    firstName: trimmedFirstName,
+    lastName: trimmedLastName,
+    email: trimmedEmail,
+    phoneNumber: trimmedPhone,
+    notes: trimmedNotes || '',
+  }
+
+  await ThrowNotification(
+    ownerTokens,
+    {
+      title: 'Chair rental enquiry',
+      body: `${trimmedFirstName} ${trimmedLastName} sent a chair rental enquiry.`,
+    },
+    notificationData,
+    salon.userId,
+  )
+
+  return res.status(200).json(
+    response({
+      message: 'Enquiry sent successfully',
+      data: { enquiryId: enquiry.id },
     }),
   )
 }
@@ -2021,10 +2223,8 @@ exports.employeeAvailability = async (req, res, next) => {
 exports.salonAvailability = async (req, res, next) => {
   let { openingTime, closingTime, jobDate, duration } = req.body
 
-  if (openingTime == '00:00' || openingTime == '00:00:00')
-    openingTime = '00:00:01' //Have do this because of (how they handeled on salon Side)
-  if (closingTime == '00:00' || closingTime == '00:00:00')
-    closingTime = '24:00:00'
+  if (openingTime == '00:00' || openingTime == '00:00:00') openingTime = '00:00:01'
+  if (closingTime == '00:00' || closingTime == '00:00:00') closingTime = '24:00:00'
 
   const salon = await salonDetail.findOne({
     where: { id: req.params.salon },
@@ -2032,16 +2232,84 @@ exports.salonAvailability = async (req, res, next) => {
   })
   if (!salon) throw new AppError('resource not Found', 200)
 
-  const availableTimeSlots = Slot.getAvailableTimeSlots(
-    jobDate,
-    openingTime,
-    closingTime,
-    duration,
-    [],
+  // Get day name from jobDate using existing utility
+  const dayName = DateManupulation.dayOnDate(new Date(jobDate))
+
+  // Load all active non-external employees working that day
+  const employees = await employee.findAll({
+    where: {
+      salonDetailId: salon.id,
+      deleted: false,
+      isExternalEmployee: false,
+    },
+    attributes: ['id'],
+    include: [
+      {
+        model: time,
+        where: { day: dayName, status: true },
+        attributes: ['openingTime', 'closingTime'],
+        required: true,
+      },
+    ],
+  })
+
+  // Fallback: no employees working that day → salon-level open/close, no breaks
+  if (employees.length === 0) {
+    const availableTimeSlots = Slot.getAvailableTimeSlots(
+      jobDate, openingTime, closingTime, duration, []
+    )
+    return res.status(200).json(response({ data: { availableTimeSlots } }))
+  }
+
+  // For each employee calculate their available slots
+  const employeeSlotSets = await Promise.all(
+    employees.map(async (emp) => {
+      const empOpeningTime = emp.times[0].openingTime
+      const empClosingTime = emp.times[0].closingTime
+
+      // Load existing assigned jobs for this employee on this date
+      const empJobs = await jobs.findAll({
+        where: {
+          employeeId: emp.id,
+          on: jobDate,
+          status: 'assign',
+        },
+        attributes: ['startTime', 'endTime'],
+      })
+
+      // Load breaks for this employee on this day
+      const empBreaks = await breakTime.findAll({
+        where: {
+          employeeId: emp.id,
+          day: dayName,
+          status: true,
+          deletedAt: null,
+        },
+        attributes: ['breakStart', 'breakEnd'],
+      })
+
+      const busyTimes = [
+        ...empJobs.map(j => ({
+          startTime: formatBusyTime(j.startTime),
+          endTime: formatBusyTime(j.endTime),
+        })),
+        ...empBreaks.map(b => ({
+          startTime: formatBusyTime(b.breakStart),
+          endTime: formatBusyTime(b.breakEnd),
+        })),
+      ]
+
+      return Slot.getAvailableTimeSlots(
+        jobDate, empOpeningTime, empClosingTime, duration, busyTimes
+      )
+    })
   )
 
-  const output = response({ data: { availableTimeSlots } })
-  return res.status(200).json(output)
+  // A slot is available if ANY employee has it free
+  const allSlots = new Set(employeeSlotSets.flat())
+  const availableTimeSlots = [...allSlots].sort()
+
+  return res.status(200).json(response({ data: { availableTimeSlots } }))
 }
 
 //* 4.Reschedule Solo Employee Appointment -----------------

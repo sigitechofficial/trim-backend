@@ -43,7 +43,8 @@ const {
   customerOnConnectAccount,
   cities,
   countries,
-  zones
+  zones,
+  rentChairAdvertisementEnquiry,
 } = require('../../models')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -3621,6 +3622,121 @@ exports.salonLiveStatus = async (req, res, next) => {
     .json(returnFunction('1', `success`, { status, salon: salon }, ''))
 }
 
+exports.getRentChairAdvertisementStatus = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: [
+      'rentChairAdvertisementChairCount',
+      'rentChairAdvertisementStatus',
+    ],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', {
+      rentChairAdvertisementChairCount:
+        salon.rentChairAdvertisementChairCount ?? 0,
+      rentChairAdvertisementStatus: salon.rentChairAdvertisementStatus ? 1 : 0,
+    }, ''),
+  )
+}
+
+exports.updateRentChairAdvertisement = async (req, res, next) => {
+  const { rentChairAdvertisementChairCount, rentChairAdvertisementStatus } =
+    req.body
+
+  if (
+    rentChairAdvertisementChairCount === undefined ||
+    rentChairAdvertisementStatus === undefined
+  ) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementChairCount and rentChairAdvertisementStatus are required',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const chairCount = Number(rentChairAdvertisementChairCount)
+  if (
+    !Number.isInteger(chairCount) ||
+    chairCount < 0 ||
+    chairCount > 99
+  ) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementChairCount must be an integer between 0 and 99',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const statusType = typeof rentChairAdvertisementStatus
+  let normalizedStatus
+  if (statusType === 'boolean') {
+    normalizedStatus = rentChairAdvertisementStatus ? 1 : 0
+  } else if (statusType === 'number') {
+    if (
+      rentChairAdvertisementStatus !== 0 &&
+      rentChairAdvertisementStatus !== 1
+    ) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'rentChairAdvertisementStatus must be 0, 1, true, or false',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedStatus = rentChairAdvertisementStatus
+  } else {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementStatus must be 0, 1, true, or false',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  await salonDetail.update(
+    {
+      rentChairAdvertisementChairCount: chairCount,
+      rentChairAdvertisementStatus: normalizedStatus === 1,
+    },
+    { where: { userId: req.user.id } },
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Success', {
+      rentChairAdvertisementChairCount: chairCount,
+      rentChairAdvertisementStatus: normalizedStatus,
+    }, ''),
+  )
+}
+
 exports.makeAnnouncement = async (req, res, next) => {
   const newEntry = await announcement.create(req.body)
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
@@ -3684,6 +3800,8 @@ exports.fetchNotifications = async (req, res, next) => {
       `data`,
       'type',
       'repliedAt',
+      'createdAt',
+      'updatedAt',
     ],
   })
 
@@ -3695,6 +3813,9 @@ exports.fetchNotifications = async (req, res, next) => {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
+      } else if (type === 'advert') {
+        accumulator.advertNotifications.push(notification)
+        accumulator.advertisementNotifications.push(notification)
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
         accumulator.otherNotifications.push(notification)
@@ -3705,6 +3826,8 @@ exports.fetchNotifications = async (req, res, next) => {
     {
       appointmentNotifications: [],
       reviewNotifications: [],
+      advertNotifications: [],
+      advertisementNotifications: [],
       otherNotifications: [],
     }, // Initial accumulator
   )
@@ -3714,6 +3837,47 @@ exports.fetchNotifications = async (req, res, next) => {
       message: 'Notifications.',
       data: { notifications: groupedNotifications },
     }),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'firstName',
+      'lastName',
+      'email',
+      'phoneNumber',
+      'notes',
+      'status',
+      'createdAt',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiry }, ''),
   )
 }
 

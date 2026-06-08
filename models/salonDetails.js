@@ -141,7 +141,17 @@ module.exports = (sequelize, DataTypes) => {
       type:DataTypes.DECIMAL(10, 2),
       allowNull:true,
       defaultValue:0,
-    }
+    },
+    rentChairAdvertisementChairCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    rentChairAdvertisementStatus: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   })
 
   salonDetail.associate = (models) => {
@@ -200,6 +210,8 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.rentCollection) // only for external employee salon id
     models.rentCollection.belongsTo(salonDetail)
+
+    salonDetail.hasMany(models.rentChairAdvertisementEnquiry)
   }
 
   return salonDetail
