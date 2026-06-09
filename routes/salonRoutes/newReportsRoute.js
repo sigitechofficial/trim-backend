@@ -50,4 +50,12 @@ router.get('/average-bookings', catchAsync(Controller.averageJobsReport))
 
 router.get('/subscriptions/history', validateToken, catchAsync(Controller.subscriptionHistory));
 
+router.get('/income-with-rent-monthly', catchAsync(Controller.incomeWithRentMonthly))
+router.get('/income-with-rent-daily', catchAsync(Controller.incomeWithRentDaily))
+router.get('/rental-income-weekly', catchAsync(Controller.rentalIncomeWeekly))
+router.get('/rental-income-monthly', catchAsync(Controller.rentalIncomeMonthly))
+router.get('/rental-profit-weekly', catchAsync(Controller.rentalProfitWeekly))
+router.get('/rental-profit-monthly', catchAsync(Controller.rentalProfitMonthly))
+router.get('/rental-overview', catchAsync(Controller.rentalOverview))
+
 module.exports = router
