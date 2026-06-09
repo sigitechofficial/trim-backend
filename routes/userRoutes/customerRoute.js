@@ -68,6 +68,18 @@ router.post(
   catchAsync(appController.submitRentChairAdvertisementEnquiry),
 )
 
+router.get(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  protect,
+  catchAsync(appController.getRentChairAdvertisementEnquiryMessages),
+)
+
+router.post(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  protect,
+  catchAsync(appController.sendRentChairAdvertisementEnquiryMessage),
+)
+
 router.get('/salon-times/:salon', catchAsync(appController.salonTimes))
 router.get('/employee-times/:employee', catchAsync(appController.employeeTimes))
 router.get('/employee-detail/:id', catchAsync(appController.employeeDetails))

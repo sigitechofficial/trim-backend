@@ -966,7 +966,12 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
         access: 'Send\nnotifications',
         key: 'sendNotification',
         level: 'none',
-      }
+      },
+      {
+        access: 'Respond to\nenquiries',
+        key: 'respondToEnquiries',
+        level: 'none',
+      },
     ]
   }
 

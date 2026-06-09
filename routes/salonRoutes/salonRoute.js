@@ -315,6 +315,16 @@ router.get(
 )
 
 router.get(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  catchAsync(salonController.getRentChairAdvertisementEnquiryMessages),
+)
+
+router.post(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  catchAsync(salonController.sendRentChairAdvertisementEnquiryMessage),
+)
+
+router.get(
   '/client-feedback/salon/:salon',
   catchAsync(customerController.clientFeedBack),
 )

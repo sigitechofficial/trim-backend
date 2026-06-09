@@ -18,6 +18,22 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(72),
         allowNull: false,
       },
+      currentLocation: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      yearsExperience: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      socialMedia: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      preferredWorkingDays: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -36,6 +52,9 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'customerUserId',
       as: 'customer',
     })
+    rentChairAdvertisementEnquiry.hasMany(
+      models.rentChairAdvertisementEnquiryMessage,
+    )
   }
 
   return rentChairAdvertisementEnquiry

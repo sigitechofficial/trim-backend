@@ -45,7 +45,13 @@ const {
   countries,
   zones,
   rentChairAdvertisementEnquiry,
+  rentChairAdvertisementEnquiryMessage,
 } = require('../../models')
+const {
+  formatEnquiryResponse,
+  MESSAGE_ATTRIBUTES,
+  canSalonReplyToEnquiry,
+} = require('../../utils/rentChairEnquiryHelper')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
@@ -3816,6 +3822,13 @@ exports.fetchNotifications = async (req, res, next) => {
       } else if (type === 'advert') {
         accumulator.advertNotifications.push(notification)
         accumulator.advertisementNotifications.push(notification)
+        const dataType = notification.data?.type
+        if (
+          dataType === 'rentChairAdvertisementEnquiry' ||
+          dataType === 'rentChairAdvertisementEnquiryMessage'
+        ) {
+          accumulator.enquiryNotifications.push(notification)
+        }
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
         accumulator.otherNotifications.push(notification)
@@ -3828,6 +3841,7 @@ exports.fetchNotifications = async (req, res, next) => {
       reviewNotifications: [],
       advertNotifications: [],
       advertisementNotifications: [],
+      enquiryNotifications: [],
       otherNotifications: [],
     }, // Initial accumulator
   )
@@ -3860,10 +3874,15 @@ exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
     attributes: [
       'id',
       'salonDetailId',
+      'customerUserId',
       'firstName',
       'lastName',
       'email',
       'phoneNumber',
+      'currentLocation',
+      'yearsExperience',
+      'socialMedia',
+      'preferredWorkingDays',
       'notes',
       'status',
       'createdAt',
@@ -3877,7 +3896,148 @@ exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
   }
 
   return res.status(200).json(
-    returnFunction('1', 'success', { enquiry }, ''),
+    returnFunction('1', 'success', { enquiry: formatEnquiryResponse(enquiry) }, ''),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: ['id'],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
+    where: { rentChairAdvertisementEnquiryId: enquiry.id },
+    attributes: MESSAGE_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+  })
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { messages }, ''),
+  )
+}
+
+exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id', 'userId', 'salonName'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'customerUserId',
+      'firstName',
+      'lastName',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  if (!enquiry.customerUserId) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'This enquiry was submitted by a guest. Please contact them using their email or phone number.',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const permission = await canSalonReplyToEnquiry(req, salon)
+  if (!permission.allowed) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'You do not have permission to respond to enquiries',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const trimmedMessage =
+    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+
+  if (!trimmedMessage) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'message is required', {}, ''))
+  }
+
+  if (trimmedMessage.length > 2000) {
+    return res.status(200).json(
+      returnFunction('0', 'message must be at most 2000 characters', {}, ''),
+    )
+  }
+
+  const createdMessage = await rentChairAdvertisementEnquiryMessage.create({
+    rentChairAdvertisementEnquiryId: enquiry.id,
+    senderRole: 'salon',
+    senderUserId: permission.actingUserId,
+    message: trimmedMessage,
+  })
+
+  const customerTokens = await deviceToken.findAll({
+    where: { userId: enquiry.customerUserId },
+    attributes: ['tokenId'],
+  })
+
+  const tokens = customerTokens.map((row) => row.tokenId).filter(Boolean)
+
+  await ThrowNotification(
+    tokens,
+    {
+      title: 'Chair rental enquiry reply',
+      body: `${salon.salonName || 'Salon'} replied to your chair rental enquiry.`,
+    },
+    {
+      type: 'rentChairAdvertisementEnquiryMessage',
+      enquiryId: String(enquiry.id),
+      messageId: String(createdMessage.id),
+      salonDetailId: String(enquiry.salonDetailId),
+    },
+    enquiry.customerUserId,
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Message sent successfully', { message: createdMessage }, ''),
   )
 }
 

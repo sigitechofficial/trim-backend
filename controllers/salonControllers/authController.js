@@ -95,7 +95,12 @@ const defaultAccess = [
     access: 'Send\nnotifications',
     key: 'sendNotification',
     level: 'none',
-  }
+  },
+  {
+    access: 'Respond to\nenquiries',
+    key: 'respondToEnquiries',
+    level: 'none',
+  },
 ]
 // [
 //   literal(

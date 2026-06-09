@@ -48,7 +48,12 @@ const {
   allergies,
   helpSupport,
   rentChairAdvertisementEnquiry,
+  rentChairAdvertisementEnquiryMessage,
 } = require('../../models')
+const {
+  parsePreferredWorkingDays,
+  MESSAGE_ATTRIBUTES,
+} = require('../../utils/rentChairEnquiryHelper')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
 const Custom = require('../../utils/customFunctions')
@@ -1728,6 +1733,10 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     lastName,
     email,
     phoneNumber,
+    currentLocation,
+    yearsExperience,
+    socialMedia,
+    preferredWorkingDays,
     notes,
   } = req.body
 
@@ -1749,6 +1758,14 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
   const trimmedEmail = typeof email === 'string' ? email.trim() : ''
   const trimmedPhone =
     typeof phoneNumber === 'string' ? phoneNumber.trim() : ''
+  const trimmedLocation =
+    typeof currentLocation === 'string' ? currentLocation.trim() : ''
+  const trimmedSocialMedia =
+    socialMedia === undefined || socialMedia === null
+      ? ''
+      : typeof socialMedia === 'string'
+        ? socialMedia.trim()
+        : null
   const trimmedNotes =
     notes === undefined || notes === null
       ? ''
@@ -1794,6 +1811,69 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
       response({
         status: '0',
         message: 'phoneNumber is required and must be at most 72 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedLocation || trimmedLocation.length > 255) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'currentLocation is required and must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const parsedYearsExperience = Number(yearsExperience)
+  if (
+    yearsExperience === undefined ||
+    yearsExperience === null ||
+    yearsExperience === '' ||
+    !Number.isInteger(parsedYearsExperience) ||
+    parsedYearsExperience < 0
+  ) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'yearsExperience is required and must be an integer >= 0',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedSocialMedia === null) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'socialMedia must be a string when provided',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedSocialMedia.length > 255) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'socialMedia must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const preferredDaysResult = parsePreferredWorkingDays(preferredWorkingDays)
+  if (preferredDaysResult.error) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: preferredDaysResult.error,
         data: {},
         error: '',
       }),
@@ -1872,6 +1952,7 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
   }
 
   const customerUserId = req.user?.id ?? null
+  const storedPreferredWorkingDays = JSON.stringify(preferredDaysResult.days)
 
   const enquiry = await rentChairAdvertisementEnquiry.create({
     salonDetailId: salon.id,
@@ -1880,6 +1961,10 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     lastName: trimmedLastName,
     email: trimmedEmail,
     phoneNumber: trimmedPhone,
+    currentLocation: trimmedLocation,
+    yearsExperience: parsedYearsExperience,
+    socialMedia: trimmedSocialMedia || null,
+    preferredWorkingDays: storedPreferredWorkingDays,
     notes: trimmedNotes || null,
     status: 0,
   })
@@ -1897,7 +1982,13 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     lastName: trimmedLastName,
     email: trimmedEmail,
     phoneNumber: trimmedPhone,
+    currentLocation: trimmedLocation,
+    yearsExperience: String(parsedYearsExperience),
+    socialMedia: trimmedSocialMedia || '',
+    preferredWorkingDays: storedPreferredWorkingDays,
     notes: trimmedNotes || '',
+    customerUserId: customerUserId ? String(customerUserId) : '',
+    canReplyInApp: customerUserId ? 'true' : 'false',
   }
 
   await ThrowNotification(
@@ -1914,6 +2005,133 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     response({
       message: 'Enquiry sent successfully',
       data: { enquiryId: enquiry.id },
+    }),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      customerUserId: req.user.id,
+    },
+    attributes: ['id'],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Enquiry not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
+    where: { rentChairAdvertisementEnquiryId: enquiry.id },
+    attributes: MESSAGE_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+  })
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: { messages },
+    }),
+  )
+}
+
+exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      customerUserId: req.user.id,
+    },
+    attributes: ['id', 'salonDetailId', 'firstName', 'lastName'],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Enquiry not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const trimmedMessage =
+    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+
+  if (!trimmedMessage) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'message is required',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedMessage.length > 2000) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'message must be at most 2000 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const createdMessage = await rentChairAdvertisementEnquiryMessage.create({
+    rentChairAdvertisementEnquiryId: enquiry.id,
+    senderRole: 'customer',
+    senderUserId: req.user.id,
+    message: trimmedMessage,
+  })
+
+  const salon = await salonDetail.findOne({
+    where: { id: enquiry.salonDetailId },
+    attributes: ['id', 'userId', 'salonName'],
+    include: {
+      model: user,
+      attributes: ['id'],
+      include: { model: deviceToken, attributes: ['tokenId'] },
+    },
+  })
+
+  if (salon?.user) {
+    const ownerTokens =
+      salon.user.deviceTokens?.map((token) => token?.tokenId).filter(Boolean) ??
+      []
+
+    await ThrowNotification(
+      ownerTokens,
+      {
+        title: 'Chair rental enquiry reply',
+        body: `${enquiry.firstName} ${enquiry.lastName} replied to their chair rental enquiry.`,
+      },
+      {
+        type: 'rentChairAdvertisementEnquiryMessage',
+        enquiryId: String(enquiry.id),
+        messageId: String(createdMessage.id),
+        salonDetailId: String(enquiry.salonDetailId),
+      },
+      salon.userId,
+    )
+  }
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'Message sent successfully',
+      data: { message: createdMessage },
     }),
   )
 }
