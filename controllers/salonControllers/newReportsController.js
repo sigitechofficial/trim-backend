@@ -1084,7 +1084,7 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
 
   // Get all active rent-a-chair employees with their wages method
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: false },
+    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
     attributes: ['id'],
     include: [{
       model: employeeWagesMethod,
@@ -1153,7 +1153,7 @@ exports.incomeWithRentDaily = async (req, res, next) => {
   if (!salon) throw new AppError('Salon not found', 200)
 
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: false },
+    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
     attributes: ['id'],
     include: [{
       model: employeeWagesMethod,
