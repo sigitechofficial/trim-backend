@@ -69,6 +69,18 @@ router.post(
 )
 
 router.get(
+  '/rent-chair-advertisement-enquiries',
+  protect,
+  catchAsync(appController.listRentChairAdvertisementEnquiries),
+)
+
+router.get(
+  '/rent-chair-advertisement-enquiry/by-salon/:salonDetailId',
+  protect,
+  catchAsync(appController.getRentChairAdvertisementEnquiryBySalon),
+)
+
+router.get(
   '/rent-chair-advertisement-enquiry/:enquiryId/messages',
   protect,
   catchAsync(appController.getRentChairAdvertisementEnquiryMessages),

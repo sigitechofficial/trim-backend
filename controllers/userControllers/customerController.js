@@ -53,6 +53,8 @@ const {
 const {
   parsePreferredWorkingDays,
   MESSAGE_ATTRIBUTES,
+  formatRentChairEnquiryForCustomer,
+  getLatestMessagesByEnquiryIds,
 } = require('../../utils/rentChairEnquiryHelper')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
@@ -1954,6 +1956,40 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
   const customerUserId = req.user?.id ?? null
   const storedPreferredWorkingDays = JSON.stringify(preferredDaysResult.days)
 
+  if (customerUserId) {
+    const existingEnquiry = await rentChairAdvertisementEnquiry.findOne({
+      where: {
+        customerUserId,
+        salonDetailId: salon.id,
+      },
+      include: [
+        {
+          model: salonDetail,
+          attributes: ['id', 'salonName', 'coverImage'],
+        },
+      ],
+    })
+
+    if (existingEnquiry) {
+      const latestMap = await getLatestMessagesByEnquiryIds([existingEnquiry.id])
+
+      return res.status(200).json(
+        response({
+          status: '1',
+          message: 'You already have an enquiry with this salon.',
+          data: {
+            enquiryId: existingEnquiry.id,
+            alreadyExists: true,
+            enquiry: formatRentChairEnquiryForCustomer(
+              existingEnquiry,
+              latestMap.get(existingEnquiry.id),
+            ),
+          },
+        }),
+      )
+    }
+  }
+
   const enquiry = await rentChairAdvertisementEnquiry.create({
     salonDetailId: salon.id,
     customerUserId,
@@ -2003,8 +2039,101 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
 
   return res.status(200).json(
     response({
+      status: '1',
       message: 'Enquiry sent successfully',
-      data: { enquiryId: enquiry.id },
+      data: { enquiryId: enquiry.id, alreadyExists: false },
+    }),
+  )
+}
+
+exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
+  const enquiries = await rentChairAdvertisementEnquiry.findAll({
+    where: { customerUserId: req.user.id },
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'salonName', 'coverImage'],
+      },
+    ],
+  })
+
+  const latestMap = await getLatestMessagesByEnquiryIds(
+    enquiries.map((enquiry) => enquiry.id),
+  )
+
+  const formattedEnquiries = enquiries
+    .map((enquiry) =>
+      formatRentChairEnquiryForCustomer(enquiry, latestMap.get(enquiry.id)),
+    )
+    .sort((a, b) => {
+      const aTime = new Date(
+        a.latestMessageAt || a.updatedAt || a.createdAt,
+      ).getTime()
+      const bTime = new Date(
+        b.latestMessageAt || b.updatedAt || b.createdAt,
+      ).getTime()
+      return bTime - aTime
+    })
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: { enquiries: formattedEnquiries },
+    }),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryBySalon = async (req, res, next) => {
+  const salonId = Number(req.params.salonDetailId)
+
+  if (!Number.isInteger(salonId) || salonId <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'salonDetailId must be a valid integer',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      customerUserId: req.user.id,
+      salonDetailId: salonId,
+    },
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'salonName', 'coverImage'],
+      },
+    ],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '1',
+        message: 'success',
+        data: { exists: false, enquiry: null },
+      }),
+    )
+  }
+
+  const latestMap = await getLatestMessagesByEnquiryIds([enquiry.id])
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: {
+        exists: true,
+        enquiry: formatRentChairEnquiryForCustomer(
+          enquiry,
+          latestMap.get(enquiry.id),
+        ),
+      },
     }),
   )
 }

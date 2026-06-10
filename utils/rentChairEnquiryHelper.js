@@ -4,6 +4,7 @@ const {
   employeeAccess,
   employeeAccessDefault,
   user,
+  rentChairAdvertisementEnquiryMessage,
 } = require('../models')
 
 const VALID_DAYS = [
@@ -196,12 +197,68 @@ async function canSalonReplyToEnquiry(req, salon) {
   return resolveSalonActor(req, salon)
 }
 
+async function getLatestMessagesByEnquiryIds(enquiryIds) {
+  const map = new Map()
+  if (!enquiryIds.length) return map
+
+  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
+    where: { rentChairAdvertisementEnquiryId: enquiryIds },
+    attributes: [
+      'rentChairAdvertisementEnquiryId',
+      'message',
+      'createdAt',
+      'senderRole',
+    ],
+    order: [['createdAt', 'DESC']],
+  })
+
+  for (const msg of messages) {
+    if (!map.has(msg.rentChairAdvertisementEnquiryId)) {
+      map.set(msg.rentChairAdvertisementEnquiryId, msg)
+    }
+  }
+
+  return map
+}
+
+function formatRentChairEnquiryForCustomer(enquiry, latestMessage = null) {
+  const plain = enquiry.get ? enquiry.get({ plain: true }) : enquiry
+  const salon = plain.salonDetail || {}
+
+  return {
+    id: plain.id,
+    salonDetailId: plain.salonDetailId,
+    salonName: salon.salonName || null,
+    salonImage: salon.coverImage || null,
+    customerUserId: plain.customerUserId,
+    firstName: plain.firstName,
+    lastName: plain.lastName,
+    email: plain.email,
+    phoneNumber: plain.phoneNumber,
+    currentLocation: plain.currentLocation,
+    yearsExperience: plain.yearsExperience,
+    socialMedia: plain.socialMedia,
+    preferredWorkingDays: parsePreferredWorkingDaysForResponse(
+      plain.preferredWorkingDays,
+    ),
+    notes: plain.notes,
+    status: plain.status,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt,
+    latestMessage: latestMessage?.message ?? null,
+    latestMessageAt: latestMessage?.createdAt ?? null,
+    latestMessageSenderRole: latestMessage?.senderRole ?? null,
+  }
+}
+
 module.exports = {
   VALID_DAYS,
   MESSAGE_ATTRIBUTES,
   parsePreferredWorkingDays,
   parsePreferredWorkingDaysForResponse,
   formatEnquiryResponse,
+  formatRentChairEnquiryForCustomer,
+  getLatestMessagesByEnquiryIds,
   resolveActingUserId,
   canSalonReplyToEnquiry,
 }
