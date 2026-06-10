@@ -251,6 +251,65 @@ function formatRentChairEnquiryForCustomer(enquiry, latestMessage = null) {
   }
 }
 
+function getEnquiryActivityTime(row) {
+  return new Date(
+    row.latestMessageAt || row.updatedAt || row.createdAt,
+  ).getTime()
+}
+
+function formatRentChairEnquiryForSalon(enquiry, latestMessage = null) {
+  const plain = enquiry.get ? enquiry.get({ plain: true }) : enquiry
+  const fullName =
+    [plain.firstName, plain.lastName].filter(Boolean).join(' ').trim() || null
+
+  return {
+    id: plain.id,
+    salonDetailId: plain.salonDetailId,
+    customerUserId: plain.customerUserId,
+    firstName: plain.firstName,
+    lastName: plain.lastName,
+    fullName,
+    email: plain.email,
+    phoneNumber: plain.phoneNumber,
+    currentLocation: plain.currentLocation,
+    yearsExperience: plain.yearsExperience,
+    socialMedia: plain.socialMedia,
+    preferredWorkingDays: parsePreferredWorkingDaysForResponse(
+      plain.preferredWorkingDays,
+    ),
+    notes: plain.notes,
+    status: plain.status,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt,
+    canReplyInApp: plain.customerUserId != null,
+    latestMessage: latestMessage?.message ?? null,
+    latestMessageAt: latestMessage?.createdAt ?? null,
+    latestMessageSenderRole: latestMessage?.senderRole ?? null,
+  }
+}
+
+function dedupeSalonEnquiryRows(rows) {
+  const loggedInBest = new Map()
+  const guests = []
+
+  for (const row of rows) {
+    if (row.customerUserId != null) {
+      const key = String(row.customerUserId)
+      const existing = loggedInBest.get(key)
+
+      if (!existing || getEnquiryActivityTime(row) > getEnquiryActivityTime(existing)) {
+        loggedInBest.set(key, row)
+      }
+    } else {
+      guests.push(row)
+    }
+  }
+
+  return [...loggedInBest.values(), ...guests].sort(
+    (a, b) => getEnquiryActivityTime(b) - getEnquiryActivityTime(a),
+  )
+}
+
 module.exports = {
   VALID_DAYS,
   MESSAGE_ATTRIBUTES,
@@ -258,7 +317,9 @@ module.exports = {
   parsePreferredWorkingDaysForResponse,
   formatEnquiryResponse,
   formatRentChairEnquiryForCustomer,
+  formatRentChairEnquiryForSalon,
   getLatestMessagesByEnquiryIds,
+  dedupeSalonEnquiryRows,
   resolveActingUserId,
   canSalonReplyToEnquiry,
 }

@@ -310,6 +310,10 @@ router.get('/announcements', catchAsync(salonController.fetchAnnouncements))
 //! Client Feed Back
 router.get('/notifications', catchAsync(salonController.fetchNotifications))
 router.get(
+  '/rent-chair-advertisement-enquiries',
+  catchAsync(salonController.listRentChairAdvertisementEnquiries),
+)
+router.get(
   '/rent-chair-advertisement-enquiry/:enquiryId',
   catchAsync(salonController.getRentChairAdvertisementEnquiryDetail),
 )

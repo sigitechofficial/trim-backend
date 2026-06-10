@@ -51,6 +51,9 @@ const {
   formatEnquiryResponse,
   MESSAGE_ATTRIBUTES,
   canSalonReplyToEnquiry,
+  formatRentChairEnquiryForSalon,
+  getLatestMessagesByEnquiryIds,
+  dedupeSalonEnquiryRows,
 } = require('../../utils/rentChairEnquiryHelper')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
@@ -3851,6 +3854,38 @@ exports.fetchNotifications = async (req, res, next) => {
       message: 'Notifications.',
       data: { notifications: groupedNotifications },
     }),
+  )
+}
+
+exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Salon not found', {}, ''))
+  }
+
+  const enquiries = await rentChairAdvertisementEnquiry.findAll({
+    where: { salonDetailId: salon.id },
+    order: [['updatedAt', 'DESC']],
+  })
+
+  const latestMap = await getLatestMessagesByEnquiryIds(
+    enquiries.map((enquiry) => enquiry.id),
+  )
+
+  const formattedEnquiries = enquiries.map((enquiry) =>
+    formatRentChairEnquiryForSalon(enquiry, latestMap.get(enquiry.id)),
+  )
+
+  const enquiriesList = dedupeSalonEnquiryRows(formattedEnquiries)
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiries: enquiriesList }, ''),
   )
 }
 
