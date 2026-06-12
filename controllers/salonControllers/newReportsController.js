@@ -18,7 +18,6 @@ const {
   jobs,
   opportunities,
   subscriptions,
-  rentChairEarning,
 } = require('../../models')
 const AppError = require('../../utils/appError')
 const DateManupulation = require('../../utils/dateManipulation')
@@ -1051,6 +1050,210 @@ exports.subscriptionHistory = async (req, res, next) => {
 
 };
 
+const RENT_CHAIR_WAGES_METHOD_ID = 3
+
+const rentChairEmployeeInclude = [{
+  model: employeeWagesMethod,
+  required: false,
+  include: [{ model: wagesMethod, attributes: ['id'] }],
+}]
+
+function isRentChairWagesMethod(emp) {
+  const ewm = emp?.employeeWagesMethod
+  if (!ewm) return false
+  return ewm.wagesMethod?.id === RENT_CHAIR_WAGES_METHOD_ID
+    || ewm.wagesMethodId === RENT_CHAIR_WAGES_METHOD_ID
+}
+
+async function loadRentChairWagesMethod(emp) {
+  if (isRentChairWagesMethod(emp)) return emp
+  if (!emp.parentEmployeeId) return emp
+
+  const parent = await employee.findOne({
+    where: { id: emp.parentEmployeeId, deleted: false },
+    attributes: ['id'],
+    include: rentChairEmployeeInclude,
+  })
+  if (parent?.employeeWagesMethod && isRentChairWagesMethod(parent)) {
+    emp.employeeWagesMethod = parent.employeeWagesMethod
+  }
+  return emp
+}
+
+async function resolveRentChairReportEmployee(req) {
+  const salonDetailIdParam = req.query?.salonDetailId
+    ? parseInt(req.query.salonDetailId, 10)
+    : null
+
+  if (req.user?.dvToken) {
+    const employeeToken = await deviceToken.findOne({
+      where: { tokenId: req.user.dvToken },
+      attributes: ['userId'],
+      include: {
+        model: user,
+        where: { userTypeId: 3, status: true },
+        attributes: ['id'],
+        required: true,
+      },
+    })
+
+    if (employeeToken) {
+      const staffWhere = {
+        userId: employeeToken.userId,
+        deleted: false,
+      }
+
+      if (salonDetailIdParam) {
+        staffWhere.salonDetailId = salonDetailIdParam
+      } else {
+        const ownerSalon = await salonDetail.findOne({
+          where: { userId: req.user.id },
+          attributes: ['id'],
+        })
+        if (ownerSalon) staffWhere.salonDetailId = ownerSalon.id
+      }
+
+      const emp = await employee.findOne({
+        where: staffWhere,
+        attributes: ['id', 'salonDetailId', 'parentEmployeeId', 'createdAt'],
+        include: rentChairEmployeeInclude,
+      })
+
+      if (emp) return loadRentChairWagesMethod(emp)
+    }
+  }
+
+  const actingUserId = req.params?.salon || req.user?.id
+
+  const baseWhere = { userId: actingUserId, deleted: false }
+  if (salonDetailIdParam) baseWhere.salonDetailId = salonDetailIdParam
+
+  const candidates = await employee.findAll({
+    where: baseWhere,
+    attributes: [
+      'id', 'salonDetailId', 'parentEmployeeId', 'createdAt',
+      'isOwner', 'isExternalEmployee',
+    ],
+    include: rentChairEmployeeInclude,
+  })
+
+  if (!candidates.length) return null
+
+  if (salonDetailIdParam) {
+    const atSalon = candidates.filter(
+      (e) => e.salonDetailId === salonDetailIdParam,
+    )
+    if (atSalon.length === 1) {
+      return loadRentChairWagesMethod(atSalon[0])
+    }
+    if (atSalon.length > 1) {
+      const ownerAtSalon = atSalon.find((e) => e.isOwner)
+      if (ownerAtSalon) return loadRentChairWagesMethod(ownerAtSalon)
+    }
+  }
+
+  const userSalons = await salonDetail.findAll({
+    where: { userId: actingUserId },
+    attributes: ['id'],
+  })
+  const ownedSalonIds = new Set(userSalons.map((s) => s.id))
+
+  const chairSalonEmployees = candidates.filter(
+    (e) => ownedSalonIds.has(e.salonDetailId) && e.isOwner,
+  )
+
+  if (chairSalonEmployees.length === 1) {
+    return loadRentChairWagesMethod(chairSalonEmployees[0])
+  }
+  if (chairSalonEmployees.length > 1 && salonDetailIdParam) {
+    const match = chairSalonEmployees.find(
+      (e) => e.salonDetailId === salonDetailIdParam,
+    )
+    if (match) return loadRentChairWagesMethod(match)
+  }
+
+  const withRentWages = candidates.filter(isRentChairWagesMethod)
+  if (withRentWages.length === 1) {
+    return loadRentChairWagesMethod(withRentWages[0])
+  }
+  if (withRentWages.length > 1) {
+    if (salonDetailIdParam) {
+      const match = withRentWages.find(
+        (e) => e.salonDetailId === salonDetailIdParam,
+      )
+      if (match) return loadRentChairWagesMethod(match)
+    }
+    const ownerChair = withRentWages.find((e) => e.isOwner)
+    if (ownerChair) return loadRentChairWagesMethod(ownerChair)
+    return null
+  }
+
+  const externalOnly = candidates.filter((e) => e.isExternalEmployee)
+  if (externalOnly.length === 1) {
+    return loadRentChairWagesMethod(externalOnly[0])
+  }
+
+  return null
+}
+
+async function getRentChairPersonIncomeByDay(employeeId, salonDetailId, startDate, endDate) {
+  return sequelize.query(`
+    SELECT DAYNAME(bookings.on) AS day, COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND bookings.on >= :startDate
+      AND bookings.on <= :endDate
+    GROUP BY DAYNAME(bookings.on)
+  `, {
+    replacements: {
+      employeeId,
+      salonDetailId,
+      startDate: `${startDate} 00:00:00`,
+      endDate: `${endDate} 23:59:59`,
+    },
+    type: sequelize.QueryTypes.SELECT,
+  })
+}
+
+async function getRentChairPersonIncomeByMonth(employeeId, salonDetailId, year) {
+  return sequelize.query(`
+    SELECT MONTH(bookings.on) AS month, COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND YEAR(bookings.on) = :year
+    GROUP BY MONTH(bookings.on)
+  `, {
+    replacements: { employeeId, salonDetailId, year },
+    type: sequelize.QueryTypes.SELECT,
+  })
+}
+
+async function getRentChairPersonIncomeForMonth(employeeId, salonDetailId, year, month) {
+  const rows = await sequelize.query(`
+    SELECT COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND YEAR(bookings.on) = :year
+      AND MONTH(bookings.on) = :month
+  `, {
+    replacements: { employeeId, salonDetailId, year, month },
+    type: sequelize.QueryTypes.SELECT,
+  })
+  return parseFloat(rows[0]?.income || 0)
+}
+
 // ─── Helper: calculate expected rent amount for a date range ────────────────
 function calculateExpectedRent(wagesMethod, startDate, endDate) {
   if (!wagesMethod) return 0
@@ -1211,36 +1414,19 @@ exports.incomeWithRentDaily = async (req, res, next) => {
 
 // ─── 3. Rental chair: income and chair rent weekly ───────────────────────────
 exports.rentalIncomeWeekly = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
   const { startDate, endDate } = req.query
   if (!startDate || !endDate)
     throw new AppError('startDate and endDate are required', 400)
 
-  const emp = await employee.findOne({
-    where: { userId, isExternalEmployee: true },
-    attributes: ['id'],
-    include: [{ model: employeeWagesMethod }],
-  })
+  const emp = await resolveRentChairReportEmployee(req)
   if (!emp) throw new AppError('Employee not found', 200)
 
-  const earningsQuery = `
-    SELECT DAYNAME(bookings.on) AS day, SUM(rentChairEarnings.earnings) AS income
-    FROM rentChairEarnings
-    JOIN bookings ON bookings.id = rentChairEarnings.bookingId
-    WHERE rentChairEarnings.employeeId = :employeeId
-      AND rentChairEarnings.appointmentClosed = true
-      AND bookings.on >= :startDate
-      AND bookings.on <= :endDate
-    GROUP BY DAYNAME(bookings.on)
-  `
-  const earnings = await sequelize.query(earningsQuery, {
-    replacements: {
-      employeeId: emp.id,
-      startDate: `${startDate} 00:00:00`,
-      endDate: `${endDate} 23:59:59`,
-    },
-    type: sequelize.QueryTypes.SELECT,
-  })
+  const earnings = await getRentChairPersonIncomeByDay(
+    emp.id,
+    emp.salonDetailId,
+    startDate,
+    endDate,
+  )
 
   const orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
   const diffDays = Math.ceil(
@@ -1267,33 +1453,20 @@ exports.rentalIncomeWeekly = async (req, res, next) => {
 
 // ─── 4. Rental chair: income and chair rent monthly ──────────────────────────
 exports.rentalIncomeMonthly = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
   const { year } = req.query
   if (!year || !/^\d{4}$/.test(year))
     throw new AppError('Valid year is required', 400)
 
   const thisYear = parseInt(year, 10)
 
-  const emp = await employee.findOne({
-    where: { userId, isExternalEmployee: true },
-    attributes: ['id'],
-    include: [{ model: employeeWagesMethod }],
-  })
+  const emp = await resolveRentChairReportEmployee(req)
   if (!emp) throw new AppError('Employee not found', 200)
 
-  const earningsQuery = `
-    SELECT MONTH(bookings.on) AS month, SUM(rentChairEarnings.earnings) AS income
-    FROM rentChairEarnings
-    JOIN bookings ON bookings.id = rentChairEarnings.bookingId
-    WHERE rentChairEarnings.employeeId = :employeeId
-      AND rentChairEarnings.appointmentClosed = true
-      AND YEAR(bookings.on) = :thisYear
-    GROUP BY MONTH(bookings.on)
-  `
-  const earnings = await sequelize.query(earningsQuery, {
-    replacements: { employeeId: emp.id, thisYear },
-    type: sequelize.QueryTypes.SELECT,
-  })
+  const earnings = await getRentChairPersonIncomeByMonth(
+    emp.id,
+    emp.salonDetailId,
+    thisYear,
+  )
 
   const monthNames = ['January','February','March','April','May','June',
     'July','August','September','October','November','December']
@@ -1321,36 +1494,19 @@ exports.rentalIncomeMonthly = async (req, res, next) => {
 
 // ─── 5. Rental chair: profit weekly ─────────────────────────────────────────
 exports.rentalProfitWeekly = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
   const { startDate, endDate } = req.query
   if (!startDate || !endDate)
     throw new AppError('startDate and endDate are required', 400)
 
-  const emp = await employee.findOne({
-    where: { userId, isExternalEmployee: true },
-    attributes: ['id'],
-    include: [{ model: employeeWagesMethod }],
-  })
+  const emp = await resolveRentChairReportEmployee(req)
   if (!emp) throw new AppError('Employee not found', 200)
 
-  const earningsQuery = `
-    SELECT DAYNAME(bookings.on) AS day, SUM(rentChairEarnings.earnings) AS income
-    FROM rentChairEarnings
-    JOIN bookings ON bookings.id = rentChairEarnings.bookingId
-    WHERE rentChairEarnings.employeeId = :employeeId
-      AND rentChairEarnings.appointmentClosed = true
-      AND bookings.on >= :startDate
-      AND bookings.on <= :endDate
-    GROUP BY DAYNAME(bookings.on)
-  `
-  const earnings = await sequelize.query(earningsQuery, {
-    replacements: {
-      employeeId: emp.id,
-      startDate: `${startDate} 00:00:00`,
-      endDate: `${endDate} 23:59:59`,
-    },
-    type: sequelize.QueryTypes.SELECT,
-  })
+  const earnings = await getRentChairPersonIncomeByDay(
+    emp.id,
+    emp.salonDetailId,
+    startDate,
+    endDate,
+  )
 
   const orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
   const diffDays = Math.ceil(
@@ -1379,33 +1535,20 @@ exports.rentalProfitWeekly = async (req, res, next) => {
 
 // ─── 6. Rental chair: profit monthly ────────────────────────────────────────
 exports.rentalProfitMonthly = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
   const { year } = req.query
   if (!year || !/^\d{4}$/.test(year))
     throw new AppError('Valid year is required', 400)
 
   const thisYear = parseInt(year, 10)
 
-  const emp = await employee.findOne({
-    where: { userId, isExternalEmployee: true },
-    attributes: ['id'],
-    include: [{ model: employeeWagesMethod }],
-  })
+  const emp = await resolveRentChairReportEmployee(req)
   if (!emp) throw new AppError('Employee not found', 200)
 
-  const earningsQuery = `
-    SELECT MONTH(bookings.on) AS month, SUM(rentChairEarnings.earnings) AS income
-    FROM rentChairEarnings
-    JOIN bookings ON bookings.id = rentChairEarnings.bookingId
-    WHERE rentChairEarnings.employeeId = :employeeId
-      AND rentChairEarnings.appointmentClosed = true
-      AND YEAR(bookings.on) = :thisYear
-    GROUP BY MONTH(bookings.on)
-  `
-  const earnings = await sequelize.query(earningsQuery, {
-    replacements: { employeeId: emp.id, thisYear },
-    type: sequelize.QueryTypes.SELECT,
-  })
+  const earnings = await getRentChairPersonIncomeByMonth(
+    emp.id,
+    emp.salonDetailId,
+    thisYear,
+  )
 
   const monthNames = ['January','February','March','April','May','June',
     'July','August','September','October','November','December']
@@ -1435,7 +1578,6 @@ exports.rentalProfitMonthly = async (req, res, next) => {
 
 // ─── 7. Rental chair: overview (KPI tiles for selected month) ────────────────
 exports.rentalOverview = async (req, res, next) => {
-  const userId = req.params?.salon || req.user?.id
   const { year, month } = req.query
   if (!year || !month)
     throw new AppError('year and month are required', 400)
@@ -1445,36 +1587,17 @@ exports.rentalOverview = async (req, res, next) => {
   const lastMonth = thisMonth === 1 ? 12 : thisMonth - 1
   const lastMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear
 
-  const emp = await employee.findOne({
-    where: { userId, isExternalEmployee: true },
-    attributes: ['id'],
-    include: [{ model: employeeWagesMethod }],
-  })
+  const emp = await resolveRentChairReportEmployee(req)
   if (!emp) throw new AppError('Employee not found', 200)
 
-  const earningsQuery = `
-    SELECT SUM(rentChairEarnings.earnings) AS income
-    FROM rentChairEarnings
-    JOIN bookings ON bookings.id = rentChairEarnings.bookingId
-    WHERE rentChairEarnings.employeeId = :employeeId
-      AND rentChairEarnings.appointmentClosed = true
-      AND YEAR(bookings.on) = :year
-      AND MONTH(bookings.on) = :month
-  `
-
-  const [thisMonthData, lastMonthData] = await Promise.all([
-    sequelize.query(earningsQuery, {
-      replacements: { employeeId: emp.id, year: thisYear, month: thisMonth },
-      type: sequelize.QueryTypes.SELECT,
-    }),
-    sequelize.query(earningsQuery, {
-      replacements: { employeeId: emp.id, year: lastMonthYear, month: lastMonth },
-      type: sequelize.QueryTypes.SELECT,
-    }),
+  const [thisIncome, lastIncome] = await Promise.all([
+    getRentChairPersonIncomeForMonth(
+      emp.id, emp.salonDetailId, thisYear, thisMonth,
+    ),
+    getRentChairPersonIncomeForMonth(
+      emp.id, emp.salonDetailId, lastMonthYear, lastMonth,
+    ),
   ])
-
-  const thisIncome = parseFloat(thisMonthData[0]?.income || 0)
-  const lastIncome = parseFloat(lastMonthData[0]?.income || 0)
 
   const daysInMonth = new Date(thisYear, thisMonth, 0).getDate()
   const monthStart = new Date(`${thisYear}-${String(thisMonth).padStart(2,'0')}-01`)
