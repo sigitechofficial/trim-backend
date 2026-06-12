@@ -1270,6 +1270,65 @@ function calculateExpectedRent(wagesMethod, startDate, endDate) {
   return 0
 }
 
+function toDateOnly(value) {
+  const d = new Date(value)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function getEmployeeRentStartDate(emp) {
+  if (emp?.createdAt) return toDateOnly(emp.createdAt)
+  return null
+}
+
+function calculateExpectedRentForEmployee(
+  wagesMethod,
+  periodStart,
+  periodEnd,
+  employeeStartDate,
+) {
+  if (!wagesMethod) return 0
+
+  const start = toDateOnly(periodStart)
+  const end = toDateOnly(periodEnd)
+  let effectiveStart = start
+
+  if (employeeStartDate) {
+    const empStart = toDateOnly(employeeStartDate)
+    if (empStart > effectiveStart) effectiveStart = empStart
+  }
+
+  if (end < effectiveStart) return 0
+  return calculateExpectedRent(wagesMethod, effectiveStart, end)
+}
+
+function sumOwnerExpectedRentForPeriod(rentalEmployees, periodStart, periodEnd) {
+  let total = 0
+  rentalEmployees.forEach((emp) => {
+    total += calculateExpectedRentForEmployee(
+      emp.employeeWagesMethod,
+      periodStart,
+      periodEnd,
+      getEmployeeRentStartDate(emp),
+    )
+  })
+  return total
+}
+
+function getCalendarDatesInRange(startDate, endDate) {
+  const dates = []
+  const cur = toDateOnly(startDate)
+  const end = toDateOnly(endDate)
+  while (cur <= end) {
+    dates.push(new Date(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
+const JS_DAY_NAMES = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+]
+
 // ─── 1. Income per month with rent (main shop owner) ────────────────────────
 exports.incomeWithRentMonthly = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
@@ -1288,7 +1347,7 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
   // Get all active rent-a-chair employees with their wages method
   const rentalEmployees = await employee.findAll({
     where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id'],
+    attributes: ['id', 'createdAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,
@@ -1318,15 +1377,15 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
     const booking = bookingRevenue.find(r => r.month === monthNum)
     const income = parseFloat(booking?.revenue || 0)
 
-    // Calculate expected rent for this month
     const daysInMonth = new Date(thisYear, monthNum, 0).getDate()
     const monthStart = new Date(`${thisYear}-${String(monthNum).padStart(2,'0')}-01`)
     const monthEnd = new Date(`${thisYear}-${String(monthNum).padStart(2,'0')}-${daysInMonth}`)
 
-    let expectedRent = 0
-    rentalEmployees.forEach(emp => {
-      expectedRent += calculateExpectedRent(emp.employeeWagesMethod, monthStart, monthEnd)
-    })
+    const expectedRent = sumOwnerExpectedRentForPeriod(
+      rentalEmployees,
+      monthStart,
+      monthEnd,
+    )
 
     return {
       month: monthName,
@@ -1357,7 +1416,7 @@ exports.incomeWithRentDaily = async (req, res, next) => {
 
   const rentalEmployees = await employee.findAll({
     where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id'],
+    attributes: ['id', 'createdAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,
@@ -1385,24 +1444,22 @@ exports.incomeWithRentDaily = async (req, res, next) => {
 
   const orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 
-  // Daily rent = total expected rent / number of days in range
-  const diffDays = Math.ceil(
-    (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)
-  ) + 1
-  let totalExpectedRent = 0
-  rentalEmployees.forEach(emp => {
-    totalExpectedRent += calculateExpectedRent(emp.employeeWagesMethod, startDate, endDate)
+  const expectedRentByDayName = {}
+  getCalendarDatesInRange(startDate, endDate).forEach((date) => {
+    const dayName = JS_DAY_NAMES[date.getDay()]
+    const dayRent = sumOwnerExpectedRentForPeriod(rentalEmployees, date, date)
+    expectedRentByDayName[dayName] = (expectedRentByDayName[dayName] || 0) + dayRent
   })
-  const dailyRent = totalExpectedRent / diffDays
 
   const report = orderedDays.map(day => {
     const booking = bookingRevenue.find(r => r.day?.toLowerCase() === day.toLowerCase())
     const income = parseFloat(booking?.revenue || 0)
+    const expectedRent = expectedRentByDayName[day] || 0
     return {
       day,
       income: income.toFixed(2),
-      expectedRent: dailyRent.toFixed(2),
-      total: (income + dailyRent).toFixed(2),
+      expectedRent: expectedRent.toFixed(2),
+      total: (income + expectedRent).toFixed(2),
     }
   })
 
