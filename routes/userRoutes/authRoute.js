@@ -9,6 +9,7 @@ router.post('/emailChecker', catchAsync(authController.emailChecker))
 router.post('/signup', catchAsync(authController.signup))
 router.post('/verify-otp', catchAsync(authController.verifyOTP))
 router.post('/login', catchAsync(authController.login))
+router.post('/social-auth', catchAsync(authController.socialAuth))
 router.post(
   '/verify-otp-forget-password',
   catchAsync(authController.verifyOTPInForgetpassword),

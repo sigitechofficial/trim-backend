@@ -1,8 +1,5 @@
-const admin = require('firebase-admin')
-const serviceAccount = require('../firebase.json')
+const { getFirebaseAdmin } = require('./firebaseAdmin')
 const { pushNotification } = require('../models')
-
-// Initialize Firebase Admin SDK using the service account JSON file
 
 // Function to send notification using Firebase Admin SDK
 module.exports = async function Throw(to, notification, data) {
@@ -21,6 +18,12 @@ module.exports = async function Throw(to, notification, data) {
     tokens: to, // Use tokens for multiple devices
     notification,
     data: validData, // Ensure data is a valid object
+  }
+
+  const admin = getFirebaseAdmin()
+  if (!admin) {
+    console.error('Firebase Admin not configured — notification not sent.')
+    return
   }
 
   try {
