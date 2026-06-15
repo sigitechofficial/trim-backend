@@ -1406,7 +1406,7 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
     if (salonUsers.length === 0) {
       return res.status(200).json({
         status: '1',
-        message: 'No salon users found with incomplete registrations',
+        message: 'No shop users found with incomplete registrations',
         data: { count: 0 },
         error: '',
       });
@@ -1473,7 +1473,7 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
     if (incompleteUsers.length === 0) {
       return res.status(200).json({
         status: '1',
-        message: 'All salon users have complete profiles',
+        message: 'All shop users have complete profiles',
         data: { count: 0 },
         error: '',
       });

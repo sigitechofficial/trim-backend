@@ -2700,7 +2700,7 @@ exports.topPerformingSalons = async (req, res, next) => {
 
   return res.status(200).json(
     response({
-      message: `Top ${limit} performing salons.`,
+      message: `Top ${limit} performing shops.`,
       data: { currencyUnit: CURRENCY_UNIT, graph: output },
     }),
   )
@@ -3222,7 +3222,7 @@ exports.updateAllSalonsVatAndPlatformFee = async (req, res, next) => {
     
     return res.status(200).json({
     status: '1',
-    message: 'VAT percentage and platform fee updated successfully for all salons',
+    message: 'VAT percentage and platform fee updated successfully for all shops',
     data: {
           affectedSalons: affectedRowsCount,
           updatedFields: updateFields,

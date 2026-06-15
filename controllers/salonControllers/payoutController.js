@@ -974,7 +974,7 @@ exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
 
     
     if (!employeeAtSalon) {
-      return res.status(400).json(response({ message: 'Employee is not associated with the specified salon' }))
+      return res.status(400).json(response({ message: 'Employee is not associated with the specified shop' }))
     }
   
   

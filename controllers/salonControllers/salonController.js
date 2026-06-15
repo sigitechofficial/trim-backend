@@ -122,7 +122,7 @@ exports.addSalonDetail = async (req, res, next) => {
   if (salon) {
     console.log('---------------------> 2nd Attempt');
     return res.json(
-      returnFunction('1', 'Salon details successfully added!', salon, ''),
+      returnFunction('1', 'Shop details successfully added!', salon, ''),
     );
   }
 
@@ -134,7 +134,7 @@ exports.addSalonDetail = async (req, res, next) => {
   if (exist) {
     let message = `It appears this phone number is already associated with an account. Please use a different number.`;
     if (businessEmail == exist?.businessEmail) {
-      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`;
+      message = `It appears that the business email is already associated with another shop. Please use a different email to continue.`;
     }
     throw new appError(message, 200);
   }
@@ -213,7 +213,7 @@ exports.addSalonDetail = async (req, res, next) => {
   //await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
 
   return res.json(
-    returnFunction('1', 'Salon details added successfully!', {
+    returnFunction('1', 'Shop details added successfully!', {
       ...newEntry.get({ plain: true }),
       ownerEmployeeId: ownerEmployee.id,
     }, ''),
@@ -291,7 +291,7 @@ exports.choosePlan = async (req, res, next) => {
 
     if (!salonData) {
       return res.json(
-        returnFunction('0', 'Salon not found for this user', {}, '')
+        returnFunction('0', 'Shop not found for this user', {}, '')
       )
     }
 
@@ -755,7 +755,7 @@ exports.salonTiming = async (req, res, next) => {
 
   // Respond with a success message
   return res.json(
-    returnFunction('1', 'Salon timing added successfully!', {}, '')
+    returnFunction('1', 'Shop timing added successfully!', {}, '')
   )
 }
 /*
@@ -788,7 +788,7 @@ exports.getSalonTiming = async (req, res, next) => {
       : ''
   })
 
-  return res.json(returnFunction('1', 'Salon timings', { salonTiming }, ''))
+  return res.json(returnFunction('1', 'Shop timings', { salonTiming }, ''))
 }
 /*
             4.Serviece Images 
@@ -904,7 +904,7 @@ exports.getAllServices = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'All salon services', { allServices }, ''),
+    returnFunction('1', 'All shop services', { allServices }, ''),
   )
 }
 /*
@@ -937,7 +937,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   if (exist) {
     let message = `It appears this phone number is already associated with an account. Please use a different number.`
     if (businessEmail == exist?.businessEmail) {
-      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+      message = `It appears that the business email is already associated with another shop. Please use a different email to continue.`
     }
     throw new appError(message, 200)
   }
@@ -974,7 +974,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon details updated successfully!', {}, ''),
+    returnFunction('1', 'Shop details updated successfully!', {}, ''),
   )
 }
 //! Salon profile Edit /Location, Services and social links
@@ -1064,7 +1064,7 @@ exports.salonProfile = async (req, res, next) => {
     },
   })
   if (!salonData) {
-    return next(new appError('Not a salon', 200))
+    return next(new appError('Not a shop', 200))
   }
   // const avgRating = await rating.aggregate('value', 'avg', {
   //   where: { salonDetailId: salonData.id },
@@ -1101,11 +1101,11 @@ exports.salonProfile = async (req, res, next) => {
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
     const output = JSON.parse(JSON.stringify(salonData))
     let stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Salon profile', { salonData, stripeDashboardlink }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData, stripeDashboardlink }, ''))
 
   } else {
     const output = JSON.parse(JSON.stringify(salonData))
-    return res.json(returnFunction('1', 'Salon profile', { salonData }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData }, ''))
 
   }
 
@@ -1121,11 +1121,11 @@ exports.updateSalonVATDetails = async (req, res, next) => {
   const { salonDetailId, isVATRegistered, vatType } = req.body
   const salon = await salonDetail.findOne({ where: { id: salonDetailId } })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
   await salonDetail.update(
     { isVATRegistered, vatType }, { where: { id: salonDetailId } })
-  return res.json(returnFunction('1', 'Salon VAT details updated successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Shop VAT details updated successfully!', {}, ''))
 }
 
 
@@ -1271,7 +1271,7 @@ exports.updateSalonTimings = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Salon timings updated successfully!', {}, ''),
+    returnFunction('1', 'Shop timings updated successfully!', {}, ''),
   )
 }
 
@@ -1519,7 +1519,7 @@ exports.updateService = async (req, res, next) => {
   await Service.save()
 
   return res.json(
-    returnFunction('1', 'Salon services updated successfully!', {}, ''),
+    returnFunction('1', 'Shop services updated successfully!', {}, ''),
   )
 }
 /*
@@ -1583,7 +1583,7 @@ exports.getCategories = async (req, res, next) => {
     },
   })
   return res.json(
-    returnFunction('1', 'All categories of salon', { categories }, ''),
+    returnFunction('1', 'All shop categories', { categories }, ''),
   )
 }
 /*
@@ -1603,7 +1603,7 @@ exports.updateCategory = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon category updated successfully!', {}, ''),
+    returnFunction('1', 'Shop category updated successfully!', {}, ''),
   )
 }
 
@@ -1620,7 +1620,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   console.log("🚀 ~ exports.changeCategoryStatus= ~ salonIdFound:", activeCategoryCount)
 
   if (!status && activeCategoryCount <= 1) {
-    throw new appError("Salon must have one Category Associated with it", 200)
+    throw new appError("Shop must have one Category Associated with it", 200)
   }
 
   await category.update(
@@ -1638,7 +1638,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon category status updated successfully!', {}, '')
+    returnFunction('1', 'Shop category status updated successfully!', {}, '')
   )
 }
 //! Coupon
@@ -2002,7 +2002,7 @@ exports.customerSubscription = async (req, res, next) => {
     } : 'salonData is null');
 
     if (!salonData) {
-      return res.json(returnFunction('2', 'Salon not found', {}, ''));
+      return res.json(returnFunction('2', 'Shop not found', {}, ''));
     }
 
     // ============================================
@@ -2705,7 +2705,7 @@ exports.getCancellationPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const condition = {
@@ -2752,7 +2752,7 @@ exports.getCancellationPolicies = async (req, res) => {
   return res.status(200).json(
     returnFunction(
       '1',
-      'Salon cancellation Policy',
+      'Shop cancellation policy',
       {
         previousVersions,
         cancellationPolicies,
@@ -2825,7 +2825,7 @@ exports.getDepositPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2838,7 +2838,7 @@ exports.getDepositPolicies = async (req, res) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'Salon Deposit Policy', { depositPolicies }, ''))
+    .json(returnFunction('1', 'Shop deposit policy', { depositPolicies }, ''))
 }
 
 /*
@@ -2882,7 +2882,7 @@ exports.depositPolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2922,7 +2922,7 @@ exports.getNoShowPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2945,7 +2945,7 @@ exports.getNoShowPolicies = async (req, res) => {
     .json(
       returnFunction(
         '1',
-        'Salon No Show Policy',
+        'Shop no-show policy',
         { noShowPolicies, depositPercentage: depositPolicies?.percentage },
         '',
       ),
@@ -2962,7 +2962,7 @@ exports.noShowPolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -3031,7 +3031,7 @@ exports.getreschedulePolicy = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -3047,7 +3047,7 @@ exports.getreschedulePolicy = async (req, res) => {
     .json(
       returnFunction(
         '1',
-        'Salon Reschedule Policy',
+        'Shop reschedule policy',
         { reschedulePolicy: reschedulePolicies },
         '',
       ),
@@ -3065,7 +3065,7 @@ exports.reschedulePolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -3181,7 +3181,7 @@ exports.salonHistory = async (req, res) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'Salon Booking History', { salonHistory }, ''))
+    .json(returnFunction('1', 'Shop booking history', { salonHistory }, ''))
 }
 
 /*
@@ -3410,7 +3410,7 @@ exports.salonWallet = async (req, res, next) => {
   return res.json(
     returnFunction(
       '1',
-      'Salon Wallet',
+      'Shop wallet',
       { currencyUnit: CURRENCY_UNIT, salonWallet, salonWallet },
       '',
     ),
@@ -3643,7 +3643,7 @@ exports.getRentChairAdvertisementStatus = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   return res.status(200).json(
@@ -3727,7 +3727,7 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   await salonDetail.update(
@@ -3866,7 +3866,7 @@ exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const enquiries = await rentChairAdvertisementEnquiry.findAll({
@@ -3898,7 +3898,7 @@ exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const enquiry = await rentChairAdvertisementEnquiry.findOne({
@@ -3944,7 +3944,7 @@ exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const enquiry = await rentChairAdvertisementEnquiry.findOne({
@@ -3981,7 +3981,7 @@ exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
   if (!salon) {
     return res
       .status(200)
-      .json(returnFunction('0', 'Salon not found', {}, ''))
+      .json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const enquiry = await rentChairAdvertisementEnquiry.findOne({
@@ -4060,7 +4060,7 @@ exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
     tokens,
     {
       title: 'Chair rental enquiry reply',
-      body: `${salon.salonName || 'Salon'} replied to your chair rental enquiry.`,
+      body: `${salon.salonName || 'Shop'} replied to your chair rental enquiry.`,
     },
     {
       type: 'rentChairAdvertisementEnquiryMessage',
@@ -4420,7 +4420,7 @@ exports.addAllergies = async (req, res, next) => {
     attributes: ['id', 'userId'],
   })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
   req.body.salonDetailId = salon?.id
 
@@ -4437,7 +4437,7 @@ exports.fetchAllergies = async (req, res, next) => {
     attributes: ['id', 'userId'],
   })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
 
   const allergiesList = await allergies.findAll({
@@ -4839,7 +4839,7 @@ exports.fetchInvoice = async (req, res, next) => {
 //     let salonConnectId=salonData.connectAccountId
 
 //     if (!salonData) {
-//       return next(new appError('Salon not found', 404));
+//       return next(new appError('Shop not found', 404));
 //     }
 
 //     if (!salonData.connectAccountId) {
@@ -4924,7 +4924,7 @@ exports.createConnectionToken = async (req, res, next) => {
     let salonConnectId='acct_1R64stEFgyBEZR5p';
 
     // if (!salonData) {
-    //   return next(new appError('Salon not found', 404));
+    //   return next(new appError('Shop not found', 404));
     // }
 
     // if (!salonData.connectAccountId) {

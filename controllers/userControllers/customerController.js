@@ -276,7 +276,7 @@ exports.sendTemplatePreview = async (req, res, next) => {
           },
           salonDetail: {
             id: 1,
-            salonName: 'Trim Demo Salon',
+            salonName: 'Trim Demo Shop',
             businessEmail: 'salon-demo@trimworldwide.com',
             user: { email: 'salon-demo@trimworldwide.com' },
             addressDB: {
@@ -319,7 +319,7 @@ exports.sendTemplatePreview = async (req, res, next) => {
         break
       }
       case 'welcomeSalon': {
-        const name = overrides?.name || 'Trim Demo Salon'
+        const name = overrides?.name || 'Trim Demo Shop'
         WelcomeForBoth(to, name, 'salon')
         break
       }
@@ -387,7 +387,7 @@ exports.sendTemplatePreview = async (req, res, next) => {
       case 'thankYou': {
         const payload = {
           appointment: buildAppointmentDummy(),
-          salon: { salonName: 'Trim Demo Salon' },
+          salon: { salonName: 'Trim Demo Shop' },
         }
         tankyou(to, merge(payload, overrides))
         break
@@ -397,7 +397,7 @@ exports.sendTemplatePreview = async (req, res, next) => {
         const payload = merge(
           {
             name: 'Jane Barber',
-            salonName: 'Trim Demo Salon',
+            salonName: 'Trim Demo Shop',
             email: to,
           },
           overrides,
@@ -421,7 +421,7 @@ exports.sendTemplatePreview = async (req, res, next) => {
             email: to,
             firstName: 'John',
             lastName: 'Doe',
-            salonName: 'Trim Demo Salon',
+            salonName: 'Trim Demo Shop',
             disabledReason: 'requirements.past_due',
             capabilityStatus: 'inactive',
           },
@@ -1924,7 +1924,7 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     return res.status(200).json(
       response({
         status: '0',
-        message: 'Salon not found',
+        message: 'Shop not found',
         data: {},
         error: '',
       }),
@@ -1935,7 +1935,7 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     return res.status(200).json(
       response({
         status: '0',
-        message: 'This salon is not accepting chair rental enquiries',
+        message: 'This shop is not accepting chair rental enquiries',
         data: {},
         error: '',
       }),
@@ -1946,7 +1946,7 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
     return res.status(200).json(
       response({
         status: '0',
-        message: 'This salon has no chairs available to rent',
+        message: 'This shop has no chairs available to rent',
         data: {},
         error: '',
       }),
@@ -1976,7 +1976,7 @@ exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
       return res.status(200).json(
         response({
           status: '1',
-          message: 'You already have an enquiry with this salon.',
+          message: 'You already have an enquiry with this shop.',
           data: {
             enquiryId: existingEnquiry.id,
             alreadyExists: true,
@@ -3342,7 +3342,7 @@ exports.bookAppointment = async (req, res, next) => {
 
       if (!salon || !salon.connectAccountId) {
         await booking.destroy({ where: { id: book.id } });
-        throw new AppError('Salon connected account not found', 200);
+        throw new AppError('Shop connected account not found', 200);
       }
 
       // Get customer's stripe customer ID on connected account
@@ -3363,7 +3363,7 @@ exports.bookAppointment = async (req, res, next) => {
 
       if (!confirmCustomerId) {
         await booking.destroy({ where: { id: book.id } });
-        throw new AppError('Customer not found on salon Stripe account', 200);
+        throw new AppError('Customer not found on shop Stripe account', 200);
       }
 
       // Calculate expected amount (upfront + tip)
@@ -3489,9 +3489,9 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   console.log("CustomerId=================>>>>",customerId)
 
   if (!req.body.onlinePayments)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
 
   const upFrontAmount =
     req.body.advanceAmount && req.body.advanceAmount > 0
@@ -3562,9 +3562,9 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
 exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
   //Partial payment upfront
   if (!req.body.onlinePayments)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
 
   const upFrontAmount =
     req.body.advanceAmount && req.body.advanceAmount > 0
@@ -5295,7 +5295,7 @@ exports.permanentAccountDeletion = async (req, res, next) => {
           {
             deleted: true,
             firstName: 'Anonymous',
-            lastName: isSalon ? 'Salon' : 'Customer',
+            lastName: isSalon ? 'Shop' : 'Customer',
             email: `Anonymous${deletedCust.userId}@gmail.com`,
             countryCode: '+00',
             phoneNum: '000 0000000',
@@ -5314,7 +5314,7 @@ exports.permanentAccountDeletion = async (req, res, next) => {
           if (salonData) {
             await salonDetail.update(
               {
-                salonName: 'Anonymous Salon',
+                salonName: 'Anonymous Shop',
                 businessEmail: `Anonymous${salonData.id}@gmail.com`,
                 businessCountryCode: '+00',
                 businessPhoneNum: '000 0000000',
@@ -5595,7 +5595,7 @@ exports.completeSubscriptionAfterPayment = async (req, res, next) => {
     if (!salonDetails) {
       return res.status(200).json(response({
         status: '0',
-        message: 'Salon details not found',
+        message: 'Shop details not found',
         data: {},
       }));
     }
@@ -5692,7 +5692,7 @@ exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
     if (!salon) {
       return res.status(200).json(response({
         status: '0',
-        message: 'Salon user not found',
+        message: 'Shop user not found',
         data: {},
       }));
     }
@@ -5702,7 +5702,7 @@ exports.initSubscriptionWithSetupIntent = async (req, res, next) => {
     if (!salonDetails) {
       return res.status(200).json(response({
         status: '0',
-        message: 'Salon details not found',
+        message: 'Shop details not found',
         data: {},
       }));
     }
@@ -5790,7 +5790,7 @@ exports.completeSubscriptionWithSetupIntent = async (req, res, next) => {
     if (!salon) {
       return res.status(200).json(response({
         status: '0',
-        message: 'Salon user not found',
+        message: 'Shop user not found',
         data: {},
       }));
     }
@@ -5809,7 +5809,7 @@ exports.completeSubscriptionWithSetupIntent = async (req, res, next) => {
     if (!salonDetails) {
       return res.status(200).json(response({
         status: '0',
-        message: 'Salon details not found',
+        message: 'Shop details not found',
         data: {},
       }));
     }
@@ -6153,14 +6153,14 @@ exports.initStripeCustomeronConnectAccount = async (req, res, next) => {
     if (!account) {
       return res.status(200).json({
         status: '0',
-        message: 'Salon account not found',
+        message: 'Shop account not found',
       });
     }
 
     if (!account.connectAccountId) {
       return res.status(200).json({
         status: '0',
-        message: 'Salon has not completed Stripe onboarding',
+        message: 'Shop has not completed Stripe onboarding',
       });
     }
 
@@ -6296,11 +6296,11 @@ exports.createSetupIntent = async (req, res, next) => {
     });
 
     if (!account) {
-      throw new AppError('Salon not found', 200);
+      throw new AppError('Shop not found', 200);
     }
 
     if (!account.connectAccountId) {
-      throw new AppError('Salon has not completed Stripe onboarding', 200);
+      throw new AppError('Shop has not completed Stripe onboarding', 200);
     }
 
     const connectAccountId = account.connectAccountId;
@@ -6388,9 +6388,9 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
   console.log("CustomerId=================>>>>",customerId)
 
   if (!req.body.onlinePayments)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
-    throw new AppError('Salon does not accept online payments.', 200)
+    throw new AppError('Shop does not accept online payments.', 200)
 
   const upFrontAmount =
     req.body.advanceAmount && req.body.advanceAmount > 0

@@ -935,12 +935,12 @@ async function createSubscriptionWithPriceId(
     if (paymentMethodId && paymentMethodId.trim() !== '') {
       await stripe.customers.update(customerId, {
         invoice_settings: { default_payment_method: paymentMethodId },
-        description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
+        description: `Shop subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
       });
     } else {
       // Update customer description only if no payment method
       await stripe.customers.update(customerId, {
-        description: `Salon subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
+        description: `Shop subscription purchase - SalonDetailId: ${metadata.salonDetailId || 'N/A'}`,
       });
     }
 
@@ -1037,7 +1037,7 @@ async function sessionCheckoutPaymnet(amount, success_url, cancel_url) {
           price_data: {
             currency: "gbp",
             product_data: {
-              name: "Book appointment in salon.",
+              name: "Book appointment in shop.",
             },
             unit_amount: convertToCents(amount), // amount in cents
           },

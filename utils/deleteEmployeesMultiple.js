@@ -131,7 +131,7 @@ async function deleteRegularEmployee(userid) {
   })
   if (!worker) return next(new appError('Data not found', 404))
   if (worker?.dataValues?.isOwner) {
-    return next(new appError('The salon owner cannot be deleted.', 200))
+    return next(new appError('The shop owner cannot be deleted.', 200))
   }
   // return res.json({ work, employeeId })
 

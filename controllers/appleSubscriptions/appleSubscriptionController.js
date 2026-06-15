@@ -628,7 +628,7 @@ exports.createAppleSubscription = async (req, res, next) => {
     });
     
     if (!salon) {
-      throw new AppError('Salon not found', 404);
+      throw new AppError('Shop not found', 404);
     }
     
     // Calculate period dates

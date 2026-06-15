@@ -19,7 +19,7 @@ exports.sendCouponNotificationToCustomers = async (couponData, salonId) => {
 
         if (!salon) {
             console.log('Salon not found')
-            throw new AppError('Salon Not Found');
+            throw new AppError('Shop Not Found');
         }
 
         const salonCustomers = await booking.findAll({

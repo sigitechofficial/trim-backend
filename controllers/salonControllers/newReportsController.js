@@ -516,7 +516,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  if (!salon) throw new AppError(`Salon not found!`, 200)
+  if (!salon) throw new AppError(`Shop not found!`, 200)
 
   // Fetch earliest and latest booking dates for all-time average
   const bookingDates = await sequelize.query(
@@ -749,7 +749,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  if (!salon) throw new AppError(`Salon not found.`, 404)
+  if (!salon) throw new AppError(`Shop not found.`, 404)
 
   const salonId = salon.id
 
@@ -1342,7 +1342,7 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
     where: { userId },
     attributes: ['id'],
   })
-  if (!salon) throw new AppError('Salon not found', 200)
+  if (!salon) throw new AppError('Shop not found', 200)
 
   // Get all active rent-a-chair employees with their wages method
   const rentalEmployees = await employee.findAll({
@@ -1412,7 +1412,7 @@ exports.incomeWithRentDaily = async (req, res, next) => {
     where: { userId },
     attributes: ['id'],
   })
-  if (!salon) throw new AppError('Salon not found', 200)
+  if (!salon) throw new AppError('Shop not found', 200)
 
   const rentalEmployees = await employee.findAll({
     where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
