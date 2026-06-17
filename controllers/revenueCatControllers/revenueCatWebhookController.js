@@ -8,6 +8,17 @@ const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
 // RevenueCat API key for fetching product prices
 const REVENUECAT_SECRET_API_KEY = process.env.REVENUECAT_SECRET_API_KEY;
 
+const LIFETIME_REVENUECAT_PRODUCT_IDS = [
+  'rc_promo_business_access_lifetime',
+  'rc_promo_Trim World Wide Pro_lifetime',
+];
+
+const LIFETIME_PERIOD_END = new Date('2099-12-31T23:59:59.999Z');
+const LIFETIME_STATUS = 'lifetime';
+
+const isLifetimeRevenueCatProduct = (productId) =>
+  LIFETIME_REVENUECAT_PRODUCT_IDS.includes(productId);
+
 /**
  * Verify RevenueCat webhook authorization
  */
@@ -521,6 +532,9 @@ const getSubscriptionDisplayName = (productId) => {
     'trimbiz_monthly:trimbiz-owner-four-staff': 'Owner + 4 staff members',
     'trimbiz_monthly:trimbiz-owner-five-staff': 'Owner + 5 staff members',
     'trimbiz_monthly:trimbiz-owner-unlimited-staff': 'Owner + Unlimited staff',
+    // RevenueCat lifetime non-renewing products
+    'rc_promo_business_access_lifetime': 'Trim Business Lifetime Access',
+    'rc_promo_Trim World Wide Pro_lifetime': 'Trim Worldwide Pro Lifetime Access',
   };
   
   // Return mapped name or fallback to product ID if not found
@@ -554,6 +568,9 @@ const getTeamSizeFromProductId = (productId) => {
     'trimbiz_monthly:trimbiz-owner-four-staff': 5,
     'trimbiz_monthly:trimbiz-owner-five-staff': 6,
     'trimbiz_monthly:trimbiz-owner-unlimited-staff': UNLIMITED_TEAM_SIZE,
+    // RevenueCat lifetime non-renewing products
+    'rc_promo_business_access_lifetime': UNLIMITED_TEAM_SIZE,
+    'rc_promo_Trim World Wide Pro_lifetime': UNLIMITED_TEAM_SIZE,
   };
   
   return teamSizeMap[productId] || 1; // Default to 1 if not found
@@ -615,6 +632,211 @@ const buildSalonMetadata = (salon, productId, teamSize, store) => {
       sloanId: salon.id?.toString() || '',
       freeTrialDays: salon.hasObtainedFreeTrial ? '0' : '7',
     };
+  }
+};
+
+const getLifetimeIdempotencyKey = (event) => {
+  if (event?.id) return event.id;
+  if (event?.transaction_id) return event.transaction_id;
+  if (event?.original_transaction_id) return event.original_transaction_id;
+  if (event?.product_id && event?.app_user_id && event?.purchased_at_ms) {
+    return `${event.product_id}:${event.app_user_id}:${event.purchased_at_ms}`;
+  }
+  return null;
+};
+
+const hasProcessedLifetimeEvent = async (idempotencyKey) => {
+  if (!idempotencyKey) return false;
+
+  const existing = await subscriptions.findOne({
+    where: {
+      subscriptionSource: 'revenuecat',
+      [Op.or]: [
+        { invoiceId: idempotencyKey },
+        { revenueCatOriginalTransactionId: idempotencyKey },
+      ],
+    },
+  });
+
+  return !!existing;
+};
+
+const resolveSalonForRevenueCatEvent = async (event) => {
+  const candidateIds = [
+    event?.app_user_id,
+    event?.original_app_user_id,
+    ...(Array.isArray(event?.aliases) ? event.aliases : []),
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const candidateId of candidateIds) {
+    if (seen.has(candidateId)) continue;
+    seen.add(candidateId);
+
+    const salon = await findSalonByAppUserId(candidateId, event);
+    if (salon) {
+      return { salon, resolvedFrom: candidateId };
+    }
+  }
+
+  for (const candidateId of candidateIds) {
+    if (candidateId.startsWith?.('$RCAnonymousID:')) continue;
+
+    const salonUser = await findUserByAppUserId(candidateId, event);
+    if (!salonUser) continue;
+
+    const salon = await salonDetail.findOne({
+      where: { userId: salonUser.id },
+      attributes: [
+        'id',
+        'userId',
+        'registrationDate',
+        'salonName',
+        'approvedByAdmin',
+        'subscriptionPlan',
+        'registrationExpiryDate',
+        'subscriptionLatestPaymentStatus',
+        'teamSize',
+        'metadata',
+        'hasObtainedFreeTrial',
+        'subscriptionPrice',
+      ],
+      include: [
+        {
+          model: user,
+          attributes: ['id', 'email', 'stripeCustomerId'],
+        },
+      ],
+      order: [['id', 'ASC']],
+    });
+
+    if (salon) {
+      return { salon, resolvedFrom: `user:${salonUser.id}` };
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Handle NON_RENEWING_PURCHASE - Lifetime access (promo non-renewing products)
+ */
+const handleNonRenewingPurchase = async (event) => {
+  try {
+    const {
+      product_id,
+      app_user_id,
+      store,
+      purchased_at_ms,
+      price,
+      price_in_purchased_currency,
+      currency,
+    } = event;
+
+    if (!isLifetimeRevenueCatProduct(product_id)) {
+      console.log(
+        `ℹ️ NON_RENEWING_PURCHASE ignored (not a lifetime product): ${product_id}`,
+      );
+      return;
+    }
+
+    console.log('♾️ RevenueCat lifetime product received', {
+      product_id,
+      app_user_id,
+      store,
+      event_id: event.id,
+      transaction_id: event.transaction_id,
+    });
+
+    const idempotencyKey = getLifetimeIdempotencyKey(event);
+    if (idempotencyKey && await hasProcessedLifetimeEvent(idempotencyKey)) {
+      console.log('♾️ Duplicate lifetime RevenueCat event ignored', {
+        idempotencyKey,
+        product_id,
+      });
+      return;
+    }
+
+    const resolved = await resolveSalonForRevenueCatEvent(event);
+    if (!resolved?.salon) {
+      console.warn('⚠️ Lifetime NON_RENEWING_PURCHASE: could not resolve salon/shop', {
+        app_user_id,
+        original_app_user_id: event.original_app_user_id,
+        aliases: event.aliases,
+        product_id,
+        store,
+      });
+      return;
+    }
+
+    const { salon, resolvedFrom } = resolved;
+    const periodStart = purchased_at_ms ? new Date(purchased_at_ms) : new Date();
+    const teamSize = getTeamSizeFromProductId(product_id);
+    const displayName = getSubscriptionDisplayName(product_id);
+    const amountPaid = price_in_purchased_currency ?? price ?? 0;
+
+    salon.approvedByAdmin = true;
+    salon.subscriptionPlan = product_id;
+    salon.registrationDate = periodStart;
+    salon.registrationExpiryDate = LIFETIME_PERIOD_END;
+    salon.subscriptionLatestPaymentStatus = LIFETIME_STATUS;
+    salon.teamSize = teamSize;
+    salon.subscriptionPrice = amountPaid;
+    salon.metadata = buildSalonMetadata(salon, product_id, teamSize, store);
+    await salon.save();
+
+    const subscriptionData = {
+      salonDetailId: salon.id,
+      subscriptionId: product_id,
+      customerId: salon.userId ? salon.userId.toString() : salon.id.toString(),
+      subscriptionSource: 'revenuecat',
+      status: LIFETIME_STATUS,
+      name: displayName,
+      periodStart,
+      periodEnd: LIFETIME_PERIOD_END,
+      currency: currency || 'gbp',
+      amountPaid,
+      invoice: null,
+      invoiceId: event.id || idempotencyKey || null,
+      priceId: product_id,
+      VAT: extractVAT(event),
+      renewablePrice: null,
+      revenueCatUserId: app_user_id,
+      revenueCatOriginalTransactionId:
+        event.transaction_id || event.original_transaction_id || null,
+      revenueCatStore: store || null,
+      appleTransactionId: null,
+      appleOriginalTransactionId: null,
+      appleProductId: null,
+      appleEnvironment: null,
+    };
+
+    const existingSubscription = await subscriptions.findOne({
+      where: {
+        salonDetailId: salon.id,
+        subscriptionSource: 'revenuecat',
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (existingSubscription) {
+      await existingSubscription.update(subscriptionData);
+      console.log(`✅ Updated lifetime subscription record: ${existingSubscription.id}`);
+    } else {
+      await subscriptions.create(subscriptionData);
+      console.log(`✅ Created lifetime subscription record for salon: ${salon.id}`);
+    }
+
+    console.log('♾️ Lifetime access granted', {
+      salonDetailId: salon.id,
+      userId: salon.userId,
+      resolvedFrom,
+      product_id,
+      store,
+      idempotencyKey,
+    });
+  } catch (error) {
+    console.error('❌ Error handling NON_RENEWING_PURCHASE:', error);
   }
 };
 
@@ -682,6 +904,10 @@ exports.revenueCatWebhookHandler = async (req, res) => {
           
           case 'TRANSFER':
             await handleTransfer(event);
+            break;
+
+          case 'NON_RENEWING_PURCHASE':
+            await handleNonRenewingPurchase(event);
             break;
           
           default:
@@ -1023,11 +1249,6 @@ const handleCancellation = async (event) => {
       return;
     }
 
-    // Update salonDetail status only
-    salon.subscriptionLatestPaymentStatus = 'cancelled';
-    await salon.save();
-
-    // Update subscription record status only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
@@ -1035,6 +1256,25 @@ const handleCancellation = async (event) => {
       },
       order: [['createdAt', 'DESC']],
     });
+
+    if (
+      existingSubscription?.status === LIFETIME_STATUS
+      || isLifetimeRevenueCatProduct(existingSubscription?.priceId)
+      || isLifetimeRevenueCatProduct(salon.subscriptionPlan)
+      || salon.subscriptionLatestPaymentStatus === LIFETIME_STATUS
+    ) {
+      console.log('♾️ Skipping CANCELLATION — lifetime access active', {
+        salonDetailId: salon.id,
+        app_user_id,
+        product_id,
+      });
+      return;
+    }
+
+    // Update salonDetail status only
+    salon.subscriptionLatestPaymentStatus = 'cancelled';
+    await salon.save();
+
     if (existingSubscription) {
       existingSubscription.status = 'cancelled';
       await existingSubscription.save();
@@ -1062,11 +1302,6 @@ const handleExpiration = async (event) => {
       return;
     }
 
-    // Update salonDetail status only
-    salon.subscriptionLatestPaymentStatus = 'expired';
-    await salon.save();
-
-    // Update subscription record status only
     const existingSubscription = await subscriptions.findOne({
       where: {
         salonDetailId: salon.id,
@@ -1074,6 +1309,25 @@ const handleExpiration = async (event) => {
       },
       order: [['createdAt', 'DESC']],
     });
+
+    if (
+      existingSubscription?.status === LIFETIME_STATUS
+      || isLifetimeRevenueCatProduct(existingSubscription?.priceId)
+      || isLifetimeRevenueCatProduct(salon.subscriptionPlan)
+      || salon.subscriptionLatestPaymentStatus === LIFETIME_STATUS
+    ) {
+      console.log('♾️ Skipping EXPIRATION — lifetime access active', {
+        salonDetailId: salon.id,
+        app_user_id,
+        product_id,
+      });
+      return;
+    }
+
+    // Update salonDetail status only
+    salon.subscriptionLatestPaymentStatus = 'expired';
+    await salon.save();
+
     if (existingSubscription) {
       existingSubscription.status = 'expired';
       await existingSubscription.save();
