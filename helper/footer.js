@@ -1,6 +1,6 @@
 const origin = "655 South Hope Street 901 Los Angeles California 90017";
 const address = "128 City Road, London, United Kingdom, EC1V 2NX";
-const copyRight = "Copyright @ 2025 trim";
+const copyRight = "Copyright @ 2026 Trim";
 const supportEmail = "support@trimworldwide.com";
 const supportNumber = "017874854624";
 
@@ -67,6 +67,7 @@ width="100%"
     font-weight: 400;
     letter-spacing: 0px;
     padding-left: 0px;
+    padding-bottom: 16px;
     text-align: left;
   "
 >
@@ -78,27 +79,46 @@ width="100%"
   </span>
 </div>
 
-              
+              <table
+                role="presentation"
+                border="0"
+                cellspacing="0"
+                cellpadding="0"
+                align="center"
+                width="100%"
+                style="mso-table-lspace:0;mso-table-rspace:0;"
+              >
                 <tr>
-                  <td class="pad" align="center" style="text-align:center;">
-                    <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="mso-table-lspace:0;mso-table-rspace:0;">
+                  <td
+                    align="center"
+                    style="text-align:center; padding: 16px 0 24px 0;"
+                  >
+                    <table
+                      role="presentation"
+                      border="0"
+                      cellspacing="0"
+                      cellpadding="0"
+                      align="center"
+                      style="mso-table-lspace:0;mso-table-rspace:0;"
+                    >
                       <tr>
-                        <td align="center" style="padding:0 6px;">
+                        <td align="center" style="padding: 0 12px;">
                           <a href="https://www.tiktok.com/en/" target="_blank">
                             <img alt="Tiktok" width="32" height="32" src="cid:tiktok" style="display:block; border:0; height:auto;" />
                           </a>
                         </td>
-                        <td align="center" style="padding:0 6px;">
+                        <td align="center" style="padding: 0 12px;">
                           <a href="https://instagram.com/" target="_blank">
                             <img alt="Instagram" width="32" height="32" src="cid:instagram" style="display:block; border:0; height:auto;" />
                           </a>
                         </td>
-                        <td align="center" style="padding:0 6px;">
+                        <td align="center" style="padding: 0 12px;">
                           <a href="https://www.facebook.com/" target="_blank">
                             <img alt="Facebook" width="32" height="32" src="cid:facebook" style="display:block; border:0; height:auto;" />
                           </a>
                         </td>
                       </tr>
+                    </table>
                   </td>
                 </tr>
               </table>

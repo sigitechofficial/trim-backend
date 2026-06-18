@@ -143,6 +143,16 @@ router.patch(
   '/updateSalonTimings',
   catchAsync(salonController.updateSalonTimings),
 )
+router.post('/breaks', catchAsync(salonController.saveBreaks))
+router.get(
+  '/breaks/salon/:salonDetailId',
+  catchAsync(salonController.getSalonBreaks),
+)
+router.get(
+  '/breaks/:employeeId',
+  catchAsync(salonController.getEmployeeBreaks),
+)
+router.delete('/breaks/:id', catchAsync(salonController.deleteBreak))
 // Update Address
 router.patch(
   '/updateSalonAddress',
@@ -271,6 +281,15 @@ router.get(
   catchAsync(salonController.salonLiveStatus),
 )
 
+router.get(
+  '/rent-chair-advertisement-status',
+  catchAsync(salonController.getRentChairAdvertisementStatus),
+)
+router.post(
+  '/rent-chair-advertisement',
+  catchAsync(salonController.updateRentChairAdvertisement),
+)
+
 //! Salon online Offline
 router.post(
   '/active-block-customer',
@@ -290,6 +309,24 @@ router.get('/announcements', catchAsync(salonController.fetchAnnouncements))
 
 //! Client Feed Back
 router.get('/notifications', catchAsync(salonController.fetchNotifications))
+router.get(
+  '/rent-chair-advertisement-enquiries',
+  catchAsync(salonController.listRentChairAdvertisementEnquiries),
+)
+router.get(
+  '/rent-chair-advertisement-enquiry/:enquiryId',
+  catchAsync(salonController.getRentChairAdvertisementEnquiryDetail),
+)
+
+router.get(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  catchAsync(salonController.getRentChairAdvertisementEnquiryMessages),
+)
+
+router.post(
+  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
+  catchAsync(salonController.sendRentChairAdvertisementEnquiryMessage),
+)
 
 router.get(
   '/client-feedback/salon/:salon',

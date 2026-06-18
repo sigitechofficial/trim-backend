@@ -147,7 +147,7 @@ exports.fetchEmployees = async (req, res, next) => {
   return res.json(
     returnFunction(
       '1',
-      'All Employees of Salon',
+      'All shop employees',
       { AllEmployess, membersAllowed, activeMembers },
       '',
     ),
@@ -450,7 +450,7 @@ exports.getServices = async (req, res, next) => {
     where: condition,
   })
 
-  return res.json(returnFunction('1', 'Services of salon', { serviceData }, ''))
+  return res.json(returnFunction('1', 'Shop services', { serviceData }, ''))
 }
 /*
             4.Add Employee Services
@@ -485,7 +485,7 @@ exports.getWagesMethod = async (req, res, next) => {
     attributes: ['id', 'methodName', 'description'],
   })
 
-  return res.json(returnFunction('1', 'Services of salon', { WagesMethod }, ''))
+  return res.json(returnFunction('1', 'Shop services', { WagesMethod }, ''))
 }
 /*
             4.Add wages method
@@ -510,6 +510,7 @@ exports.employeeDetail = async (req, res, next) => {
     include: [
       {
         model: user,
+        required: false,
         attributes: [
           'id',
           'firstName',
@@ -523,7 +524,12 @@ exports.employeeDetail = async (req, res, next) => {
       // { model: salonDetail, attributes: ['coverImage'] },
       {
         model: employeeWagesMethod,
-        include: { model: wagesMethod, attributes: ['methodName'] },
+        required: false,
+        include: {
+          model: wagesMethod,
+          required: false,
+          attributes: ['methodName'],
+        },
         attributes: [
           'id',
           'value',
@@ -960,7 +966,12 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
         access: 'Send\nnotifications',
         key: 'sendNotification',
         level: 'none',
-      }
+      },
+      {
+        access: 'Respond to\nenquiries',
+        key: 'respondToEnquiries',
+        level: 'none',
+      },
     ]
   }
 
@@ -1005,7 +1016,7 @@ exports.activeBlockEmployee = async (req, res, next) => {
   if (!worker) return next(new appError('Data not found', 404))
   if (worker.isOwner) {
     return next(
-      new appError('The salon owner cannot be restricted or blocked.', 200),
+      new appError('The shop owner cannot be restricted or blocked.', 200),
     )
   }
   const activeMembers = await employee.count({
@@ -1078,7 +1089,7 @@ exports.deleteEmployee = async (req, res, next) => {
   })
   if (!worker) return next(new appError('Data not found', 404))
   if (worker?.dataValues?.isOwner) {
-    return next(new appError('The salon owner cannot be deleted.', 200))
+    return next(new appError('The shop owner cannot be deleted.', 200))
   }
   // return res.json({ work, employeeId })
 

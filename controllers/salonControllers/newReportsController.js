@@ -516,7 +516,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  if (!salon) throw new AppError(`Salon not found!`, 200)
+  if (!salon) throw new AppError(`Shop not found!`, 200)
 
   // Fetch earliest and latest booking dates for all-time average
   const bookingDates = await sequelize.query(
@@ -749,7 +749,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
     attributes: ['id'],
   })
 
-  if (!salon) throw new AppError(`Salon not found.`, 404)
+  if (!salon) throw new AppError(`Shop not found.`, 404)
 
   const salonId = salon.id
 
@@ -1049,3 +1049,736 @@ exports.subscriptionHistory = async (req, res, next) => {
   }));
 
 };
+
+const RENT_CHAIR_WAGES_METHOD_ID = 3
+
+const rentChairEmployeeInclude = [{
+  model: employeeWagesMethod,
+  required: false,
+  include: [{ model: wagesMethod, attributes: ['id'] }],
+}]
+
+function isRentChairWagesMethod(emp) {
+  const ewm = emp?.employeeWagesMethod
+  if (!ewm) return false
+  return ewm.wagesMethod?.id === RENT_CHAIR_WAGES_METHOD_ID
+    || ewm.wagesMethodId === RENT_CHAIR_WAGES_METHOD_ID
+}
+
+async function loadRentChairWagesMethod(emp) {
+  if (isRentChairWagesMethod(emp)) return emp
+  if (!emp.parentEmployeeId) return emp
+
+  const parent = await employee.findOne({
+    where: { id: emp.parentEmployeeId, deleted: false },
+    attributes: ['id'],
+    include: rentChairEmployeeInclude,
+  })
+  if (parent?.employeeWagesMethod && isRentChairWagesMethod(parent)) {
+    emp.employeeWagesMethod = parent.employeeWagesMethod
+  }
+  return emp
+}
+
+async function resolveRentChairReportEmployee(req) {
+  const salonDetailIdParam = req.query?.salonDetailId
+    ? parseInt(req.query.salonDetailId, 10)
+    : null
+
+  if (req.user?.dvToken) {
+    const employeeToken = await deviceToken.findOne({
+      where: { tokenId: req.user.dvToken },
+      attributes: ['userId'],
+      include: {
+        model: user,
+        where: { userTypeId: 3, status: true },
+        attributes: ['id'],
+        required: true,
+      },
+    })
+
+    if (employeeToken) {
+      const staffWhere = {
+        userId: employeeToken.userId,
+        deleted: false,
+      }
+
+      if (salonDetailIdParam) {
+        staffWhere.salonDetailId = salonDetailIdParam
+      } else {
+        const ownerSalon = await salonDetail.findOne({
+          where: { userId: req.user.id },
+          attributes: ['id'],
+        })
+        if (ownerSalon) staffWhere.salonDetailId = ownerSalon.id
+      }
+
+      const emp = await employee.findOne({
+        where: staffWhere,
+        attributes: ['id', 'salonDetailId', 'parentEmployeeId', 'createdAt'],
+        include: rentChairEmployeeInclude,
+      })
+
+      if (emp) return loadRentChairWagesMethod(emp)
+    }
+  }
+
+  const actingUserId = req.params?.salon || req.user?.id
+
+  const baseWhere = { userId: actingUserId, deleted: false }
+  if (salonDetailIdParam) baseWhere.salonDetailId = salonDetailIdParam
+
+  const candidates = await employee.findAll({
+    where: baseWhere,
+    attributes: [
+      'id', 'salonDetailId', 'parentEmployeeId', 'createdAt',
+      'isOwner', 'isExternalEmployee',
+    ],
+    include: rentChairEmployeeInclude,
+  })
+
+  if (!candidates.length) return null
+
+  if (salonDetailIdParam) {
+    const atSalon = candidates.filter(
+      (e) => e.salonDetailId === salonDetailIdParam,
+    )
+    if (atSalon.length === 1) {
+      return loadRentChairWagesMethod(atSalon[0])
+    }
+    if (atSalon.length > 1) {
+      const ownerAtSalon = atSalon.find((e) => e.isOwner)
+      if (ownerAtSalon) return loadRentChairWagesMethod(ownerAtSalon)
+    }
+  }
+
+  const userSalons = await salonDetail.findAll({
+    where: { userId: actingUserId },
+    attributes: ['id'],
+  })
+  const ownedSalonIds = new Set(userSalons.map((s) => s.id))
+
+  const chairSalonEmployees = candidates.filter(
+    (e) => ownedSalonIds.has(e.salonDetailId) && e.isOwner,
+  )
+
+  if (chairSalonEmployees.length === 1) {
+    return loadRentChairWagesMethod(chairSalonEmployees[0])
+  }
+  if (chairSalonEmployees.length > 1 && salonDetailIdParam) {
+    const match = chairSalonEmployees.find(
+      (e) => e.salonDetailId === salonDetailIdParam,
+    )
+    if (match) return loadRentChairWagesMethod(match)
+  }
+
+  const withRentWages = candidates.filter(isRentChairWagesMethod)
+  if (withRentWages.length === 1) {
+    return loadRentChairWagesMethod(withRentWages[0])
+  }
+  if (withRentWages.length > 1) {
+    if (salonDetailIdParam) {
+      const match = withRentWages.find(
+        (e) => e.salonDetailId === salonDetailIdParam,
+      )
+      if (match) return loadRentChairWagesMethod(match)
+    }
+    const ownerChair = withRentWages.find((e) => e.isOwner)
+    if (ownerChair) return loadRentChairWagesMethod(ownerChair)
+    return null
+  }
+
+  const externalOnly = candidates.filter((e) => e.isExternalEmployee)
+  if (externalOnly.length === 1) {
+    return loadRentChairWagesMethod(externalOnly[0])
+  }
+
+  return null
+}
+
+async function getRentChairPersonIncomeByDay(employeeId, salonDetailId, startDate, endDate) {
+  return sequelize.query(`
+    SELECT DAYNAME(bookings.on) AS day, COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND bookings.on >= :startDate
+      AND bookings.on <= :endDate
+    GROUP BY DAYNAME(bookings.on)
+  `, {
+    replacements: {
+      employeeId,
+      salonDetailId,
+      startDate: `${startDate} 00:00:00`,
+      endDate: `${endDate} 23:59:59`,
+    },
+    type: sequelize.QueryTypes.SELECT,
+  })
+}
+
+async function getRentChairPersonIncomeByMonth(employeeId, salonDetailId, year) {
+  return sequelize.query(`
+    SELECT MONTH(bookings.on) AS month, COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND YEAR(bookings.on) = :year
+    GROUP BY MONTH(bookings.on)
+  `, {
+    replacements: { employeeId, salonDetailId, year },
+    type: sequelize.QueryTypes.SELECT,
+  })
+}
+
+async function getRentChairPersonIncomeForMonth(
+  employeeId,
+  salonDetailId,
+  year,
+  month,
+  minBookingDate,
+) {
+  const replacements = { employeeId, salonDetailId, year, month }
+  let minDateClause = ''
+  if (minBookingDate) {
+    minDateClause = ' AND bookings.on >= :minBookingDate'
+    replacements.minBookingDate = `${minBookingDate} 00:00:00`
+  }
+
+  const rows = await sequelize.query(`
+    SELECT COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND YEAR(bookings.on) = :year
+      AND MONTH(bookings.on) = :month
+      ${minDateClause}
+  `, {
+    replacements,
+    type: sequelize.QueryTypes.SELECT,
+  })
+  return parseFloat(rows[0]?.income || 0)
+}
+
+async function getRentChairPersonIncomeForDate(employeeId, salonDetailId, date) {
+  const dateStr = formatDateOnly(date)
+  const rows = await sequelize.query(`
+    SELECT COALESCE(SUM(jobs.total), 0) AS income
+    FROM jobs
+    INNER JOIN bookings ON bookings.id = jobs.bookingId
+    WHERE jobs.employeeId = :employeeId
+      AND bookings.salonDetailId = :salonDetailId
+      AND jobs.status = 'complete'
+      AND bookings.status = 'complete'
+      AND bookings.on >= :startDate
+      AND bookings.on <= :endDate
+  `, {
+    replacements: {
+      employeeId,
+      salonDetailId,
+      startDate: `${dateStr} 00:00:00`,
+      endDate: `${dateStr} 23:59:59`,
+    },
+    type: sequelize.QueryTypes.SELECT,
+  })
+  return parseFloat(rows[0]?.income || 0)
+}
+
+// ─── Helper: calculate expected rent amount for a date range ────────────────
+function calculateExpectedRent(wagesMethod, startDate, endDate) {
+  if (!wagesMethod) return 0
+  const value = parseFloat(wagesMethod.value) || 0
+  const cycle = wagesMethod.cycle
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+
+  if (cycle === 'Daily') return value * diffDays
+  if (cycle === 'Weekly') return value * (diffDays / 7)
+  if (cycle === 'Bi-weekly') return value * (diffDays / 14)
+  if (cycle === 'Monthly') return value * (diffDays / 30)
+  return 0
+}
+
+function toDateOnly(value) {
+  const d = new Date(value)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function getEmployeeRentStartDate(emp) {
+  if (emp?.createdAt) return toDateOnly(emp.createdAt)
+  return null
+}
+
+function formatDateOnly(value) {
+  const d = toDateOnly(value)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function isPeriodBeforeEmployee(periodEnd, employeeStartDate) {
+  if (!employeeStartDate) return false
+  return toDateOnly(periodEnd) < toDateOnly(employeeStartDate)
+}
+
+function getMinBookingDateForMonth(monthStart, employeeStartDate) {
+  if (!employeeStartDate) return null
+  if (toDateOnly(employeeStartDate) > toDateOnly(monthStart)) {
+    return formatDateOnly(employeeStartDate)
+  }
+  return null
+}
+
+async function buildRentChairWeeklyReport(emp, startDate, endDate, includeProfit = false) {
+  const empStart = getEmployeeRentStartDate(emp)
+  const orderedDays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ]
+  const incomeByDayName = {}
+  const rentByDayName = {}
+  const dates = getCalendarDatesInRange(startDate, endDate)
+
+  await Promise.all(dates.map(async (date) => {
+    const dayName = JS_DAY_NAMES[date.getDay()]
+    if (isPeriodBeforeEmployee(date, empStart)) return
+
+    const income = await getRentChairPersonIncomeForDate(
+      emp.id,
+      emp.salonDetailId,
+      date,
+    )
+    const dayRent = calculateExpectedRentForEmployee(
+      emp.employeeWagesMethod,
+      date,
+      date,
+      empStart,
+    )
+    incomeByDayName[dayName] = (incomeByDayName[dayName] || 0) + income
+    rentByDayName[dayName] = (rentByDayName[dayName] || 0) + dayRent
+  }))
+
+  return orderedDays.map((day) => {
+    const income = incomeByDayName[day] || 0
+    const chairRent = rentByDayName[day] || 0
+    const row = {
+      day,
+      income: income.toFixed(2),
+      chairRent: chairRent.toFixed(2),
+    }
+    if (includeProfit) {
+      row.profit = (income - chairRent).toFixed(2)
+    }
+    return row
+  })
+}
+
+async function buildRentChairMonthlyReport(emp, year, includeProfit = false) {
+  const empStart = getEmployeeRentStartDate(emp)
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ]
+  const report = []
+
+  for (let i = 0; i < monthNames.length; i += 1) {
+    const monthNum = i + 1
+    const monthName = monthNames[i]
+    const daysInMonth = new Date(year, monthNum, 0).getDate()
+    const monthStart = new Date(
+      `${year}-${String(monthNum).padStart(2, '0')}-01`,
+    )
+    const monthEnd = new Date(
+      `${year}-${String(monthNum).padStart(2, '0')}-${daysInMonth}`,
+    )
+
+    if (isPeriodBeforeEmployee(monthEnd, empStart)) {
+      const row = {
+        month: monthName,
+        income: '0.00',
+        chairRent: '0.00',
+      }
+      if (includeProfit) row.profit = '0.00'
+      report.push(row)
+      continue
+    }
+
+    const minBookingDate = getMinBookingDateForMonth(monthStart, empStart)
+    const income = await getRentChairPersonIncomeForMonth(
+      emp.id,
+      emp.salonDetailId,
+      year,
+      monthNum,
+      minBookingDate,
+    )
+    const chairRent = calculateExpectedRentForEmployee(
+      emp.employeeWagesMethod,
+      monthStart,
+      monthEnd,
+      empStart,
+    )
+    const row = {
+      month: monthName,
+      income: income.toFixed(2),
+      chairRent: chairRent.toFixed(2),
+    }
+    if (includeProfit) {
+      row.profit = (income - chairRent).toFixed(2)
+    }
+    report.push(row)
+  }
+
+  return report
+}
+
+function calculateExpectedRentForEmployee(
+  wagesMethod,
+  periodStart,
+  periodEnd,
+  employeeStartDate,
+) {
+  if (!wagesMethod) return 0
+
+  const start = toDateOnly(periodStart)
+  const end = toDateOnly(periodEnd)
+  let effectiveStart = start
+
+  if (employeeStartDate) {
+    const empStart = toDateOnly(employeeStartDate)
+    if (empStart > effectiveStart) effectiveStart = empStart
+  }
+
+  if (end < effectiveStart) return 0
+  return calculateExpectedRent(wagesMethod, effectiveStart, end)
+}
+
+function sumOwnerExpectedRentForPeriod(rentalEmployees, periodStart, periodEnd) {
+  let total = 0
+  rentalEmployees.forEach((emp) => {
+    total += calculateExpectedRentForEmployee(
+      emp.employeeWagesMethod,
+      periodStart,
+      periodEnd,
+      getEmployeeRentStartDate(emp),
+    )
+  })
+  return total
+}
+
+function getCalendarDatesInRange(startDate, endDate) {
+  const dates = []
+  const cur = toDateOnly(startDate)
+  const end = toDateOnly(endDate)
+  while (cur <= end) {
+    dates.push(new Date(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
+const JS_DAY_NAMES = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+]
+
+// ─── 1. Income per month with rent (main shop owner) ────────────────────────
+exports.incomeWithRentMonthly = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+  const { year } = req.query
+  if (!year || !/^\d{4}$/.test(year))
+    throw new AppError('Valid year is required', 400)
+
+  const thisYear = parseInt(year, 10)
+
+  const salon = await salonDetail.findOne({
+    where: { userId },
+    attributes: ['id'],
+  })
+  if (!salon) throw new AppError('Shop not found', 200)
+
+  // Get all active rent-a-chair employees with their wages method
+  const rentalEmployees = await employee.findAll({
+    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
+    attributes: ['id', 'createdAt'],
+    include: [{
+      model: employeeWagesMethod,
+      required: true,
+      include: [{ model: wagesMethod, where: { id: 3 }, attributes: [] }],
+    }],
+  })
+
+  const monthNames = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December']
+
+  // Booking income per month
+  const bookingQuery = `
+    SELECT MONTH(bookings.on) AS month, SUM(bookings.total) AS revenue
+    FROM bookings
+    WHERE bookings.salonDetailId = :salonDetailId
+      AND bookings.status = 'complete'
+      AND YEAR(bookings.on) = :thisYear
+    GROUP BY MONTH(bookings.on)
+  `
+  const bookingRevenue = await sequelize.query(bookingQuery, {
+    replacements: { salonDetailId: salon.id, thisYear },
+    type: sequelize.QueryTypes.SELECT,
+  })
+
+  const report = monthNames.map((monthName, i) => {
+    const monthNum = i + 1
+    const booking = bookingRevenue.find(r => r.month === monthNum)
+    const income = parseFloat(booking?.revenue || 0)
+
+    const daysInMonth = new Date(thisYear, monthNum, 0).getDate()
+    const monthStart = new Date(`${thisYear}-${String(monthNum).padStart(2,'0')}-01`)
+    const monthEnd = new Date(`${thisYear}-${String(monthNum).padStart(2,'0')}-${daysInMonth}`)
+
+    const expectedRent = sumOwnerExpectedRentForPeriod(
+      rentalEmployees,
+      monthStart,
+      monthEnd,
+    )
+
+    return {
+      month: monthName,
+      income: income.toFixed(2),
+      expectedRent: expectedRent.toFixed(2),
+      total: (income + expectedRent).toFixed(2),
+    }
+  })
+
+  return res.status(200).json(response({
+    message: 'Income with rent monthly',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 2. Income per day with rent (main shop owner) ──────────────────────────
+exports.incomeWithRentDaily = async (req, res, next) => {
+  const userId = req.params?.salon || req.user?.id
+  const { startDate, endDate } = req.query
+  if (!startDate || !endDate)
+    throw new AppError('startDate and endDate are required', 400)
+
+  const salon = await salonDetail.findOne({
+    where: { userId },
+    attributes: ['id'],
+  })
+  if (!salon) throw new AppError('Shop not found', 200)
+
+  const rentalEmployees = await employee.findAll({
+    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
+    attributes: ['id', 'createdAt'],
+    include: [{
+      model: employeeWagesMethod,
+      required: true,
+      include: [{ model: wagesMethod, where: { id: 3 }, attributes: [] }],
+    }],
+  })
+
+  const bookingQuery = `
+    SELECT DAYNAME(bookings.on) AS day, SUM(bookings.total) AS revenue
+    FROM bookings
+    WHERE bookings.salonDetailId = :salonDetailId
+      AND bookings.status = 'complete'
+      AND bookings.on >= :startDate
+      AND bookings.on <= :endDate
+    GROUP BY DAYNAME(bookings.on)
+  `
+  const bookingRevenue = await sequelize.query(bookingQuery, {
+    replacements: {
+      salonDetailId: salon.id,
+      startDate: `${startDate} 00:00:00`,
+      endDate: `${endDate} 23:59:59`,
+    },
+    type: sequelize.QueryTypes.SELECT,
+  })
+
+  const orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+
+  const expectedRentByDayName = {}
+  getCalendarDatesInRange(startDate, endDate).forEach((date) => {
+    const dayName = JS_DAY_NAMES[date.getDay()]
+    const dayRent = sumOwnerExpectedRentForPeriod(rentalEmployees, date, date)
+    expectedRentByDayName[dayName] = (expectedRentByDayName[dayName] || 0) + dayRent
+  })
+
+  const report = orderedDays.map(day => {
+    const booking = bookingRevenue.find(r => r.day?.toLowerCase() === day.toLowerCase())
+    const income = parseFloat(booking?.revenue || 0)
+    const expectedRent = expectedRentByDayName[day] || 0
+    return {
+      day,
+      income: income.toFixed(2),
+      expectedRent: expectedRent.toFixed(2),
+      total: (income + expectedRent).toFixed(2),
+    }
+  })
+
+  return res.status(200).json(response({
+    message: 'Income with rent daily',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 3. Rental chair: income and chair rent weekly ───────────────────────────
+exports.rentalIncomeWeekly = async (req, res, next) => {
+  const { startDate, endDate } = req.query
+  if (!startDate || !endDate)
+    throw new AppError('startDate and endDate are required', 400)
+
+  const emp = await resolveRentChairReportEmployee(req)
+  if (!emp) throw new AppError('Employee not found', 200)
+
+  const report = await buildRentChairWeeklyReport(emp, startDate, endDate)
+
+  return res.status(200).json(response({
+    message: 'Rental income weekly',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 4. Rental chair: income and chair rent monthly ──────────────────────────
+exports.rentalIncomeMonthly = async (req, res, next) => {
+  const { year } = req.query
+  if (!year || !/^\d{4}$/.test(year))
+    throw new AppError('Valid year is required', 400)
+
+  const thisYear = parseInt(year, 10)
+
+  const emp = await resolveRentChairReportEmployee(req)
+  if (!emp) throw new AppError('Employee not found', 200)
+
+  const report = await buildRentChairMonthlyReport(emp, thisYear)
+
+  return res.status(200).json(response({
+    message: 'Rental income monthly',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 5. Rental chair: profit weekly ─────────────────────────────────────────
+exports.rentalProfitWeekly = async (req, res, next) => {
+  const { startDate, endDate } = req.query
+  if (!startDate || !endDate)
+    throw new AppError('startDate and endDate are required', 400)
+
+  const emp = await resolveRentChairReportEmployee(req)
+  if (!emp) throw new AppError('Employee not found', 200)
+
+  const report = await buildRentChairWeeklyReport(emp, startDate, endDate, true)
+
+  return res.status(200).json(response({
+    message: 'Rental profit weekly',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 6. Rental chair: profit monthly ────────────────────────────────────────
+exports.rentalProfitMonthly = async (req, res, next) => {
+  const { year } = req.query
+  if (!year || !/^\d{4}$/.test(year))
+    throw new AppError('Valid year is required', 400)
+
+  const thisYear = parseInt(year, 10)
+
+  const emp = await resolveRentChairReportEmployee(req)
+  if (!emp) throw new AppError('Employee not found', 200)
+
+  const report = await buildRentChairMonthlyReport(emp, thisYear, true)
+
+  return res.status(200).json(response({
+    message: 'Rental profit monthly',
+    data: { currencyUnit: CURRENCY_UNIT, report },
+  }))
+}
+
+// ─── 7. Rental chair: overview (KPI tiles for selected month) ────────────────
+exports.rentalOverview = async (req, res, next) => {
+  const { year, month } = req.query
+  if (!year || !month)
+    throw new AppError('year and month are required', 400)
+
+  const thisYear = parseInt(year, 10)
+  const thisMonth = parseInt(month, 10)
+  const lastMonth = thisMonth === 1 ? 12 : thisMonth - 1
+  const lastMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear
+
+  const emp = await resolveRentChairReportEmployee(req)
+  if (!emp) throw new AppError('Employee not found', 200)
+
+  const empStart = getEmployeeRentStartDate(emp)
+
+  const daysInMonth = new Date(thisYear, thisMonth, 0).getDate()
+  const monthStart = new Date(
+    `${thisYear}-${String(thisMonth).padStart(2, '0')}-01`,
+  )
+  const monthEnd = new Date(
+    `${thisYear}-${String(thisMonth).padStart(2, '0')}-${daysInMonth}`,
+  )
+
+  const lastDaysInMonth = new Date(lastMonthYear, lastMonth, 0).getDate()
+  const lastMonthStart = new Date(
+    `${lastMonthYear}-${String(lastMonth).padStart(2, '0')}-01`,
+  )
+  const lastMonthEnd = new Date(
+    `${lastMonthYear}-${String(lastMonth).padStart(2, '0')}-${lastDaysInMonth}`,
+  )
+
+  const thisMinBookingDate = getMinBookingDateForMonth(monthStart, empStart)
+  const lastMinBookingDate = getMinBookingDateForMonth(lastMonthStart, empStart)
+
+  const [thisIncome, lastIncome] = await Promise.all([
+    isPeriodBeforeEmployee(monthEnd, empStart)
+      ? 0
+      : getRentChairPersonIncomeForMonth(
+        emp.id, emp.salonDetailId, thisYear, thisMonth, thisMinBookingDate,
+      ),
+    isPeriodBeforeEmployee(lastMonthEnd, empStart)
+      ? 0
+      : getRentChairPersonIncomeForMonth(
+        emp.id, emp.salonDetailId, lastMonthYear, lastMonth, lastMinBookingDate,
+      ),
+  ])
+
+  const chairRent = isPeriodBeforeEmployee(monthEnd, empStart)
+    ? 0
+    : calculateExpectedRentForEmployee(
+      emp.employeeWagesMethod,
+      monthStart,
+      monthEnd,
+      empStart,
+    )
+
+  const profit = thisIncome - chairRent
+  const incomeVsRent = thisIncome - chairRent
+
+  let performanceVsLastMonth = 'same'
+  if (thisIncome > lastIncome) performanceVsLastMonth = 'up'
+  else if (thisIncome < lastIncome) performanceVsLastMonth = 'down'
+
+  const percentChange = lastIncome === 0
+    ? null
+    : (((thisIncome - lastIncome) / lastIncome) * 100).toFixed(1)
+
+  return res.status(200).json(response({
+    message: 'Rental overview',
+    data: {
+      currencyUnit: CURRENCY_UNIT,
+      incomeThisMonth: thisIncome.toFixed(2),
+      performanceVsLastMonth,
+      percentChange,
+      profitThisMonth: profit.toFixed(2),
+      incomeVsRentThisMonth: incomeVsRent.toFixed(2),
+      chairRentThisMonth: chairRent.toFixed(2),
+    },
+  }))
+}

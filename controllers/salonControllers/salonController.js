@@ -8,6 +8,7 @@ const {
   serviceImage,
   employee,
   time,
+  breakTime,
   category,
   service,
   salonImage,
@@ -42,8 +43,18 @@ const {
   customerOnConnectAccount,
   cities,
   countries,
-  zones
+  zones,
+  rentChairAdvertisementEnquiry,
+  rentChairAdvertisementEnquiryMessage,
 } = require('../../models')
+const {
+  formatEnquiryResponse,
+  MESSAGE_ATTRIBUTES,
+  canSalonReplyToEnquiry,
+  formatRentChairEnquiryForSalon,
+  getLatestMessagesByEnquiryIds,
+  dedupeSalonEnquiryRows,
+} = require('../../utils/rentChairEnquiryHelper')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
@@ -111,7 +122,7 @@ exports.addSalonDetail = async (req, res, next) => {
   if (salon) {
     console.log('---------------------> 2nd Attempt');
     return res.json(
-      returnFunction('1', 'Salon details successfully added!', salon, ''),
+      returnFunction('1', 'Shop details successfully added!', salon, ''),
     );
   }
 
@@ -123,7 +134,7 @@ exports.addSalonDetail = async (req, res, next) => {
   if (exist) {
     let message = `It appears this phone number is already associated with an account. Please use a different number.`;
     if (businessEmail == exist?.businessEmail) {
-      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`;
+      message = `It appears that the business email is already associated with another shop. Please use a different email to continue.`;
     }
     throw new appError(message, 200);
   }
@@ -147,7 +158,7 @@ exports.addSalonDetail = async (req, res, next) => {
     vatType,
   });
 
-  await employee.create({
+  const ownerEmployee = await employee.create({
     position: 'Owner',
     userId,
     salonDetailId: newEntry.id,
@@ -202,7 +213,10 @@ exports.addSalonDetail = async (req, res, next) => {
   //await salonDetail.update({ zoneId: zoneId }, { where: { id: newEntry.id } })
 
   return res.json(
-    returnFunction('1', 'Salon details added successfully!', newEntry, ''),
+    returnFunction('1', 'Shop details added successfully!', {
+      ...newEntry.get({ plain: true }),
+      ownerEmployeeId: ownerEmployee.id,
+    }, ''),
   );
 };
 
@@ -277,7 +291,7 @@ exports.choosePlan = async (req, res, next) => {
 
     if (!salonData) {
       return res.json(
-        returnFunction('0', 'Salon not found for this user', {}, '')
+        returnFunction('0', 'Shop not found for this user', {}, '')
       )
     }
 
@@ -638,7 +652,7 @@ exports.accountAdded = async (req, res, next) => {
 
   let salonData = await salonDetail.findOne({
     where: { userId: userId },
-    atrributes: ['connectAccountId', 'id'],
+    attributes: ['connectAccountId', 'id'],
   })
 
   let msg = 'Information Incomplete account not added.'
@@ -653,10 +667,13 @@ exports.accountAdded = async (req, res, next) => {
   )
 
   if (isConnectAccountComplete) {
-    await wallet.update(
-      { accountConnected: true },
-      { where: { salonDetailId: salonData.id } },
-    )
+    const [walletRecord] = await wallet.findOrCreate({
+      where: { salonDetailId: salonData.id },
+      defaults: { salonDetailId: salonData.id, accountConnected: true },
+    });
+    if (!walletRecord.accountConnected) {
+      await walletRecord.update({ accountConnected: true });
+    }
 
     await salonProfiles.update(
       {
@@ -738,7 +755,7 @@ exports.salonTiming = async (req, res, next) => {
 
   // Respond with a success message
   return res.json(
-    returnFunction('1', 'Salon timing added successfully!', {}, '')
+    returnFunction('1', 'Shop timing added successfully!', {}, '')
   )
 }
 /*
@@ -771,7 +788,7 @@ exports.getSalonTiming = async (req, res, next) => {
       : ''
   })
 
-  return res.json(returnFunction('1', 'Salon timings', { salonTiming }, ''))
+  return res.json(returnFunction('1', 'Shop timings', { salonTiming }, ''))
 }
 /*
             4.Serviece Images 
@@ -887,7 +904,7 @@ exports.getAllServices = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'All salon services', { allServices }, ''),
+    returnFunction('1', 'All shop services', { allServices }, ''),
   )
 }
 /*
@@ -920,7 +937,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   if (exist) {
     let message = `It appears this phone number is already associated with an account. Please use a different number.`
     if (businessEmail == exist?.businessEmail) {
-      message = `It appears that the business email is already associated with another salon. Please use a different email to continue.`
+      message = `It appears that the business email is already associated with another shop. Please use a different email to continue.`
     }
     throw new appError(message, 200)
   }
@@ -957,7 +974,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon details updated successfully!', {}, ''),
+    returnFunction('1', 'Shop details updated successfully!', {}, ''),
   )
 }
 //! Salon profile Edit /Location, Services and social links
@@ -1047,7 +1064,7 @@ exports.salonProfile = async (req, res, next) => {
     },
   })
   if (!salonData) {
-    return next(new appError('Not a salon', 200))
+    return next(new appError('Not a shop', 200))
   }
   // const avgRating = await rating.aggregate('value', 'avg', {
   //   where: { salonDetailId: salonData.id },
@@ -1084,11 +1101,11 @@ exports.salonProfile = async (req, res, next) => {
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
     const output = JSON.parse(JSON.stringify(salonData))
     let stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Salon profile', { salonData, stripeDashboardlink }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData, stripeDashboardlink }, ''))
 
   } else {
     const output = JSON.parse(JSON.stringify(salonData))
-    return res.json(returnFunction('1', 'Salon profile', { salonData }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData }, ''))
 
   }
 
@@ -1104,11 +1121,11 @@ exports.updateSalonVATDetails = async (req, res, next) => {
   const { salonDetailId, isVATRegistered, vatType } = req.body
   const salon = await salonDetail.findOne({ where: { id: salonDetailId } })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
   await salonDetail.update(
     { isVATRegistered, vatType }, { where: { id: salonDetailId } })
-  return res.json(returnFunction('1', 'Salon VAT details updated successfully!', {}, ''))
+  return res.json(returnFunction('1', 'Shop VAT details updated successfully!', {}, ''))
 }
 
 
@@ -1254,8 +1271,205 @@ exports.updateSalonTimings = async (req, res, next) => {
     }
   })
   return res.json(
-    returnFunction('1', 'Salon timings updated successfully!', {}, ''),
+    returnFunction('1', 'Shop timings updated successfully!', {}, ''),
   )
+}
+
+const BREAK_DAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
+function normalizeBreakTime(timeStr) {
+  if (!timeStr) return null
+  if (/AM|PM/i.test(timeStr)) {
+    const t24 = Convert.convertTo24HourFormat(timeStr.trim())
+    return t24.length === 5 ? `${t24}:00` : t24
+  }
+  const parts = timeStr.trim().split(':')
+  if (parts.length === 2) {
+    return `${String(parts[0]).padStart(2, '0')}:${String(parts[1]).padStart(2, '0')}:00`
+  }
+  return timeStr
+}
+
+function breakTimeToMinutes(timeStr) {
+  const normalized = normalizeBreakTime(timeStr)
+  const [hours, minutes] = normalized.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function emptyBreaksByDay() {
+  return BREAK_DAYS.reduce((acc, day) => {
+    acc[day] = []
+    return acc
+  }, {})
+}
+
+/*
+            4.Save Employee Breaks
+    ________________________________________
+*/
+exports.saveBreaks = async (req, res, next) => {
+  const { employeeId, salonDetailId, day, breaks } = req.body
+
+  if (!employeeId || !salonDetailId || !day) {
+    return res.json(
+      returnFunction(
+        '0',
+        'employeeId, salonDetailId, and day are required',
+        {},
+        '',
+      ),
+    )
+  }
+
+  if (!Array.isArray(breaks)) {
+    return res.json(
+      returnFunction('0', 'breaks must be an array', {}, ''),
+    )
+  }
+
+  if (!BREAK_DAYS.includes(day)) {
+    return res.json(returnFunction('0', 'Invalid day', {}, ''))
+  }
+
+  for (const br of breaks) {
+    if (!br?.breakStart || !br?.breakEnd) {
+      return res.json(
+        returnFunction('0', 'Each break requires breakStart and breakEnd', {}, ''),
+      )
+    }
+    if (breakTimeToMinutes(br.breakStart) >= breakTimeToMinutes(br.breakEnd)) {
+      return res.json(
+        returnFunction('0', 'breakStart must be before breakEnd', {}, ''),
+      )
+    }
+  }
+
+  await breakTime.destroy({
+    where: {
+      employeeId,
+      day,
+    },
+  })
+
+  let savedBreaks = []
+  if (breaks.length > 0) {
+    const now = new Date()
+    const rows = breaks.map((br) => ({
+      employeeId,
+      salonDetailId,
+      day,
+      breakStart: normalizeBreakTime(br.breakStart),
+      breakEnd: normalizeBreakTime(br.breakEnd),
+      status: true,
+      createdAt: now,
+      updatedAt: now,
+    }))
+    savedBreaks = await breakTime.bulkCreate(rows)
+  }
+
+  return res.json(
+    returnFunction('1', 'Breaks saved successfully', { breaks: savedBreaks }, ''),
+  )
+}
+
+/*
+            4.Get Employee Breaks
+    ________________________________________
+*/
+exports.getEmployeeBreaks = async (req, res, next) => {
+  const { employeeId } = req.params
+
+  const employeeBreaks = await breakTime.findAll({
+    where: {
+      employeeId,
+      status: true,
+      deletedAt: null,
+    },
+    attributes: ['id', 'day', 'breakStart', 'breakEnd'],
+    order: [
+      ['day', 'ASC'],
+      ['breakStart', 'ASC'],
+    ],
+  })
+
+  const data = emptyBreaksByDay()
+  employeeBreaks.forEach((br) => {
+    data[br.day].push({
+      id: br.id,
+      breakStart: br.breakStart,
+      breakEnd: br.breakEnd,
+    })
+  })
+
+  return res.json(returnFunction('1', 'Success', data, ''))
+}
+
+/*
+            4.Delete Break
+    ________________________________________
+*/
+exports.deleteBreak = async (req, res, next) => {
+  const { id } = req.params
+
+  const existingBreak = await breakTime.findOne({
+    where: {
+      id,
+      deletedAt: null,
+    },
+  })
+
+  if (!existingBreak) {
+    return res.json(returnFunction('0', 'Break not found', {}, ''))
+  }
+
+  await existingBreak.destroy()
+
+  return res.json(returnFunction('1', 'Break deleted successfully', {}, ''))
+}
+
+/*
+            4.Get Salon Breaks
+    ________________________________________
+*/
+exports.getSalonBreaks = async (req, res, next) => {
+  const { salonDetailId } = req.params
+
+  const salonBreaks = await breakTime.findAll({
+    where: {
+      salonDetailId,
+      status: true,
+      deletedAt: null,
+    },
+    attributes: ['id', 'employeeId', 'day', 'breakStart', 'breakEnd'],
+    order: [
+      ['employeeId', 'ASC'],
+      ['day', 'ASC'],
+      ['breakStart', 'ASC'],
+    ],
+  })
+
+  const data = {}
+  salonBreaks.forEach((br) => {
+    const empKey = String(br.employeeId)
+    if (!data[empKey]) {
+      data[empKey] = emptyBreaksByDay()
+    }
+    data[empKey][br.day].push({
+      id: br.id,
+      breakStart: br.breakStart,
+      breakEnd: br.breakEnd,
+    })
+  })
+
+  return res.json(returnFunction('1', 'Success', data, ''))
 }
 /*
             4.Update Salon Timings
@@ -1305,7 +1519,7 @@ exports.updateService = async (req, res, next) => {
   await Service.save()
 
   return res.json(
-    returnFunction('1', 'Salon services updated successfully!', {}, ''),
+    returnFunction('1', 'Shop services updated successfully!', {}, ''),
   )
 }
 /*
@@ -1369,7 +1583,7 @@ exports.getCategories = async (req, res, next) => {
     },
   })
   return res.json(
-    returnFunction('1', 'All categories of salon', { categories }, ''),
+    returnFunction('1', 'All shop categories', { categories }, ''),
   )
 }
 /*
@@ -1389,7 +1603,7 @@ exports.updateCategory = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon category updated successfully!', {}, ''),
+    returnFunction('1', 'Shop category updated successfully!', {}, ''),
   )
 }
 
@@ -1406,7 +1620,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   console.log("🚀 ~ exports.changeCategoryStatus= ~ salonIdFound:", activeCategoryCount)
 
   if (!status && activeCategoryCount <= 1) {
-    throw new appError("Salon must have one Category Associated with it", 200)
+    throw new appError("Shop must have one Category Associated with it", 200)
   }
 
   await category.update(
@@ -1424,7 +1638,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
   )
 
   return res.json(
-    returnFunction('1', 'Salon category status updated successfully!', {}, '')
+    returnFunction('1', 'Shop category status updated successfully!', {}, '')
   )
 }
 //! Coupon
@@ -1788,7 +2002,7 @@ exports.customerSubscription = async (req, res, next) => {
     } : 'salonData is null');
 
     if (!salonData) {
-      return res.json(returnFunction('2', 'Salon not found', {}, ''));
+      return res.json(returnFunction('2', 'Shop not found', {}, ''));
     }
 
     // ============================================
@@ -2491,7 +2705,7 @@ exports.getCancellationPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   const condition = {
@@ -2538,7 +2752,7 @@ exports.getCancellationPolicies = async (req, res) => {
   return res.status(200).json(
     returnFunction(
       '1',
-      'Salon cancellation Policy',
+      'Shop cancellation policy',
       {
         previousVersions,
         cancellationPolicies,
@@ -2611,7 +2825,7 @@ exports.getDepositPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2624,7 +2838,7 @@ exports.getDepositPolicies = async (req, res) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'Salon Deposit Policy', { depositPolicies }, ''))
+    .json(returnFunction('1', 'Shop deposit policy', { depositPolicies }, ''))
 }
 
 /*
@@ -2668,7 +2882,7 @@ exports.depositPolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2708,7 +2922,7 @@ exports.getNoShowPolicies = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2731,7 +2945,7 @@ exports.getNoShowPolicies = async (req, res) => {
     .json(
       returnFunction(
         '1',
-        'Salon No Show Policy',
+        'Shop no-show policy',
         { noShowPolicies, depositPercentage: depositPolicies?.percentage },
         '',
       ),
@@ -2748,7 +2962,7 @@ exports.noShowPolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2817,7 +3031,7 @@ exports.getreschedulePolicy = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2833,7 +3047,7 @@ exports.getreschedulePolicy = async (req, res) => {
     .json(
       returnFunction(
         '1',
-        'Salon Reschedule Policy',
+        'Shop reschedule policy',
         { reschedulePolicy: reschedulePolicies },
         '',
       ),
@@ -2851,7 +3065,7 @@ exports.reschedulePolicyHistory = async (req, res) => {
   })
 
   if (!salon) {
-    return res.status(200).json(returnFunction('0', 'Salon not found', {}, ''))
+    return res.status(200).json(returnFunction('0', 'Shop not found', {}, ''))
   }
 
   // Find cancellation policies associated with the salon
@@ -2967,7 +3181,7 @@ exports.salonHistory = async (req, res) => {
 
   return res
     .status(200)
-    .json(returnFunction('1', 'Salon Booking History', { salonHistory }, ''))
+    .json(returnFunction('1', 'Shop booking history', { salonHistory }, ''))
 }
 
 /*
@@ -3196,7 +3410,7 @@ exports.salonWallet = async (req, res, next) => {
   return res.json(
     returnFunction(
       '1',
-      'Salon Wallet',
+      'Shop wallet',
       { currencyUnit: CURRENCY_UNIT, salonWallet, salonWallet },
       '',
     ),
@@ -3417,6 +3631,121 @@ exports.salonLiveStatus = async (req, res, next) => {
     .json(returnFunction('1', `success`, { status, salon: salon }, ''))
 }
 
+exports.getRentChairAdvertisementStatus = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: [
+      'rentChairAdvertisementChairCount',
+      'rentChairAdvertisementStatus',
+    ],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', {
+      rentChairAdvertisementChairCount:
+        salon.rentChairAdvertisementChairCount ?? 0,
+      rentChairAdvertisementStatus: salon.rentChairAdvertisementStatus ? 1 : 0,
+    }, ''),
+  )
+}
+
+exports.updateRentChairAdvertisement = async (req, res, next) => {
+  const { rentChairAdvertisementChairCount, rentChairAdvertisementStatus } =
+    req.body
+
+  if (
+    rentChairAdvertisementChairCount === undefined ||
+    rentChairAdvertisementStatus === undefined
+  ) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementChairCount and rentChairAdvertisementStatus are required',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const chairCount = Number(rentChairAdvertisementChairCount)
+  if (
+    !Number.isInteger(chairCount) ||
+    chairCount < 0 ||
+    chairCount > 99
+  ) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementChairCount must be an integer between 0 and 99',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const statusType = typeof rentChairAdvertisementStatus
+  let normalizedStatus
+  if (statusType === 'boolean') {
+    normalizedStatus = rentChairAdvertisementStatus ? 1 : 0
+  } else if (statusType === 'number') {
+    if (
+      rentChairAdvertisementStatus !== 0 &&
+      rentChairAdvertisementStatus !== 1
+    ) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'rentChairAdvertisementStatus must be 0, 1, true, or false',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedStatus = rentChairAdvertisementStatus
+  } else {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'rentChairAdvertisementStatus must be 0, 1, true, or false',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  await salonDetail.update(
+    {
+      rentChairAdvertisementChairCount: chairCount,
+      rentChairAdvertisementStatus: normalizedStatus === 1,
+    },
+    { where: { userId: req.user.id } },
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Success', {
+      rentChairAdvertisementChairCount: chairCount,
+      rentChairAdvertisementStatus: normalizedStatus,
+    }, ''),
+  )
+}
+
 exports.makeAnnouncement = async (req, res, next) => {
   const newEntry = await announcement.create(req.body)
   return res.status(200).json(returnFunction('1', `success`, {}, ''))
@@ -3480,6 +3809,8 @@ exports.fetchNotifications = async (req, res, next) => {
       `data`,
       'type',
       'repliedAt',
+      'createdAt',
+      'updatedAt',
     ],
   })
 
@@ -3491,6 +3822,16 @@ exports.fetchNotifications = async (req, res, next) => {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
+      } else if (type === 'advert') {
+        accumulator.advertNotifications.push(notification)
+        accumulator.advertisementNotifications.push(notification)
+        const dataType = notification.data?.type
+        if (
+          dataType === 'rentChairAdvertisementEnquiry' ||
+          dataType === 'rentChairAdvertisementEnquiryMessage'
+        ) {
+          accumulator.enquiryNotifications.push(notification)
+        }
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
         accumulator.otherNotifications.push(notification)
@@ -3501,6 +3842,9 @@ exports.fetchNotifications = async (req, res, next) => {
     {
       appointmentNotifications: [],
       reviewNotifications: [],
+      advertNotifications: [],
+      advertisementNotifications: [],
+      enquiryNotifications: [],
       otherNotifications: [],
     }, // Initial accumulator
   )
@@ -3510,6 +3854,225 @@ exports.fetchNotifications = async (req, res, next) => {
       message: 'Notifications.',
       data: { notifications: groupedNotifications },
     }),
+  )
+}
+
+exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiries = await rentChairAdvertisementEnquiry.findAll({
+    where: { salonDetailId: salon.id },
+    order: [['updatedAt', 'DESC']],
+  })
+
+  const latestMap = await getLatestMessagesByEnquiryIds(
+    enquiries.map((enquiry) => enquiry.id),
+  )
+
+  const formattedEnquiries = enquiries.map((enquiry) =>
+    formatRentChairEnquiryForSalon(enquiry, latestMap.get(enquiry.id)),
+  )
+
+  const enquiriesList = dedupeSalonEnquiryRows(formattedEnquiries)
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiries: enquiriesList }, ''),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'customerUserId',
+      'firstName',
+      'lastName',
+      'email',
+      'phoneNumber',
+      'currentLocation',
+      'yearsExperience',
+      'socialMedia',
+      'preferredWorkingDays',
+      'notes',
+      'status',
+      'createdAt',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiry: formatEnquiryResponse(enquiry) }, ''),
+  )
+}
+
+exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: ['id'],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
+    where: { rentChairAdvertisementEnquiryId: enquiry.id },
+    attributes: MESSAGE_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+  })
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { messages }, ''),
+  )
+}
+
+exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id', 'userId', 'salonName'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await rentChairAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'customerUserId',
+      'firstName',
+      'lastName',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  if (!enquiry.customerUserId) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'This enquiry was submitted by a guest. Please contact them using their email or phone number.',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const permission = await canSalonReplyToEnquiry(req, salon)
+  if (!permission.allowed) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'You do not have permission to respond to enquiries',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const trimmedMessage =
+    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+
+  if (!trimmedMessage) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'message is required', {}, ''))
+  }
+
+  if (trimmedMessage.length > 2000) {
+    return res.status(200).json(
+      returnFunction('0', 'message must be at most 2000 characters', {}, ''),
+    )
+  }
+
+  const createdMessage = await rentChairAdvertisementEnquiryMessage.create({
+    rentChairAdvertisementEnquiryId: enquiry.id,
+    senderRole: 'salon',
+    senderUserId: permission.actingUserId,
+    message: trimmedMessage,
+  })
+
+  const customerTokens = await deviceToken.findAll({
+    where: { userId: enquiry.customerUserId },
+    attributes: ['tokenId'],
+  })
+
+  const tokens = customerTokens.map((row) => row.tokenId).filter(Boolean)
+
+  await ThrowNotification(
+    tokens,
+    {
+      title: 'Chair rental enquiry reply',
+      body: `${salon.salonName || 'Shop'} replied to your chair rental enquiry.`,
+    },
+    {
+      type: 'rentChairAdvertisementEnquiryMessage',
+      enquiryId: String(enquiry.id),
+      messageId: String(createdMessage.id),
+      salonDetailId: String(enquiry.salonDetailId),
+    },
+    enquiry.customerUserId,
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Message sent successfully', { message: createdMessage }, ''),
   )
 }
 
@@ -3857,7 +4420,7 @@ exports.addAllergies = async (req, res, next) => {
     attributes: ['id', 'userId'],
   })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
   req.body.salonDetailId = salon?.id
 
@@ -3874,7 +4437,7 @@ exports.fetchAllergies = async (req, res, next) => {
     attributes: ['id', 'userId'],
   })
   if (!salon) {
-    return next(new appError('Salon not found!', 200))
+    return next(new appError('Shop not found!', 200))
   }
 
   const allergiesList = await allergies.findAll({
@@ -4276,7 +4839,7 @@ exports.fetchInvoice = async (req, res, next) => {
 //     let salonConnectId=salonData.connectAccountId
 
 //     if (!salonData) {
-//       return next(new appError('Salon not found', 404));
+//       return next(new appError('Shop not found', 404));
 //     }
 
 //     if (!salonData.connectAccountId) {
@@ -4361,7 +4924,7 @@ exports.createConnectionToken = async (req, res, next) => {
     let salonConnectId='acct_1R64stEFgyBEZR5p';
 
     // if (!salonData) {
-    //   return next(new appError('Salon not found', 404));
+    //   return next(new appError('Shop not found', 404));
     // }
 
     // if (!salonData.connectAccountId) {

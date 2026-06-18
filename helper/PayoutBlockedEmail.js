@@ -7,7 +7,7 @@ const { transporter } = require('./transpoter')
 const { footer } = require('./footer')
 
 module.exports = function (data) {
-  const salonName = data.salonName || 'Your Salon'
+  const salonName = data.salonName || 'Your Shop'
   const ownerName = `${data.firstName} ${data.lastName}`
   const disabledReason = data.disabledReason || 'Account restrictions'
   const capabilityStatus = data.capabilityStatus || 'inactive'

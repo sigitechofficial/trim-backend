@@ -5,6 +5,7 @@ const {
   coupon,
   employee,
   time,
+  breakTime,
   category,
   service,
   booking,
@@ -317,6 +318,7 @@ exports.calendarAppointments = async (req, res, next) => {
   })
   console.log(req.body)
   let parentSalonName = ''
+  let subscriptionSalon = salon
   const JobAttributes = [
     'id',
     'on',
@@ -368,11 +370,14 @@ exports.calendarAppointments = async (req, res, next) => {
 
   if (salon?.parentSalonId) {
     const parentSalon = await salonDetail.findOne({
-      where: { id: salon?.parentSalonId },
-      attributes: ['id', 'salonName'],
+      where: { id: salon.parentSalonId },
+      attributes: ['id', 'salonName', 'registrationExpiryDate', 'registrationDate'],
     })
 
-    parentSalonName = parentSalon?.salonName
+    if (parentSalon) {
+      parentSalonName = parentSalon.salonName
+      subscriptionSalon = parentSalon
+    }
   }
   if (!salon) {
     throw new AppError('Resource not found', 404)
@@ -513,10 +518,11 @@ exports.calendarAppointments = async (req, res, next) => {
     results.push(unassign)
   }
 
-  // Check salon subscription status
+  // Check salon subscription status (parent salon for rent-a-chair / external employees)
   let subscriptionExpire = false
+  const subscriptionSalonId = subscriptionSalon?.id ?? salon?.id
   const salonSubscription = await subscriptions.findOne({
-    where: { salonDetailId: salon?.id },
+    where: { salonDetailId: subscriptionSalonId },
     attributes: ['subscriptionId', 'status', 'subscriptionSource'],
     order: [['createdAt', 'DESC']], // Get the latest subscription
   })
@@ -545,8 +551,8 @@ exports.calendarAppointments = async (req, res, next) => {
       parentSalonName,
       onlinePayments: salon?.onlinePayments ?? true,
       subscriptionExpire,
-      registrationExpiryDate: salon?.registrationExpiryDate,
-      registrationDate: salon?.registrationDate,
+      registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
+      registrationDate: subscriptionSalon?.registrationDate,
     },
   })
 
@@ -722,7 +728,7 @@ exports.salonBookings = async (req, res, next) => {
   return res.json(
     returnFunction(
       '1',
-      'Salon all bookings',
+      'Shop bookings',
       { salonEmployee, bookings: bookings.reverse() },
       '',
     ),
@@ -1136,7 +1142,7 @@ exports.cancelBooking = async (req, res, next) => {
     // Prepare metadata for Stripe refund
     const metadata = {
       customerName: customerName,
-      salonName: salon?.salonName || 'Unknown Salon',
+      salonName: salon?.salonName || 'Unknown Shop',
       salonDetailId: appointment.salonDetailId.toString(),
       bookingId: bookingId.toString(),
       case: 'cancel',
@@ -1246,7 +1252,7 @@ exports.getServices = async (req, res, next) => {
       services,
     }
   })
-  return res.json(returnFunction('1', 'Salon services', { allServices }, ''))
+  return res.json(returnFunction('1', 'Shop services', { allServices }, ''))
 }
 /*
               4.Get Services of Ctegories
@@ -1265,7 +1271,7 @@ exports.getServicesofCategories = async (req, res, next) => {
       attributes: [],
     },
   })
-  return res.json(returnFunction('1', 'Salon services', { Services }, ''))
+  return res.json(returnFunction('1', 'Shop services', { Services }, ''))
 }
 /*
               4.Find Employees That provides all selected services
@@ -1357,7 +1363,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
     return obj
   })
   return res.json(
-    returnFunction('1', "Salon employee's", { employees: result }, ''),
+    returnFunction('1', 'Shop employees', { employees: result }, ''),
   )
 }
 /*
@@ -1438,6 +1444,22 @@ exports.employeeAvailability = async (req, res, next) => {
         attributes: ['startTime', 'endTime'],
       })
       : []
+
+  const employeeBreaks = await breakTime.findAll({
+    where: {
+      employeeId,
+      day: dateDay,
+      status: true,
+      deletedAt: null,
+    },
+  })
+
+  for (const br of employeeBreaks) {
+    busyTimes.push({
+      startTime: br.breakStart,
+      endTime: br.breakEnd,
+    })
+  }
 
   console.log('TIMES BUSY', JSON.parse(JSON.stringify(busyTimes)))
 
@@ -1754,7 +1776,7 @@ exports.addWalkinCustomer = async (req, res, next) => {
       stripeCustomerId,
       userTypeId: 1,
     })
-    message = `New customer added to the salon.`
+    message = `New customer added to the shop.`
   } else if (!alreadyExist && !req?.body?.email) {
     userExist = {
       id: 0,
@@ -2189,7 +2211,7 @@ exports.checkOutBooking = async (req, res, next) => {
   // Prepare metadata for Stripe payment capture
   const metadata = {
     customerName: customerName,
-    salonName: bookingData.salonDetail?.salonName || 'Unknown Salon',
+    salonName: bookingData.salonDetail?.salonName || 'Unknown Shop',
     salonDetailId: bookingData.salonDetailId.toString(),
     bookingId: bookingId.toString(),
     case: 'complete',
@@ -2851,7 +2873,7 @@ exports.salonServices = async (req, res, next) => {
     attributes: ['id', 'serviceName', 'duration'],
   })
   return res.json(
-    returnFunction('1', 'All services of salon', { salonServices }, ''),
+    returnFunction('1', 'All shop services', { salonServices }, ''),
   )
 }
 /*
@@ -3407,7 +3429,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       // Prepare metadata for Stripe refund
       const metadata = {
         customerName: customerName,
-        salonName: appointment.salonDetail?.salonName || 'Unknown Salon',
+        salonName: appointment.salonDetail?.salonName || 'Unknown Shop',
         salonDetailId: appointment.salonDetailId.toString(),
         bookingId: bookingId.toString(),
         case: 'no-show',
@@ -3440,7 +3462,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       // Prepare metadata for Stripe penalty capture
       const metadata = {
         customerName: customerName,
-        salonName: appointment.salonDetail?.salonName || 'Unknown Salon',
+        salonName: appointment.salonDetail?.salonName || 'Unknown Shop',
         salonDetailId: appointment.salonDetailId.toString(),
         bookingId: bookingId.toString(),
         case: 'no-show',
@@ -3523,7 +3545,7 @@ exports.updateOnlibePayment = async (req, res, next) => {
   console.log("findSaloonDetail ----------->", findSaloonDetail)
 
   if (!findSaloonDetail) {
-    throw new appError("Saloon Detail Not Exists")
+    throw new appError("Shop details do not exist")
   }
 
   await salonDetail.update({

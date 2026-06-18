@@ -1,11 +1,5 @@
-const admin = require('firebase-admin')
-const serviceAccount = require('../firebase.json')
+const { getFirebaseAdmin } = require('./firebaseAdmin')
 const { pushNotification } = require('../models')
-
-// Initialize Firebase Admin SDK using the service account JSON file
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-})
 
 // Function to send notification using Firebase Admin SDK
 module.exports = async function Throw(
@@ -37,6 +31,11 @@ module.exports = async function Throw(
     userId: userId,
   }
   if (validData.rating) input.type = 'rating'
+  else if (
+    validData.type === 'rentChairAdvertisementEnquiry' ||
+    validData.type === 'rentChairAdvertisementEnquiryMessage'
+  )
+    input.type = 'advert'
   if (broadcastTo) input.to = broadcastTo
 
   pushNotification.create(input)
@@ -48,6 +47,12 @@ module.exports = async function Throw(
   }
   
   console.log("message=========MSG MSG =====>>>",message)
+
+  const admin = getFirebaseAdmin()
+  if (!admin) {
+    console.error('Firebase Admin not configured — notification not sent.')
+    return
+  }
 
   try {
   const response = await admin.messaging().sendEachForMulticast(message);

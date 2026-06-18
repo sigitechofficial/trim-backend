@@ -12,7 +12,7 @@ module.exports = function (to, name, sentTo = 'salon') {
 There's a lot of different tools to use in Trim Business, after a few bookings have a look at the Shop Performance section.<br/><br/><strong>Your new window cling</strong><br /><br /> If this is your first time signing up to Trim Business we will 
 also be sending you a window cling (free) to put on your shop's window to show people they can book through Trim. <br /><br /> When you get your cling, you’ll need water to apply to the window and cling (ideally a spray) and a flat surface like a squeegee, or something a flat and soft to get out all the bubbles so it sticks. We have pulled together a quick how to below:`
 
-  let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your salon's success.`
+  let secondParagraph = `Thank you for choosing Trim! We look forward to supporting your shop's success.`
 
   let greetings = `Hi ${name}!`
 
@@ -20,7 +20,7 @@ also be sending you a window cling (free) to put on your shop's window to show p
   if (isCustomer) {
     firstParagraph = `Welcome to Trim, just to confirm your account is now set up and you're ready to start booking in your next Trim!<br /> <br />`
 
-    secondParagraph = `Thank you for choosing Trim! We're here to make your salon experience enjoyable and effortless.`
+    secondParagraph = `Thank you for choosing Trim! We're here to make your shop experience enjoyable and effortless.`
     greetings = `Hi ${name}!`
   }
 

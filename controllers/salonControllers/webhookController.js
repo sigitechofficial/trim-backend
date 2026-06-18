@@ -440,7 +440,7 @@ case 'account.updated': {
                   firstName: salonOwner.firstName,
                   lastName: salonOwner.lastName,
                   email: salonOwner.email,
-                  salonName: salon.salonName || 'Your Salon',
+                  salonName: salon.salonName || 'Your Shop',
                   disabledReason: account.requirements?.disabled_reason || 'Account restrictions',
                 };
                 
@@ -540,7 +540,7 @@ case 'account.updated': {
                   firstName: salonOwner.firstName,
                   lastName: salonOwner.lastName,
                   email: salonOwner.email,
-                  salonName: salon.salonName || 'Your Salon',
+                  salonName: salon.salonName || 'Your Shop',
                   disabledReason: 'Capability restrictions',
                   capabilityStatus: capability.status === 'inactive' ? 'inactive' : 'pending verification',
                 };

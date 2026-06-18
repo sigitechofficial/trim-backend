@@ -1,20 +1,28 @@
-const { Op, where } = require('sequelize')
+const { Op } = require('sequelize')
 const { user, deviceToken, otpVerification } = require('../../models')
 const jwt = require('jsonwebtoken')
 const appError = require('../../utils/appError')
-const DateManupulation = require('../../utils/dateManipulation')
-const Email = require('../../utils/Email')
-const Stripe = require('../stripe')
 const bcrypt = require('bcryptjs')
-
-// OTP generator
 const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
-
 const AppError = require('../../utils/appError')
-
 const redis_Client = require('../../routes/redis_connect')
+const {
+  AUTH_STATUS,
+  normalizeEmail,
+  providerMismatchMessage,
+  authResponse,
+  findUsersByNormalizedEmail,
+  findActiveCustomersByEmail,
+  resolveCustomerAccount,
+  hasBusinessAccount,
+  ensureDeviceToken,
+  maybeBackfillVerifiedAt,
+  isSocialProvider,
+  resolveVerifiedSocialIdentity,
+} = require('../../helper/customerAuthHelper')
+
 const VERIFICATION_BYPASS_OTP = '8798'
 
 const generateOTP = () =>
@@ -24,82 +32,299 @@ const generateOTP = () =>
     specialChars: false,
     digits: true,
   })
-//! Function to create JWT Tocken
+
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
 }
 
-//! Function to send Tocken in Response
-const createSendToken = (user, dvToken, statusCode, res) => {
-  console.log('ðŸš€ ~ createSendToken ~ user:', user)
-  const token = signTocken(user.id, dvToken)
-  redis_Client.hSet(`trim${user.id}`, dvToken, token)
+const createSendToken = (
+  userRecord,
+  dvToken,
+  statusCode,
+  res,
+  authStatus = AUTH_STATUS.LOGIN_SUCCESS,
+) => {
+  const token = signTocken(userRecord.id, dvToken)
+  redis_Client.hSet(`trim${userRecord.id}`, dvToken, token)
+  const message =
+    authStatus === AUTH_STATUS.NEW_SOCIAL_USER_CREATED
+      ? 'Account created'
+      : 'Loaded'
   res.status(statusCode).json({
     status: '1',
-    message: 'Loaded',
+    authStatus,
+    message,
     data: {
       accessToken: token,
-      userId: `${user.id}`,
-      image: `${user.image}`,
-      firstName: `${user.firstName}`,
-      lastName: `${user.lastName}`,
-      email: `${user.email}`,
-      phoneNum: `${user.countryCode} ${user.phoneNum}`,
-      stripeCustomerId: user.stripeCustomerId,
+      userId: `${userRecord.id}`,
+      image: `${userRecord.image || ''}`,
+      firstName: `${userRecord.firstName || ''}`,
+      lastName: `${userRecord.lastName || ''}`,
+      email: `${userRecord.email}`,
+      phoneNum: `${userRecord.countryCode || ''} ${userRecord.phoneNum || ''}`.trim(),
+      stripeCustomerId: userRecord.stripeCustomerId,
       joinOn: new Date(),
     },
     error: '',
   })
 }
-//! Return Function
-let returnFunction = (status, message, data, error) => {
-  return {
-    status: `${status}`,
-    message: `${message}`,
-    data: data,
-    error: `${error}`,
-  }
-}
-// ! Module 1 : Auth
-// ! _________________________________________________________________________________________________________________________________
-exports.emailChecker = async (req, res, next) => {
-  const { email, dvToken } = req.body
 
-  const existUser = await user.findOne({
-    where: [
-      {
-        email: email,
-        deleted: 0,
-      },
-      // {
-      //   signedFrom: {
-      //     [Op.in]: ['google', 'apple', 'facebook'],
-      //   },
-      // },
-    ],
+const returnFunction = (status, message, data, error, extra = {}) => ({
+  status: `${status}`,
+  message: `${message}`,
+  data,
+  error: `${error}`,
+  ...extra,
+})
+
+const sendAuthOutcome = (res, payload) => res.status(200).json(authResponse(payload))
+
+const sendProviderMismatch = (res, registeredProvider) =>
+  sendAuthOutcome(res, {
+    status: '0',
+    authStatus: AUTH_STATUS.PROVIDER_MISMATCH,
+    registeredProvider,
+    message: providerMismatchMessage(registeredProvider),
   })
-  // console.log('USER', existUser)
-  if (existUser) {
-    if (existUser.userTypeId == 2) {
-      return next(
-        new AppError(
-          'This email is associated with the Trim Business account.',
-          200,
+
+const sendAccountConflict = (res) =>
+  sendAuthOutcome(res, {
+    status: '0',
+    authStatus: AUTH_STATUS.ACCOUNT_CONFLICT,
+    message:
+      'Multiple accounts exist with this email. Please contact support.',
+  })
+
+/**
+ * Core social auth handler used by POST /social-auth and legacy /signup delegation.
+ */
+async function handleSocialAuth(req, res, next) {
+  const {
+    email,
+    loginBy,
+    signedBy,
+    firstName,
+    lastName,
+    dvToken,
+    idToken,
+    image,
+    countryCode,
+    phoneNum,
+  } = req.body
+
+  const provider = loginBy || signedBy
+
+  if (!isSocialProvider(provider)) {
+    return next(new appError('Invalid social sign-in provider.', 200))
+  }
+
+  const identity = await resolveVerifiedSocialIdentity({
+    email,
+    loginBy: provider,
+    idToken,
+  })
+
+  if (!identity.ok) {
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: identity.authStatus || AUTH_STATUS.ERROR,
+      message: identity.message,
+    })
+  }
+
+  const resolvedEmail = identity.email
+  const allUsers = await findUsersByNormalizedEmail(user, resolvedEmail)
+
+  if (hasBusinessAccount(allUsers)) {
+    return next(
+      new AppError(
+        'This email is associated with the Trim Business account.',
+        200,
+      ),
+    )
+  }
+
+  const customers = allUsers.filter((u) => u.userTypeId === 1)
+  const resolution = resolveCustomerAccount(customers, provider)
+
+  if (resolution.type === 'ACCOUNT_CONFLICT') {
+    return sendAccountConflict(res)
+  }
+
+  if (resolution.type === 'PROVIDER_MISMATCH') {
+    return sendProviderMismatch(res, resolution.registeredProvider)
+  }
+
+  if (resolution.type === 'BLOCKED') {
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.ACCOUNT_BLOCKED,
+      message: 'User Blocked by admin',
+    })
+  }
+
+  if (resolution.type === 'OK') {
+    const existing = resolution.account
+    await maybeBackfillVerifiedAt(user, existing)
+    await ensureDeviceToken(deviceToken, existing, dvToken)
+    return createSendToken(existing, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
+  }
+
+  // New social user
+  const newUser = await user.create({
+    email: resolvedEmail,
+    countryCode: countryCode || '',
+    phoneNum: phoneNum || '',
+    signedFrom: provider,
+    firstName: firstName || '',
+    lastName: lastName || '',
+    userTypeId: 1,
+    image: image || '',
+    status: 1,
+    verifiedAt: new Date(),
+  })
+
+  await deviceToken.create({
+    tokenId: dvToken,
+    status: true,
+    userId: newUser.id,
+  })
+
+  const fullName = `${newUser.firstName} ${newUser.lastName}`.trim()
+  if (fullName) {
+    EmailWelcome([newUser.email], fullName, 'customer')
+  }
+
+  return createSendToken(
+    newUser,
+    dvToken,
+    200,
+    res,
+    AUTH_STATUS.NEW_SOCIAL_USER_CREATED,
+  )
+}
+
+// ! Module 1 : Auth
+exports.emailChecker = async (req, res, next) => {
+  const { email, dvToken, loginBy } = req.body
+  const normalizedEmail = normalizeEmail(email)
+
+  if (!normalizedEmail) {
+    return next(new AppError('Please provide Email', 200))
+  }
+
+  const allUsers = await findUsersByNormalizedEmail(user, normalizedEmail)
+
+  if (!allUsers.length) {
+    return res.json(
+      returnFunction('2', 'User not exist ', {}, '', {
+        authStatus: AUTH_STATUS.USER_NOT_FOUND,
+      }),
+    )
+  }
+
+  if (hasBusinessAccount(allUsers)) {
+    return next(
+      new AppError(
+        'This email is associated with the Trim Business account.',
+        200,
+      ),
+    )
+  }
+
+  const customers = allUsers.filter((u) => u.userTypeId === 1)
+
+  if (!customers.length) {
+    return res.json(
+      returnFunction('2', 'User not exist ', {}, '', {
+        authStatus: AUTH_STATUS.USER_NOT_FOUND,
+      }),
+    )
+  }
+
+  const resolution = resolveCustomerAccount(
+    customers,
+    loginBy || null,
+  )
+
+  if (resolution.type === 'ACCOUNT_CONFLICT') {
+    return sendAccountConflict(res)
+  }
+
+  if (resolution.type === 'BLOCKED') {
+    return next(new AppError('User Blocked by admin', 200))
+  }
+
+  if (resolution.type === 'PROVIDER_MISMATCH') {
+    return sendProviderMismatch(res, resolution.registeredProvider)
+  }
+
+  const account = resolution.account
+
+  // Explicit social check with provider enforcement
+  if (loginBy && isSocialProvider(loginBy)) {
+    await maybeBackfillVerifiedAt(user, account)
+    await ensureDeviceToken(deviceToken, account, dvToken)
+    return createSendToken(account, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
+  }
+
+  // Explicit email path — never issue JWT from emailChecker
+  if (loginBy === 'email') {
+    if (account.signedFrom === 'email' && !account.verifiedAt) {
+      return res.json(
+        returnFunction(
+          '2',
+          'Not Verified! verify otp first.',
+          { userId: `${account.id}`, exists: true },
+          '',
+          { authStatus: AUTH_STATUS.OTP_REQUIRED },
         ),
       )
     }
-    if (!existUser.status) {
-      return next(new AppError('User Blocked by admin', 200))
-    }
-    createSendToken(existUser, dvToken, 200, res)
-  } else if (!existUser) {
-    return res.json(returnFunction('2', 'User not exist ', {}, ''))
+    return res.json(
+      returnFunction(
+        '1',
+        'User exists',
+        { exists: true, userId: `${account.id}` },
+        '',
+        { authStatus: AUTH_STATUS.LOGIN_SUCCESS },
+      ),
+    )
   }
+
+  // Legacy: no loginBy — issue JWT only for social accounts (not email/password)
+  if (!loginBy && isSocialProvider(account.signedFrom)) {
+    await maybeBackfillVerifiedAt(user, account)
+    await ensureDeviceToken(deviceToken, account, dvToken)
+    return createSendToken(account, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
+  }
+
+  // Email/password accounts: never issue JWT from emailChecker
+  if (account.signedFrom === 'email' && !account.verifiedAt) {
+    return res.json(
+      returnFunction(
+        '2',
+        'Not Verified! verify otp first.',
+        { userId: `${account.id}`, exists: true },
+        '',
+        { authStatus: AUTH_STATUS.OTP_REQUIRED },
+      ),
+    )
+  }
+
+  return res.json(
+    returnFunction(
+      '1',
+      'User exists',
+      { exists: true, userId: `${account.id}` },
+      '',
+      { authStatus: AUTH_STATUS.LOGIN_SUCCESS },
+    ),
+  )
 }
-/*
-            1. Register Step 1 (basic info)
-    ________________________________________
-*/
+
+exports.socialAuth = handleSocialAuth
+
 exports.signup = async (req, res, next) => {
   const {
     firstName,
@@ -111,51 +336,35 @@ exports.signup = async (req, res, next) => {
     signedBy,
     dvToken,
     image,
+    idToken,
+    loginBy,
   } = req.body
-  // check if user with same eamil and phoneNum exists
-  const whereConditions = [{ email: email }];
-  
-  // Only check phone number if it's provided (not empty)
-  if (phoneNum && phoneNum.trim() !== '') {
-    whereConditions.push({ 
-      [Op.and]: [{ countryCode: countryCode }, { phoneNum: phoneNum }] 
-    });
-  }
-  
-  let userExist = await user.findOne({
-    where: {
-      [Op.or]: whereConditions,
-      deleted: 0,
-    },
-    include: [
-      { model: otpVerification, required: false, attributes: ['OTP'] },
-      { model: deviceToken, required: false, attributes: ['tokenId'] },
-    ],
-  })
 
-  console.log('userExist++++++++++++++++++++++++++++++++', userExist)
-  //return res.json(userExist)
-  if (userExist) {
-    if (email === userExist.email) {
-      // Check if it's a social signup (Apple/Google/Facebook)
-      if (signedBy !== 'email' && userExist.signedFrom !== 'email') {
-        // Allow re-login for social accounts
-        return next(
-          new appError(
-            'Users exists,The email you entered is already taken',
-            200,
-          ),
-        )
-      } else {
-        return next(
-          new appError(
-            'Users exists,The email you entered is already taken',
-            200,
-          ),
-        )
-      }
-    } else if (phoneNum && phoneNum.trim() !== '' && phoneNum === userExist.phoneNum) {
-      // Only show phone number error if phone is actually provided and matches
+  const provider = signedBy || loginBy
+
+  // Legacy social signup — delegate to shared social auth logic
+  if (isSocialProvider(provider)) {
+    req.body.loginBy = provider
+    req.body.signedBy = provider
+    req.body.idToken = idToken || req.body.idToken
+    return handleSocialAuth(req, res, next)
+  }
+
+  const normalizedEmail = normalizeEmail(email)
+
+  // Phone uniqueness check (unchanged behavior)
+  if (phoneNum && phoneNum.trim() !== '') {
+    const phoneConflict = await user.findOne({
+      where: {
+        [Op.and]: [{ countryCode: countryCode }, { phoneNum: phoneNum }],
+        deleted: 0,
+        userTypeId: 1,
+      },
+    })
+    if (
+      phoneConflict &&
+      normalizeEmail(phoneConflict.email) !== normalizedEmail
+    ) {
       return next(
         new appError(
           'Users exists,The Phone Number you entered is already taken',
@@ -165,12 +374,69 @@ exports.signup = async (req, res, next) => {
     }
   }
 
-  userExist = await user.create({
-    email,
+  const allUsers = await findUsersByNormalizedEmail(user, normalizedEmail)
+  const customers = allUsers.filter((u) => u.userTypeId === 1)
+
+  if (customers.length) {
+    const resolution = resolveCustomerAccount(customers, null)
+
+    if (resolution.type === 'ACCOUNT_CONFLICT') {
+      return sendAccountConflict(res)
+    }
+
+    const existing = resolution.account
+
+    if (isSocialProvider(existing.signedFrom)) {
+      return sendProviderMismatch(res, existing.signedFrom)
+    }
+
+    if (existing.signedFrom === 'email' && !existing.verifiedAt) {
+      const OTP = generateOTP()
+      EmailResetPasswordOtpToAll(OTP, existing, 'verification', 'customer')
+      const DT = new Date()
+
+      let otpRecord = await otpVerification.findOne({
+        where: { userId: existing.id },
+      })
+
+      if (otpRecord) {
+        await otpVerification.update(
+          { OTP, reqAt: DT },
+          { where: { userId: existing.id } },
+        )
+      } else {
+        otpRecord = await otpVerification.create({
+          OTP,
+          reqAt: DT,
+          userId: existing.id,
+        })
+      }
+
+      return res.json(
+        returnFunction(
+          '2',
+          'SignUp Success',
+          { otpId: otpRecord.id, userId: existing.id },
+          '',
+          { authStatus: AUTH_STATUS.OTP_REQUIRED },
+        ),
+      )
+    }
+
+    return next(
+      new appError(
+        'Users exists,The email you entered is already taken',
+        200,
+      ),
+    )
+  }
+
+  const newUser = await user.create({
+    email: normalizedEmail,
     password,
     countryCode,
     phoneNum,
-    signedFrom: signedBy,
+    signedFrom: 'email',
     firstName: firstName || '',
     lastName: lastName || '',
     userTypeId: 1,
@@ -181,48 +447,32 @@ exports.signup = async (req, res, next) => {
   await deviceToken.create({
     tokenId: dvToken,
     status: true,
-    userId: userExist.id,
+    userId: newUser.id,
   })
 
-  if (signedBy !== 'email') {
-    const fullName = `${userExist.firstName} ${userExist.lastName}`
-    //const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
-    //await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
-    let input = JSON.parse(JSON.stringify(userExist))
-    //input.stripeCustomerId = stripeCustomerId
-    input.verifiedAt = new Date()
+  const OTP = generateOTP()
+  EmailResetPasswordOtpToAll(OTP, newUser, 'verification', 'customer')
 
-    EmailWelcome([userExist?.email], fullName, 'customer')
+  const DT = new Date()
+  const otpData = await otpVerification.create({
+    OTP,
+    reqAt: DT,
+    userId: newUser.id,
+  })
 
-    createSendToken(input, dvToken, 200, res)
-  } else {
-    const OTP = generateOTP()
-
-    EmailResetPasswordOtpToAll(OTP, userExist, 'verification','customer')
-
-    const DT = new Date()
-    const otpData = await otpVerification.create({
-      OTP,
-      reqAt: DT,
-      userId: userExist.id,
-    })
-
-    return res.json(
-      returnFunction(
-        '2',
-        'SignUp Success',
-        { otpId: otpData.id, userId: userExist.id },
-        '',
-      ),
-    )
-  }
+  return res.json(
+    returnFunction(
+      '2',
+      'SignUp Success',
+      { otpId: otpData.id, userId: newUser.id },
+      '',
+      { authStatus: AUTH_STATUS.OTP_REQUIRED },
+    ),
+  )
 }
-/*
-            2. Verify OTP
-*/
+
 exports.verifyOTP = async (req, res, next) => {
   const { otpId, OTP, userId, dvToken } = req.body
-  console.log('Ã°Å¸Å¡â‚¬ ~ exports.verifyOTP= ~ req.body:', req.body)
   const otpData = await otpVerification.findOne({
     where: { id: otpId, userId },
   })
@@ -233,7 +483,7 @@ exports.verifyOTP = async (req, res, next) => {
     )
   }
 
-  let userExist = await user.findOne({
+  const userExist = await user.findOne({
     where: {
       id: userId,
       deletedAt: { [Op.is]: null },
@@ -248,59 +498,86 @@ exports.verifyOTP = async (req, res, next) => {
 
   const providedOTP = String(OTP)
   const isValidOTP =
-    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+    String(otpData.OTP) === providedOTP ||
+    providedOTP === VERIFICATION_BYPASS_OTP
 
   if (!isValidOTP) {
     return next(
       new appError('Invalid OTP , Please enter correct OTP to continue', 200),
     )
   }
+
   await deviceToken.create({
     tokenId: dvToken,
     status: true,
     userId: userExist.id,
   })
+
   const fullName = `${userExist.firstName} ${userExist.lastName}`
   if (!req?.body?.forgetPassword) {
     EmailWelcome([userExist?.email], fullName, 'customer')
   }
-  // if (!user.stripeCustomerId) {
-  //   const stripeCustomerId = await Stripe.addCustomer(fullName, userExist.email)
-  //   userExist.stripeCustomerId = stripeCustomerId
-  //   await user.update({ stripeCustomerId }, { where: { id: userExist.id } })
-  // }
 
   await user.update({ verifiedAt: Date.now() }, { where: { id: userId } })
-  createSendToken(userExist, dvToken, 200, res)
+  createSendToken(userExist, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
 }
 
-/*
-            4. Login
-*/
 exports.login = async (req, res, next) => {
-  const { email, password, dvToken } = req.body
+  const { email, password, dvToken, loginBy } = req.body
 
   if (!email) {
     return next(new appError('Please provide Email', 200))
   }
-  const User = await user.findOne({
-    where: {
-      email,
-      // userTypeId: 1,
-      deleted: false,
-    },
-    include: [{ model: deviceToken, required: false, attributes: ['tokenId'] }],
-  })
 
-  // if (!User || password !== User.password) {
-  // this is fri email or by google
-  if (!User && !password) {
-    return res.json(returnFunction('2', `User not Found.`, {}, ''))
+  const normalizedEmail = normalizeEmail(email)
+  const allUsers = await findUsersByNormalizedEmail(user, normalizedEmail)
+  const customers = allUsers.filter((u) => u.userTypeId === 1)
+
+  if (!customers.length) {
+    if (!password) {
+      return res.json(
+        returnFunction('2', 'User not Found.', {}, '', {
+          authStatus: AUTH_STATUS.USER_NOT_FOUND,
+        }),
+      )
+    }
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.INVALID_CREDENTIALS,
+      message: 'Invalid Email. User not Found.',
+    })
   }
 
-  if (!User) {
-    return next(new appError(`Invalid Email. User not Found.`, 200))
+  const resolution = resolveCustomerAccount(customers, null)
+
+  if (resolution.type === 'ACCOUNT_CONFLICT') {
+    return sendAccountConflict(res)
   }
+
+  if (resolution.type === 'NOT_FOUND') {
+    if (!password) {
+      return res.json(
+        returnFunction('2', 'User not Found.', {}, '', {
+          authStatus: AUTH_STATUS.USER_NOT_FOUND,
+        }),
+      )
+    }
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.INVALID_CREDENTIALS,
+      message: 'Invalid Email. User not Found.',
+    })
+  }
+
+  if (resolution.type === 'BLOCKED') {
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.ACCOUNT_BLOCKED,
+      message: 'User Blocked by admin',
+    })
+  }
+
+  const User = resolution.account
 
   if (User?.userTypeId != 1) {
     return next(
@@ -311,13 +588,30 @@ exports.login = async (req, res, next) => {
     )
   }
 
-  // if (User.signedFrom == 'walkin') {
-  //   return next(new appError(`Invalid Email. User not Found.`, 200))
-  // }
-  console.log('🚀 ~ !User.verifiedAt:', !User.verifiedAt)
-  console.log("🚀 ~ User.signedFrom == 'email':", User.signedFrom == 'email')
+  if (!User.status) {
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.ACCOUNT_BLOCKED,
+      message: 'User Blocked by admin',
+    })
+  }
 
-  if (User.signedFrom == 'walkin' && !User.password) {
+  // Legacy social login: emailChecker → socialLogin → POST /login with loginBy
+  if (loginBy && isSocialProvider(loginBy)) {
+    if (User.signedFrom !== loginBy) {
+      return sendProviderMismatch(res, User.signedFrom)
+    }
+    await maybeBackfillVerifiedAt(user, User)
+    await ensureDeviceToken(deviceToken, User, dvToken)
+    return createSendToken(User, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
+  }
+
+  // Email / walk-in path (loginBy === 'email' or omitted)
+  if (isSocialProvider(User.signedFrom)) {
+    return sendProviderMismatch(res, User.signedFrom)
+  }
+
+  if (User.signedFrom === 'walkin' && !User.password) {
     return res.json(
       returnFunction(
         '3',
@@ -328,79 +622,94 @@ exports.login = async (req, res, next) => {
     )
   }
 
-  if (User.signedFrom == 'email' && !User.verifiedAt) {
+  if (User.signedFrom === 'email' && !User.verifiedAt) {
     return res.json(
       returnFunction(
         '2',
         'Not Verified! verify otp first.',
         { userId: `${User.id}` },
         '',
+        { authStatus: AUTH_STATUS.OTP_REQUIRED },
       ),
     )
   }
 
   if (
-    User.signedFrom == 'email' &&
+    User.signedFrom === 'email' &&
     password &&
     !(await bcrypt.compare(password, User?.password || '1'))
   ) {
-    return next(new appError('Incorrect Password', 200))
-  }
-
-  if (!User.status) {
-    return next(new appError('User Blocked by admin', 200))
-  }
-
-  // check Device Token
-  const found = User.deviceTokens.find((ele) => ele.tokenId === dvToken)
-  if (!found)
-    await deviceToken.create({
-      tokenId: dvToken,
-      status: true,
-      userId: User.id,
+    return sendAuthOutcome(res, {
+      status: '0',
+      authStatus: AUTH_STATUS.INVALID_CREDENTIALS,
+      message: 'Incorrect Password',
     })
-  createSendToken(User, dvToken, 200, res)
+  }
+
+  await ensureDeviceToken(deviceToken, User, dvToken)
+  createSendToken(User, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
 }
-/*
-            7. OTP request for changing password
-*/
+
 exports.requestOtp = async (req, res, next) => {
   const condition = { userTypeId: 1, deleted: false }
   if (req.body.email) condition.email = req.body.email
   if (req.body.userId) condition.id = req.body.userId
   let mailType = 'verification'
   if (req.body.email) mailType = 'forgetPassword'
-  const userData = await user.findOne({
-    where: condition,
-    include: { model: otpVerification, attributes: ['id'] },
-    attributes: ['id', 'email', 'firstName', 'lastName'],
-  })
 
-  // user not found
+  let userData
+
+  if (req.body.email) {
+    const customers = await findActiveCustomersByEmail(user, req.body.email, [
+      { model: otpVerification, attributes: ['id'] },
+    ])
+    const resolution = resolveCustomerAccount(customers, null)
+
+    if (resolution.type === 'ACCOUNT_CONFLICT') {
+      return sendAccountConflict(res)
+    }
+    if (resolution.type === 'NOT_FOUND') {
+      return next(new appError('Invalid information,No user exists', 200))
+    }
+    if (isSocialProvider(resolution.account.signedFrom)) {
+      return sendProviderMismatch(res, resolution.account.signedFrom)
+    }
+
+    userData = await user.findOne({
+      where: { id: resolution.account.id },
+      include: { model: otpVerification, attributes: ['id'] },
+      attributes: ['id', 'email', 'firstName', 'lastName', 'signedFrom'],
+    })
+  } else {
+    userData = await user.findOne({
+      where: condition,
+      include: { model: otpVerification, attributes: ['id'] },
+      attributes: ['id', 'email', 'firstName', 'lastName', 'signedFrom'],
+    })
+  }
+
   if (!userData) {
     return next(new appError('Invalid information,No user exists', 200))
   }
 
-  let OTP = generateOTP()
+  if (isSocialProvider(userData.signedFrom)) {
+    return sendProviderMismatch(res, userData.signedFrom)
+  }
 
-  //return res.json(OTP)
+  const OTP = generateOTP()
+  EmailResetPasswordOtpToAll(OTP, userData, mailType, 'customer')
 
-  EmailResetPasswordOtpToAll(OTP, userData, mailType,'customer')
-
-  let DT = new Date()
+  const DT = new Date()
 
   if (userData.otpVerification != null) {
     await otpVerification.update(
-      {
-        OTP,
-        reqAt: DT,
-      },
+      { OTP, reqAt: DT },
       { where: { userId: userData.id } },
     )
-    res.json(
+    return res.json(
       returnFunction(
         '1',
-        `OTP sent successfully.`,
+        'OTP sent successfully.',
         {
           otpId: userData.otpVerification.id,
           userId: userData.id || '',
@@ -408,28 +717,26 @@ exports.requestOtp = async (req, res, next) => {
         '',
       ),
     )
-  } else {
-    const otpData = await otpVerification.create({
-      OTP,
-      reqAt: DT,
-      userId: userData.id,
-    })
-    res.json(
-      returnFunction(
-        '1',
-        `OTP sent successfully.`,
-        {
-          otpId: otpData.id,
-          userId: userData.id || '',
-        },
-        '',
-      ),
-    )
   }
+
+  const otpData = await otpVerification.create({
+    OTP,
+    reqAt: DT,
+    userId: userData.id,
+  })
+  return res.json(
+    returnFunction(
+      '1',
+      'OTP sent successfully.',
+      {
+        otpId: otpData.id,
+        userId: userData.id || '',
+      },
+      '',
+    ),
+  )
 }
-/*
-            8. Verify OTP for changing password
-*/
+
 exports.verifyOTPInForgetpassword = async (req, res, next) => {
   const { otpId, OTP } = req.body
   const otpData = await otpVerification.findByPk(otpId, {
@@ -444,9 +751,11 @@ exports.verifyOTPInForgetpassword = async (req, res, next) => {
       ),
     )
   }
+
   const providedOTP = String(OTP)
   const isValidOTP =
-    String(otpData.OTP) === providedOTP || providedOTP === VERIFICATION_BYPASS_OTP
+    String(otpData.OTP) === providedOTP ||
+    providedOTP === VERIFICATION_BYPASS_OTP
 
   if (!isValidOTP) {
     return next(
@@ -461,17 +770,14 @@ exports.verifyOTPInForgetpassword = async (req, res, next) => {
     returnFunction('1', 'OTP verified', { otpId, userId: otpData.userId }, ''),
   )
 }
-/*
-            8. changing password
-*/
+
 exports.updatePassword = async (req, res, next) => {
   const { password, newPassword } = req.body
   const userId = req.user.id
-  let User = await user.findByPk(userId, {
+  const User = await user.findByPk(userId, {
     include: [{ model: deviceToken, required: false, attributes: ['tokenId'] }],
   })
 
-  // if (password !== User.password) {
   if (!(await bcrypt.compare(password, User.password))) {
     return next(
       new appError('Invalid password! Please provide correct Password', 200),
@@ -487,27 +793,25 @@ exports.updatePassword = async (req, res, next) => {
 exports.resetPassword = async (req, res, next) => {
   const { password, userId, otpId, dvToken } = req.body
 
-  let otp = await otpVerification.findByPk(otpId, {})
+  const otp = await otpVerification.findByPk(otpId, {})
   if (!otp || !otp.verifiedInForgetCase) {
     throw new AppError('OTP not verified yet!', 200)
   }
-  let User = await user.findByPk(userId, {
+
+  const User = await user.findByPk(userId, {
     include: [{ model: deviceToken, required: false, attributes: ['tokenId'] }],
   })
   if (!User) {
     throw new AppError('User Not Found', 200)
   }
 
+  if (isSocialProvider(User.signedFrom)) {
+    return sendProviderMismatch(res, User.signedFrom)
+  }
+
   User.password = await bcrypt.hash(password, 12)
   await User.save()
 
-  const found = User.deviceTokens.find((ele) => ele.tokenId === dvToken)
-  if (!found)
-    await deviceToken.create({
-      tokenId: dvToken,
-      status: true,
-      userId: User.id,
-    })
-
-  createSendToken(User, dvToken, 200, res)
+  await ensureDeviceToken(deviceToken, User, dvToken)
+  createSendToken(User, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)
 }

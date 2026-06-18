@@ -10,7 +10,7 @@ module.exports = function (data) {
   console.log('🚀 Sending the Incomplete Registration Reminder Email')
   console.log('🚀 ~ IncompleteRegistrationReminder ~ data:', data)
 
-  const subject = `⚠️ Complete Your Salon Setup - ${data.firstName}`
+  const subject = `⚠️ Complete Your Shop Setup - ${data.firstName}`
 
   // Progress numbers
   const totalSteps = 7
