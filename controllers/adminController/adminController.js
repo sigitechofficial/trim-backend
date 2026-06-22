@@ -3365,6 +3365,31 @@ exports.getZones = async (req, res, next) => {
 
 //!-------------------------------App Version Config-------------------------------//
 
+const APP_VERSION_SEMVER_REGEX = /^\d+\.\d+\.\d+$/
+
+function parseAppSemver(version) {
+  const parts = String(version).trim().split('.').map(Number)
+  return { major: parts[0] || 0, minor: parts[1] || 0, patch: parts[2] || 0 }
+}
+
+function compareAppSemver(a, b) {
+  const va = parseAppSemver(a)
+  const vb = parseAppSemver(b)
+  if (va.major !== vb.major) return va.major - vb.major
+  if (va.minor !== vb.minor) return va.minor - vb.minor
+  return va.patch - vb.patch
+}
+
+function isValidAppSemver(version) {
+  return APP_VERSION_SEMVER_REGEX.test(String(version).trim())
+}
+
+function normalizeOptionalMessage(value) {
+  if (value === undefined) return undefined
+  const trimmed = String(value).trim()
+  return trimmed === '' ? null : trimmed
+}
+
 // ^ Get all app version config rows (all appTypes + platforms)
 exports.getAppVersionConfig = async (req, res, next) => {
   const data = await appVersionConfig.findAll({
@@ -3376,7 +3401,13 @@ exports.getAppVersionConfig = async (req, res, next) => {
 // ^ Update a specific app version config row by appType + platform
 exports.updateAppVersionConfig = async (req, res, next) => {
   const { appType, platform } = req.params
-  const { latestVersion, minimumSupportedVersion, forceUpdateMessage, softUpdateMessage } = req.body
+  const {
+    latestVersion,
+    minimumSupportedVersion,
+    forceUpdateMessage,
+    softUpdateMessage,
+    allowMinimumGreaterThanLatest,
+  } = req.body
 
   const validAppTypes = ['client', 'business']
   const validPlatforms = ['android', 'ios']
@@ -3389,7 +3420,12 @@ exports.updateAppVersionConfig = async (req, res, next) => {
     return next(new appError(`Invalid platform. Must be one of: ${validPlatforms.join(', ')}`, 400))
   }
 
-  if (!latestVersion && !minimumSupportedVersion && forceUpdateMessage === undefined && softUpdateMessage === undefined) {
+  if (
+    latestVersion === undefined &&
+    minimumSupportedVersion === undefined &&
+    forceUpdateMessage === undefined &&
+    softUpdateMessage === undefined
+  ) {
     return next(new appError('At least one field is required to update', 400))
   }
 
@@ -3400,12 +3436,51 @@ exports.updateAppVersionConfig = async (req, res, next) => {
   }
 
   const updateFields = {}
-  if (latestVersion) updateFields.latestVersion = latestVersion
-  if (minimumSupportedVersion) updateFields.minimumSupportedVersion = minimumSupportedVersion
-  if (forceUpdateMessage !== undefined) updateFields.forceUpdateMessage = forceUpdateMessage || null
-  if (softUpdateMessage !== undefined) updateFields.softUpdateMessage = softUpdateMessage || null
+
+  if (latestVersion !== undefined && latestVersion !== null && latestVersion !== '') {
+    const trimmedLatest = String(latestVersion).trim()
+    if (!isValidAppSemver(trimmedLatest)) {
+      return next(new appError('latestVersion must use semantic version format x.y.z (e.g. 1.0.23)', 400))
+    }
+    updateFields.latestVersion = trimmedLatest
+  }
+
+  if (
+    minimumSupportedVersion !== undefined &&
+    minimumSupportedVersion !== null &&
+    minimumSupportedVersion !== ''
+  ) {
+    const trimmedMinimum = String(minimumSupportedVersion).trim()
+    if (!isValidAppSemver(trimmedMinimum)) {
+      return next(
+        new appError('minimumSupportedVersion must use semantic version format x.y.z (e.g. 1.0.23)', 400),
+      )
+    }
+    updateFields.minimumSupportedVersion = trimmedMinimum
+  }
+
+  if (forceUpdateMessage !== undefined) {
+    updateFields.forceUpdateMessage = normalizeOptionalMessage(forceUpdateMessage)
+  }
+
+  if (softUpdateMessage !== undefined) {
+    updateFields.softUpdateMessage = normalizeOptionalMessage(softUpdateMessage)
+  }
+
+  const finalLatest = updateFields.latestVersion ?? row.latestVersion
+  const finalMinimum = updateFields.minimumSupportedVersion ?? row.minimumSupportedVersion
+
+  if (compareAppSemver(finalMinimum, finalLatest) > 0 && !allowMinimumGreaterThanLatest) {
+    return next(
+      new appError(
+        'minimumSupportedVersion cannot be greater than latestVersion. Set allowMinimumGreaterThanLatest to true if this is intentional.',
+        400,
+      ),
+    )
+  }
 
   await row.update(updateFields)
+  await row.reload()
 
   return res.status(200).json(
     response({
