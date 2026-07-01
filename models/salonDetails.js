@@ -69,6 +69,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(),
       allowNull: true,
     },
+    terminalLocationId: {
+      type: DataTypes.STRING(),
+      allowNull: true,
+    },
     onlinePayments: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

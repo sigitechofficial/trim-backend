@@ -3521,12 +3521,6 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     confirmCustomerId,
     account.connectAccountId
   )
-  
-  // Create connection token for Stripe Terminal
-  // In live mode, you need to pass a location ID
-  // For now, we're passing null which works in test mode
-  // In production, you'll need to provide an actual location ID
-  const connectionToken = await Stripe.createConnectionToken(null, null)
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
@@ -3540,7 +3534,6 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
 
   const data = {
     ephemeralKeySecret: ephemeralKey ? ephemeralKey.secret : '',
-    connectionToken: connectionToken,
     client_secret: indent ? indent.client_secret : '',
     paymentIntendId: indent ? indent.id : '',
     initialPayment: upFrontAmount,
@@ -6420,12 +6413,6 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
     confirmCustomerId,
     account.connectAccountId
   )
-  
-  // Create connection token for Stripe Terminal
-  // In live mode, you need to pass a location ID
-  // For now, we're passing null which works in test mode
-  // In production, you'll need to provide an actual location ID
-  const connectionToken = await Stripe.createConnectionToken(null, null)
 
   // Create Setup Intent instead of Payment Intent
   // Setup Intent is used to save payment method, then charge separately later
@@ -6439,7 +6426,6 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
 
   const data = {
     ephemeralKeySecret: ephemeralKey ? ephemeralKey.secret : '',
-    connectionToken: connectionToken,
     client_secret: setupIntent ? setupIntent.client_secret : '',
     setupIntentId: setupIntent ? setupIntent.id : '',
     paymentIntendId: null, // No payment intent with setup intent approach
