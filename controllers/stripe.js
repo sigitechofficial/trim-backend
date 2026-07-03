@@ -336,7 +336,10 @@ async function createOneTapePayment(
   }
 
   const resolvedIdempotencyKey =
-    idempotencyKey || (bookingId != null ? `tap_pi_${bookingId}` : undefined);
+    idempotencyKey ||
+    (bookingId != null && piAmountMinor
+      ? `tap_pi_${bookingId}_${piAmountMinor}`
+      : undefined);
 
   const metadata = {
     payment_Type: 'tap_to_pay',
@@ -368,6 +371,10 @@ async function createOneTapePayment(
   if (resolvedIdempotencyKey) {
     requestOptions.idempotencyKey = resolvedIdempotencyKey;
   }
+
+  console.log(
+    `[TapToPay] creating PI bookingId=${bookingId} serviceMinor=${serviceAmountMinor} tipMinor=${tipAmountMinor} expectedMinor=${piAmountMinor} idempotencyKey=${resolvedIdempotencyKey}`,
+  );
 
   try {
     const paymentIntent = await stripe.paymentIntents.create(
