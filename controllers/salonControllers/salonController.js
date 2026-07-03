@@ -60,9 +60,12 @@ const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
 const Stripe = require('../stripe')
 const {
-  TAP_TO_PAY_TIP_NOT_SUPPORTED_MESSAGE,
-  hasBookingTip,
-  resolveExpectedTapToPayAmountGbp,
+  INVALID_TIP_MESSAGE,
+  parseTapToPayTip,
+  parseMetadataMinorUnits,
+  resolveTapToPayServiceAmountGbp,
+  resolveTapToPayServiceAmountMinorUnits,
+  toMinorUnits,
 } = require('../../utils/tapToPayAmount')
 const dateManipulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -4921,6 +4924,20 @@ exports.createConnectionToken = async (req, res, next) => {
     );
   }
 
+  let tipAmount;
+  try {
+    tipAmount = parseTapToPayTip(req.body);
+  } catch (error) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        error.message || INVALID_TIP_MESSAGE,
+        {},
+        error.message || INVALID_TIP_MESSAGE,
+      ),
+    );
+  }
+
   const salonData = await salonDetail.findOne({
     where: { userId },
     include: [{ model: addressDBS }],
@@ -4960,20 +4977,10 @@ exports.createConnectionToken = async (req, res, next) => {
     );
   }
 
-  if (hasBookingTip(bookingRecord)) {
-    return res.status(409).json(
-      returnFunction(
-        '0',
-        TAP_TO_PAY_TIP_NOT_SUPPORTED_MESSAGE,
-        {},
-        'Tip not supported',
-      ),
-    );
-  }
+  const serviceAmount = resolveTapToPayServiceAmountGbp(bookingRecord);
+  const chargeAmount = serviceAmount + tipAmount;
 
-  const tapToPayAmountGbp = resolveExpectedTapToPayAmountGbp(bookingRecord);
-
-  if (tapToPayAmountGbp <= 0) {
+  if (chargeAmount <= 0) {
     return res.status(400).json(
       returnFunction(
         '0',
@@ -4983,6 +4990,10 @@ exports.createConnectionToken = async (req, res, next) => {
       ),
     );
   }
+
+  const serviceAmountMinor = resolveTapToPayServiceAmountMinorUnits(bookingRecord);
+  const tipAmountMinor = toMinorUnits(tipAmount);
+  const expectedAmountMinor = serviceAmountMinor + tipAmountMinor;
 
   const terminalLocationId = await Stripe.ensureTerminalLocation(
     salonData.connectAccountId,
@@ -5006,9 +5017,15 @@ exports.createConnectionToken = async (req, res, next) => {
   );
 
   const directCharge = await Stripe.createOneTapePayment(
-    tapToPayAmountGbp,
+    chargeAmount,
     salonData.connectAccountId,
-    { bookingId, salonDetailId: salonData.id },
+    {
+      bookingId,
+      salonDetailId: salonData.id,
+      serviceAmountMinor,
+      tipAmountMinor,
+      expectedAmountMinor,
+    },
   );
 
   return res.json(
@@ -5019,6 +5036,9 @@ exports.createConnectionToken = async (req, res, next) => {
       customerId: null,
       connectAccountId: salonData.connectAccountId,
       terminalLocationId,
+      serviceAmount,
+      tipAmount,
+      chargeAmount,
     }, ''),
   );
 };

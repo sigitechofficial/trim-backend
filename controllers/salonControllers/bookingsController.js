@@ -54,9 +54,8 @@ const {
 
 const { distributeTip } = require('../../utils/tipDistribution')
 const {
-  TAP_TO_PAY_TIP_NOT_SUPPORTED_MESSAGE,
-  hasBookingTip,
-  resolveExpectedTapToPayAmountMinorUnits,
+  parseMetadataMinorUnits,
+  resolveTapToPayServiceAmountMinorUnits,
 } = require('../../utils/tapToPayAmount')
 const {
   walkinAppointmentConfirm,
@@ -2305,17 +2304,6 @@ exports.finalizeTapToPay = async (req, res, next) => {
     );
   }
 
-  if (hasBookingTip(bookingData)) {
-    return res.status(409).json(
-      returnFunction(
-        '0',
-        TAP_TO_PAY_TIP_NOT_SUPPORTED_MESSAGE,
-        {},
-        'Tip not supported',
-      ),
-    );
-  }
-
   const connectAccountId =
     bookingData.salonDetail?.connectAccountId || salon.connectAccountId;
 
@@ -2418,7 +2406,19 @@ exports.finalizeTapToPay = async (req, res, next) => {
       ? paymentIntent.amount_received
       : paymentIntent.amount;
 
-  const expectedMinor = resolveExpectedTapToPayAmountMinorUnits(bookingData);
+  const fallbackServiceMinor = resolveTapToPayServiceAmountMinorUnits(bookingData);
+  const serviceAmountMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.serviceAmountMinor,
+    fallbackServiceMinor,
+  );
+  const tipAmountMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.tipAmountMinor,
+    0,
+  );
+  const expectedMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.expectedAmountMinor,
+    serviceAmountMinor + tipAmountMinor,
+  );
 
   if (expectedMinor <= 0) {
     return res.status(400).json(
@@ -2433,7 +2433,7 @@ exports.finalizeTapToPay = async (req, res, next) => {
 
   if (amountReceivedMinor !== expectedMinor) {
     console.error(
-      `finalizeTapToPay amount mismatch for booking ${bookingId}: Stripe=${amountReceivedMinor} expected=${expectedMinor}`,
+      `finalizeTapToPay amount mismatch for booking ${bookingId}: Stripe=${amountReceivedMinor} expected=${expectedMinor} (service=${serviceAmountMinor}, tip=${tipAmountMinor})`,
     );
     return res.status(400).json(
       returnFunction(
@@ -2445,9 +2445,10 @@ exports.finalizeTapToPay = async (req, res, next) => {
     );
   }
 
-  const serviceAmount = amountReceivedMinor / 100;
+  const serviceAmount = serviceAmountMinor / 100;
+  const tipAmount = tipAmountMinor / 100;
   const oldTip = parseFloat(bookingData.tip) || 0;
-  const tipAmount = 0;
+  const amount = serviceAmount + tipAmount;
   const salonEarning =
     serviceAmount + parseFloat(bookingData.actualCapturedAmount || 0);
 
@@ -2459,9 +2460,9 @@ exports.finalizeTapToPay = async (req, res, next) => {
     salonEarning,
     tipAmount,
     oldTip,
-    amount: serviceAmount,
+    amount,
     paymentMethod: 'tap_to_pay',
-    skipTipDistribution: true,
+    skipTipDistribution: false,
   });
 
   return res.json({
@@ -2471,6 +2472,8 @@ exports.finalizeTapToPay = async (req, res, next) => {
       bookingId: Number(bookingId),
       paymentIntentId,
       amountReceived: amountReceivedMinor,
+      serviceAmount,
+      tipAmount,
       currency: 'gbp',
       alreadyCompleted: completion.alreadyCompleted,
     },

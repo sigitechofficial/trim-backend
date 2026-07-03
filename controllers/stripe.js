@@ -313,9 +313,21 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
 async function createOneTapePayment(
   amount,
   connectAccountId,
-  { bookingId, salonDetailId, idempotencyKey } = {},
+  {
+    bookingId,
+    salonDetailId,
+    idempotencyKey,
+    serviceAmountMinor,
+    tipAmountMinor,
+    expectedAmountMinor,
+  } = {},
 ) {
-  if (!amount || amount <= 0) {
+  const piAmountMinor =
+    expectedAmountMinor != null && Number.isFinite(Number(expectedAmountMinor))
+      ? Number(expectedAmountMinor)
+      : convertToCents(amount);
+
+  if (!piAmountMinor || piAmountMinor <= 0) {
     throw new AppError('Payment amount must be greater than zero', 200);
   }
 
@@ -328,6 +340,7 @@ async function createOneTapePayment(
 
   const metadata = {
     payment_Type: 'tap_to_pay',
+    tipSupported: 'true',
   };
 
   if (bookingId != null) {
@@ -336,6 +349,18 @@ async function createOneTapePayment(
 
   if (salonDetailId != null) {
     metadata.salonDetailId = String(salonDetailId);
+  }
+
+  if (serviceAmountMinor != null) {
+    metadata.serviceAmountMinor = String(serviceAmountMinor);
+  }
+
+  if (tipAmountMinor != null) {
+    metadata.tipAmountMinor = String(tipAmountMinor);
+  }
+
+  if (expectedAmountMinor != null) {
+    metadata.expectedAmountMinor = String(expectedAmountMinor);
   }
 
   const requestOptions = { stripeAccount: connectAccountId };
@@ -347,7 +372,7 @@ async function createOneTapePayment(
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
-        amount: convertToCents(amount),
+        amount: piAmountMinor,
         currency: 'gbp',
         payment_method_types: ['card_present'],
         capture_method: 'automatic',
