@@ -59,6 +59,14 @@ const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
 const Stripe = require('../stripe')
+const {
+  INVALID_TIP_MESSAGE,
+  parseTapToPayTip,
+  parseMetadataMinorUnits,
+  resolveTapToPayServiceAmountGbp,
+  resolveTapToPayServiceAmountMinorUnits,
+  toMinorUnits,
+} = require('../../utils/tapToPayAmount')
 const dateManipulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
 const { sendEvent } = require('../../socket_io')
@@ -4907,91 +4915,130 @@ exports.fetchInvoice = async (req, res, next) => {
 
 
 exports.createConnectionToken = async (req, res, next) => {
-    const userId = req.user.id;
-    
-    console.log("CALING THE API  OF CREATE TOKEN")
+  const userId = req.user.id;
+  const { amount: _amount, bookingId } = req.body;
 
-    const { amount } = req.body;
-    // Find the salon and get the connect account ID
-    const salonData = await salonDetail.findOne({
-      where: { userId },
-      include: [{ model: user, attributes: ['id', 'stripeCustomerId', 'email', 'firstName', 'lastName'] }],
-    });
-    
-    //console.log("salonData=======================+++++",salonData.connectAccountId)
-    
-    // let salonConnectId=salonData.connectAccountId
-    let salonConnectId='acct_1R64stEFgyBEZR5p';
-
-    // if (!salonData) {
-    //   return next(new appError('Shop not found', 404));
-    // }
-
-    // if (!salonData.connectAccountId) {
-    //   return next(new appError('Salon connect account not found. Please complete onboarding first.', 400));
-    // }
-
-    // Check if customer exists in customerOnConnectAccount table
-    let customerOnConnect = await customerOnConnectAccount.findOne({
-      where: { 
-        salonDetailId: salonData.id,
-        connectAccountId: salonData.connectAccountId,
-        userId: salonData.user.id
-      }
-    });
-
-    let customerId;
-    
-    console.log("customerId===++++=======++++++++++++======",customerId)
-
-    if (!customerOnConnect) {
-      // Create customer in the connect account
-      
-      console.log("Going into this =============================+++++")
-      customerId = await Stripe.addCustomer(
-        `${salonData.user.firstName} ${salonData.user.lastName}`,
-        salonData.user.email,
-        salonData.connectAccountId
-      );
-
-      // Save customer in customerOnConnectAccount table
-      await customerOnConnectAccount.create({
-        customerId: customerId,
-        connectAccountId: salonConnectId,
-        salonDetailId: salonData.id,
-        userId: salonData.user.id,
-        status: true
-      });
-    } else {
-      customerId = customerOnConnect.customerId;
-    }
-
-    // Create connection token for Stripe Terminal
-    // In live mode, you need to pass a location ID
-    // For now, we're passing null which works in test mode
-    // In production, you'll need to provide an actual location ID from your database
-    const connectionToken = await Stripe.createConnectionToken('tml_GP5oQgqIvzs3VW');
-    
-    // Create setup intent for client secret using the connect account
-    const directCharge = await Stripe.createOneTapePayment(amount,salonConnectId);
-    console.log('directCharge', directCharge)
-    
-     let outObj={
-        connectionToken,
-        clientSecret: directCharge.client_secret,
-        paymentIntentId: directCharge.id,
-        customerId,
-        connectAccountId: salonData.connectAccountId
-    }
-   
-     console.log('outObj========================+++++++', outObj)
-    return res.json(
-      returnFunction('1', 'Connection token and client secret created successfully', {
-        connectionToken,
-        clientSecret: directCharge.client_secret,
-        paymentIntentId: directCharge.id,
-        customerId,
-        connectAccountId: salonData.connectAccountId
-      }, '')
+  if (bookingId == null || bookingId === '') {
+    return res.status(400).json(
+      returnFunction('0', 'bookingId is required', {}, 'bookingId is required'),
     );
+  }
+
+  let tipAmount;
+  try {
+    tipAmount = parseTapToPayTip(req.body);
+  } catch (error) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        error.message || INVALID_TIP_MESSAGE,
+        {},
+        error.message || INVALID_TIP_MESSAGE,
+      ),
+    );
+  }
+
+  const salonData = await salonDetail.findOne({
+    where: { userId },
+    include: [{ model: addressDBS }],
+  });
+
+  if (!salonData) {
+    return res.json(
+      returnFunction('0', 'Shop not found', {}, 'Shop not found'),
+    );
+  }
+
+  if (!salonData.connectAccountId) {
+    return res.json(
+      returnFunction(
+        '0',
+        'Shop payment onboarding is incomplete. Please connect your Stripe account before using Tap to Pay.',
+        {},
+        'Connect account not found',
+      ),
+    );
+  }
+
+  const bookingRecord = await booking.findByPk(bookingId, {
+    attributes: [
+      'id',
+      'salonDetailId',
+      'total',
+      'discount',
+      'tip',
+      'actualCapturedAmount',
+    ],
+  });
+
+  if (!bookingRecord || bookingRecord.salonDetailId !== salonData.id) {
+    return res.status(404).json(
+      returnFunction('0', 'Booking not found', {}, 'Booking not found'),
+    );
+  }
+
+  const serviceAmount = resolveTapToPayServiceAmountGbp(bookingRecord);
+  const chargeAmount = serviceAmount + tipAmount;
+
+  if (chargeAmount <= 0) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'Booking has no remaining balance for Tap to Pay',
+        {},
+        'Invalid amount',
+      ),
+    );
+  }
+
+  const serviceAmountMinor = resolveTapToPayServiceAmountMinorUnits(bookingRecord);
+  const tipAmountMinor = toMinorUnits(tipAmount);
+  const expectedAmountMinor = serviceAmountMinor + tipAmountMinor;
+
+  const terminalLocationId = await Stripe.ensureTerminalLocation(
+    salonData.connectAccountId,
+    salonData,
+  );
+
+  if (!terminalLocationId) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'Unable to resolve Stripe Terminal location for this shop. Please check your salon address and try again.',
+        {},
+        'Terminal location not found',
+      ),
+    );
+  }
+
+  const connectionToken = await Stripe.createConnectionToken(
+    salonData.connectAccountId,
+    terminalLocationId,
+  );
+
+  const directCharge = await Stripe.createOneTapePayment(
+    chargeAmount,
+    salonData.connectAccountId,
+    {
+      bookingId,
+      salonDetailId: salonData.id,
+      serviceAmountMinor,
+      tipAmountMinor,
+      expectedAmountMinor,
+    },
+  );
+
+  return res.json(
+    returnFunction('1', 'Connection token and client secret created successfully', {
+      connectionToken,
+      clientSecret: directCharge.client_secret,
+      paymentIntentId: directCharge.id,
+      customerId: null,
+      connectAccountId: salonData.connectAccountId,
+      terminalLocationId,
+      serviceAmount,
+      tipAmount,
+      chargeAmount,
+    }, ''),
+  );
 };

@@ -54,6 +54,10 @@ const {
 
 const { distributeTip } = require('../../utils/tipDistribution')
 const {
+  parseMetadataMinorUnits,
+  resolveTapToPayServiceAmountMinorUnits,
+} = require('../../utils/tapToPayAmount')
+const {
   walkinAppointmentConfirm,
 } = require('../eventDrivenCommunication/appointmentConfirm')
 
@@ -998,10 +1002,6 @@ exports.bookingDetails = async (req, res, next) => {
     parseFloat(bookingData.discount) -
     parseFloat(bookingData.actualCapturedAmount);
 
-    const connectionToken = await Stripe.createConnectionToken(null, null);
-    console.log("🚀 ~ connectionToken:", connectionToken)
-
-
   let bookingDetail = {
     id: bookingData.id,
     scheduleDate: bookingData.on,
@@ -1019,7 +1019,6 @@ exports.bookingDetails = async (req, res, next) => {
     duration: bookingData.duration,
     initialPayment: bookingData.initialPayment,
     total: bookingData.total,
-    connectionToken: connectionToken,
     subTotal: bookingData.subTotal,
     vatAmount: bookingData?.vatAmount,
     vatOriginalAmount: bookingData?.vatOriginalAmount,
@@ -2106,10 +2105,385 @@ exports.clientHistory = async (req, res, next) => {
     ),
   )
 }
+exports.completeBookingAfterOnlinePayment = async ({
+  bookingId,
+  bookingData,
+  paymentIntentId,
+  serviceAmount,
+  salonEarning,
+  tipAmount,
+  oldTip,
+  amount,
+  paymentMethod = null,
+  skipTipDistribution = false,
+}) => {
+  const freshBooking = await booking.findByPk(bookingId, {
+    attributes: ['id', 'status', 'finalPayment'],
+  });
+
+  if (
+    freshBooking?.finalPayment === 'paid' ||
+    freshBooking?.status === 'complete'
+  ) {
+    console.log(
+      `completeBookingAfterOnlinePayment skipped: booking ${bookingId} already completed (status=${freshBooking?.status}, finalPayment=${freshBooking?.finalPayment})`,
+    );
+    return { alreadyCompleted: true };
+  }
+
+  // Add service amount to onlineAmount
+  await wallet.increment(
+    { onlineAmount: salonEarning },
+    { where: { salonDetailId: bookingData?.salonDetail?.id } }
+  );
+
+  // ✅ CRITICAL FIX: Also add tip to onlineAmount so it's included in total wallet balance
+  // The payment amount includes tip, so onlineAmount should also include it
+  // Add the new tip (tipAmount) to onlineAmount - this ensures it's in the total
+  // Note: Old tip was already added to onlineAmount during booking (if it was paid upfront)
+  if (tipAmount > 0) {
+    await wallet.increment(
+      { onlineAmount: tipAmount },
+      { where: { salonDetailId: bookingData?.salonDetail?.id } }
+    );
+    console.log(`✅ Tip added to onlineAmount: tipAmount=${tipAmount} (new tip from checkout)`);
+  }
+
+  bookingData.status = 'complete';
+  bookingData.finalPaymentIntend = paymentIntentId;
+  bookingData.finalPayment = 'paid';
+  bookingData.subTotal = bookingData.total;
+  if (paymentMethod) {
+    bookingData.paymentMethod = paymentMethod;
+  }
+  await bookingData.save();
+
+  // Increment actualCapturedAmount with service amount only (no tip)
+  await booking.increment(
+    { actualCapturedAmount: serviceAmount },
+    { where: { id: bookingId } }
+  );
+
+  // Update tip: old tip + new tip
+  await booking.update(
+    { tip: oldTip + tipAmount },
+    { where: { id: bookingId } }
+  );
+
+  Communication.online(bookingId, tipAmount, amount);
+
+  await employeeCommission.update(
+    { appointmentClosed: true },
+    { where: { bookingId: bookingData.id } }
+  );
+
+  await rentChairEarning.update(
+    { appointmentClosed: true },
+    { where: { bookingId: bookingData.id } }
+  );
+
+  // Call distributeTip for job distribution (tip distribution among employees)
+  // distributeTip will handle adding tip to tipAmount field
+  if (!skipTipDistribution) {
+    try {
+      const originalTip = bookingData.tip;
+      bookingData.tip = parseFloat(oldTip) + parseFloat(tipAmount);
+      distributeTip(bookingData, 0);
+      bookingData.tip = originalTip;
+    } catch (error) {
+      console.error('Error in distributeTip (non-critical):', error);
+    }
+  }
+
+  return { alreadyCompleted: false };
+};
+
+/*
+              4.Finalize Tap to Pay
+      ________________________________________
+*/
+exports.finalizeTapToPay = async (req, res, next) => {
+  const { bookingId, paymentIntentId } = req.body;
+
+  if (bookingId == null || bookingId === '') {
+    return res.status(400).json(
+      returnFunction('0', 'bookingId is required', {}, 'bookingId is required'),
+    );
+  }
+
+  if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'paymentIntentId is required',
+        {},
+        'paymentIntentId is required',
+      ),
+    );
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id', 'connectAccountId'],
+  });
+
+  if (!salon) {
+    return res.status(404).json(
+      returnFunction('0', 'Shop not found', {}, 'Shop not found'),
+    );
+  }
+
+  const freshBooking = await booking.findByPk(bookingId, {
+    attributes: ['id', 'status', 'finalPayment', 'finalPaymentIntend'],
+  });
+
+  if (!freshBooking) {
+    return res.status(404).json(
+      returnFunction('0', 'Booking not found', {}, 'Booking not found'),
+    );
+  }
+
+  if (
+    freshBooking.finalPayment === 'paid' ||
+    freshBooking.status === 'complete'
+  ) {
+    console.log(
+      `finalizeTapToPay skipped: booking ${bookingId} already completed (status=${freshBooking.status}, finalPayment=${freshBooking.finalPayment})`,
+    );
+    return res.json({
+      status: true,
+      message: 'Tap to Pay payment finalized successfully',
+      data: {
+        bookingId: Number(bookingId),
+        paymentIntentId: freshBooking.finalPaymentIntend || paymentIntentId,
+        amountReceived: null,
+        currency: 'gbp',
+        alreadyCompleted: true,
+      },
+    });
+  }
+
+  if (
+    freshBooking.status === 'cancel' ||
+    freshBooking.status === 'no-show'
+  ) {
+    return res.status(409).json(
+      returnFunction(
+        '0',
+        `Cannot finalize payment for booking with status ${freshBooking.status}`,
+        {},
+        'Invalid booking status',
+      ),
+    );
+  }
+
+  const bookingData = await booking.findByPk(bookingId, {
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'connectAccountId', 'salonName'],
+      },
+      { model: jobs },
+    ],
+    attributes: [
+      'id',
+      'status',
+      'total',
+      'discount',
+      'tip',
+      'actualCapturedAmount',
+      'salonDetailId',
+      'finalPayment',
+      'finalPaymentIntend',
+    ],
+  });
+
+  if (!bookingData || bookingData.salonDetailId !== salon.id) {
+    return res.status(404).json(
+      returnFunction('0', 'Booking not found', {}, 'Booking not found'),
+    );
+  }
+
+  const connectAccountId =
+    bookingData.salonDetail?.connectAccountId || salon.connectAccountId;
+
+  if (!connectAccountId) {
+    console.error(
+      `finalizeTapToPay failed: no connectAccountId for booking ${bookingId}, salon ${salon.id}`,
+    );
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'Shop payment onboarding is incomplete. Stripe Connect account not found.',
+        {},
+        'Connect account not found',
+      ),
+    );
+  }
+
+  let paymentIntent;
+  try {
+    paymentIntent = await Stripe.retrieveConnectPaymentIntent(
+      paymentIntentId,
+      connectAccountId,
+    );
+  } catch (error) {
+    console.error(
+      `finalizeTapToPay Stripe retrieve failed for booking ${bookingId}, PI ${paymentIntentId}:`,
+      error.message,
+    );
+    return res.status(400).json(
+      returnFunction('0', error.message, {}, error.message),
+    );
+  }
+
+  if (paymentIntent.status !== 'succeeded') {
+    console.error(
+      `finalizeTapToPay failed: PI ${paymentIntentId} status=${paymentIntent.status} for booking ${bookingId}`,
+    );
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        `PaymentIntent status must be succeeded (current: ${paymentIntent.status})`,
+        {},
+        'Payment not succeeded',
+      ),
+    );
+  }
+
+  if (paymentIntent.currency !== 'gbp') {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        `PaymentIntent currency must be gbp (current: ${paymentIntent.currency})`,
+        {},
+        'Invalid currency',
+      ),
+    );
+  }
+
+  if (String(paymentIntent.metadata?.bookingId) !== String(bookingId)) {
+    console.error(
+      `finalizeTapToPay metadata mismatch: expected bookingId ${bookingId}, got ${paymentIntent.metadata?.bookingId}`,
+    );
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'PaymentIntent bookingId metadata does not match request',
+        {},
+        'Metadata mismatch',
+      ),
+    );
+  }
+
+  if (paymentIntent.metadata?.payment_Type !== 'tap_to_pay') {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'PaymentIntent is not a Tap to Pay charge',
+        {},
+        'Invalid payment type',
+      ),
+    );
+  }
+
+  if (
+    paymentIntent.metadata?.salonDetailId != null &&
+    String(paymentIntent.metadata.salonDetailId) !== String(bookingData.salonDetailId)
+  ) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'PaymentIntent salonDetailId metadata does not match booking',
+        {},
+        'Metadata mismatch',
+      ),
+    );
+  }
+
+  const amountReceivedMinor =
+    paymentIntent.amount_received != null
+      ? paymentIntent.amount_received
+      : paymentIntent.amount;
+
+  const fallbackServiceMinor = resolveTapToPayServiceAmountMinorUnits(bookingData);
+  const serviceAmountMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.serviceAmountMinor,
+    fallbackServiceMinor,
+  );
+  const tipAmountMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.tipAmountMinor,
+    0,
+  );
+  const expectedMinor = parseMetadataMinorUnits(
+    paymentIntent.metadata?.expectedAmountMinor,
+    serviceAmountMinor + tipAmountMinor,
+  );
+
+  if (expectedMinor <= 0) {
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        'Booking has no remaining balance to finalize',
+        {},
+        'Invalid expected amount',
+      ),
+    );
+  }
+
+  if (amountReceivedMinor !== expectedMinor) {
+    console.error(
+      `finalizeTapToPay amount mismatch for booking ${bookingId}: Stripe=${amountReceivedMinor} expected=${expectedMinor} (service=${serviceAmountMinor}, tip=${tipAmountMinor})`,
+    );
+    return res.status(400).json(
+      returnFunction(
+        '0',
+        `Payment amount does not match booking total (received ${amountReceivedMinor} pence, expected ${expectedMinor} pence)`,
+        {},
+        'Amount mismatch',
+      ),
+    );
+  }
+
+  const serviceAmount = serviceAmountMinor / 100;
+  const tipAmount = tipAmountMinor / 100;
+  const oldTip = parseFloat(bookingData.tip) || 0;
+  const amount = serviceAmount + tipAmount;
+  const salonEarning =
+    serviceAmount + parseFloat(bookingData.actualCapturedAmount || 0);
+
+  const completion = await exports.completeBookingAfterOnlinePayment({
+    bookingId,
+    bookingData,
+    paymentIntentId,
+    serviceAmount,
+    salonEarning,
+    tipAmount,
+    oldTip,
+    amount,
+    paymentMethod: 'tap_to_pay',
+    skipTipDistribution: false,
+  });
+
+  return res.json({
+    status: true,
+    message: 'Tap to Pay payment finalized successfully',
+    data: {
+      bookingId: Number(bookingId),
+      paymentIntentId,
+      amountReceived: amountReceivedMinor,
+      serviceAmount,
+      tipAmount,
+      currency: 'gbp',
+      alreadyCompleted: completion.alreadyCompleted,
+    },
+  });
+};
+
 /*
               4.CheckOut Api
       ________________________________________
-  */
+*/
 exports.checkOutBooking = async (req, res, next) => {
   const { bookingId, tip } = req.body;
 
@@ -2229,64 +2603,16 @@ exports.checkOutBooking = async (req, res, next) => {
   );
 
   if (payments.status === 'succeeded') {
-    // Add service amount to onlineAmount
-    await wallet.increment(
-      { onlineAmount: salonEarning },
-      { where: { salonDetailId: bookingData?.salonDetail?.id } }
-    );
-    
-    // ✅ CRITICAL FIX: Also add tip to onlineAmount so it's included in total wallet balance
-    // The payment amount includes tip, so onlineAmount should also include it
-    // Add the new tip (tipAmount) to onlineAmount - this ensures it's in the total
-    // Note: Old tip was already added to onlineAmount during booking (if it was paid upfront)
-    if (tipAmount > 0) {
-      await wallet.increment(
-        { onlineAmount: tipAmount },
-        { where: { salonDetailId: bookingData?.salonDetail?.id } }
-      );
-      console.log(`✅ Tip added to onlineAmount: tipAmount=${tipAmount} (new tip from checkout)`);
-    }
-
-    bookingData.status = 'complete';
-    bookingData.finalPaymentIntend = payments.id;
-    bookingData.finalPayment = 'paid';
-    bookingData.subTotal = bookingData.total;
-    await bookingData.save();
-
-    // Increment actualCapturedAmount with service amount only (no tip)
-    await booking.increment(
-      { actualCapturedAmount: serviceAmount },
-      { where: { id: bookingId } }
-    );
-    
-    // Update tip: old tip + new tip
-    await booking.update(
-      { tip: oldTip + tipAmount },
-      { where: { id: bookingId } }
-    );
-
-    Communication.online(bookingId, tipAmount, amount);
-
-    await employeeCommission.update(
-      { appointmentClosed: true },
-      { where: { bookingId: bookingData.id } }
-    );
-
-    await rentChairEarning.update(
-      { appointmentClosed: true },
-      { where: { bookingId: bookingData.id } }
-    );
-
-    // Call distributeTip for job distribution (tip distribution among employees)
-    // distributeTip will handle adding tip to tipAmount field
-    try {
-      const originalTip = bookingData.tip;
-      bookingData.tip = parseFloat(oldTip) + parseFloat(tipAmount);
-      distributeTip(bookingData, 0);
-      bookingData.tip = originalTip;
-    } catch (error) {
-      console.error('Error in distributeTip (non-critical):', error);
-    }
+    await exports.completeBookingAfterOnlinePayment({
+      bookingId,
+      bookingData,
+      paymentIntentId: payments.id,
+      serviceAmount,
+      salonEarning,
+      tipAmount,
+      oldTip,
+      amount,
+    });
 
     return res.json(
       returnFunction('1', 'Payment processed successfully.', {}, '')

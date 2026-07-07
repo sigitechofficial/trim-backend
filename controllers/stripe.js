@@ -4,6 +4,7 @@ const stripe = require('stripe')(STRIPE_SECRET_KEY)
 
 const AppError = require("../utils/appError");
 const dateManipulation = require("../utils/dateManipulation");
+const { addressDBS } = require('../models');
 
 // Amount to Cents
 function convertToCents(amount) {
@@ -309,20 +310,89 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
 // }
 
 
-async function  createOneTapePayment(amount) {
-  console.log("createOneTapePayment--------------------connectedAccountId========Stripe===>", amount)
+async function createOneTapePayment(
+  amount,
+  connectAccountId,
+  {
+    bookingId,
+    salonDetailId,
+    idempotencyKey,
+    serviceAmountMinor,
+    tipAmountMinor,
+    expectedAmountMinor,
+  } = {},
+) {
+  const piAmountMinor =
+    expectedAmountMinor != null && Number.isFinite(Number(expectedAmountMinor))
+      ? Number(expectedAmountMinor)
+      : convertToCents(amount);
+
+  if (!piAmountMinor || piAmountMinor <= 0) {
+    throw new AppError('Payment amount must be greater than zero', 200);
+  }
+
+  if (!connectAccountId) {
+    throw new AppError('Stripe Connect account is required for Tap to Pay', 200);
+  }
+
+  const resolvedIdempotencyKey =
+    idempotencyKey ||
+    (bookingId != null && piAmountMinor
+      ? `tap_pi_${bookingId}_${piAmountMinor}`
+      : undefined);
+
+  const metadata = {
+    payment_Type: 'tap_to_pay',
+    tipSupported: 'true',
+  };
+
+  if (bookingId != null) {
+    metadata.bookingId = String(bookingId);
+  }
+
+  if (salonDetailId != null) {
+    metadata.salonDetailId = String(salonDetailId);
+  }
+
+  if (serviceAmountMinor != null) {
+    metadata.serviceAmountMinor = String(serviceAmountMinor);
+  }
+
+  if (tipAmountMinor != null) {
+    metadata.tipAmountMinor = String(tipAmountMinor);
+  }
+
+  if (expectedAmountMinor != null) {
+    metadata.expectedAmountMinor = String(expectedAmountMinor);
+  }
+
+  const requestOptions = { stripeAccount: connectAccountId };
+
+  if (resolvedIdempotencyKey) {
+    requestOptions.idempotencyKey = resolvedIdempotencyKey;
+  }
+
+  console.log(
+    `[TapToPay] creating PI bookingId=${bookingId} serviceMinor=${serviceAmountMinor} tipMinor=${tipAmountMinor} expectedMinor=${piAmountMinor} idempotencyKey=${resolvedIdempotencyKey}`,
+  );
+
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
-        amount: convertToCents(amount),
+        amount: piAmountMinor,
         currency: 'gbp',
         payment_method_types: ['card_present'],
-      }
+        capture_method: 'automatic',
+        description: `Tap to Pay - booking #${bookingId ?? 'n/a'}`,
+        metadata,
+      },
+      requestOptions,
     );
+
     return paymentIntent;
-  }
-  catch (error) {
-    throw new AppError(`${error.message} `, 200);
+  } catch (error) {
+    console.error('❌ createOneTapePayment error:', error.message);
+    throw new AppError(`Failed to create Tap to Pay payment: ${error.message}`, 200);
   }
 }
 
@@ -1108,6 +1178,30 @@ async function retrievePaymentIntent(paymentIntentId) {
   }
 }
 
+async function retrieveConnectPaymentIntent(paymentIntentId, connectAccountId) {
+  if (!connectAccountId) {
+    throw new AppError('Stripe Connect account is required', 400);
+  }
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      {},
+      { stripeAccount: connectAccountId },
+    );
+    return paymentIntent;
+  } catch (error) {
+    console.error(
+      `❌ retrieveConnectPaymentIntent failed for ${paymentIntentId} on ${connectAccountId}:`,
+      error.message,
+    );
+    throw new AppError(
+      `PaymentIntent not found on connected account: ${error.message}`,
+      400,
+    );
+  }
+}
+
 /*
  * Retrieve and Confirm Payment Intent for Upfront Payment
  */
@@ -1711,53 +1805,182 @@ async function getInvoiceDetails(invoiceId) {
 /*
  *  1:  Create Connection Token ________________________
  */
-// async function createConnectionToken(connectAccountId=null, locationId ='tml_GP5oQgqIvzs3VW') {
-//   try {
-//     const tokenParams = {};
-    
-//     // Only include location parameter in live mode
-//     if (locationId) {
-//       tokenParams.location = locationId;
-//     }
-    
-//     const token = await stripe.terminal.connectionTokens.create(
-//       tokenParams,
-//     //   {
-//     //     stripeAccount: connectAccountId, // Pass the connected account ID here
-//     //   }
-//     );
-//     console.log("✅ Connection token created successfully");
-//     return token.secret;
-//   } catch (error) {
-//     console.error("❌ Stripe Terminal error:", error);
-//     throw new AppError(`${error.message}`, 200);
-//   }
-// }
+async function createConnectionToken(connectAccountId, locationId) {
+  if (!connectAccountId) {
+    throw new AppError(
+      'Stripe Connect account is required to create a Terminal connection token',
+      200,
+    );
+  }
 
-
-async function createConnectionToken(locationId ='tml_GP5oQgqIvzs3VW') {
   try {
     const tokenParams = {};
-    
-    // Only include location parameter in live mode
+
     if (locationId) {
       tokenParams.location = locationId;
     }
-    
+
     const token = await stripe.terminal.connectionTokens.create(
       tokenParams,
-    //   {
-    //     stripeAccount: connectAccountId, // Pass the connected account ID here
-    //   }
+      { stripeAccount: connectAccountId },
     );
-    console.log("✅ Connection token created successfully");
+    console.log('✅ Connection token created successfully');
     return token.secret;
   } catch (error) {
-    console.error("❌ Stripe Terminal error:", error);
+    console.error('❌ Stripe Terminal error:', error);
     throw new AppError(`${error.message}`, 200);
   }
 }
 
+
+const ISO_COUNTRY_ALIASES = {
+  'united kingdom': 'GB',
+  uk: 'GB',
+  'great britain': 'GB',
+  england: 'GB',
+  scotland: 'GB',
+  wales: 'GB',
+  'northern ireland': 'GB',
+  pakistan: 'PK',
+  ireland: 'IE',
+  'united states': 'US',
+  usa: 'US',
+};
+
+function toIsoCountryCode(countryValue) {
+  const raw = `${countryValue || ''}`.trim();
+  if (!raw) return null;
+
+  if (/^[a-z]{2}$/i.test(raw)) {
+    return raw.toUpperCase();
+  }
+
+  return ISO_COUNTRY_ALIASES[raw.toLowerCase()] || null;
+}
+
+function resolveTerminalLine1(address) {
+  const primary = `${address.streetLineAddress1 || address.streetAddress || ''}`.trim();
+  const unitParts = [address.building, address.floor, address.apartment]
+    .map((part) => `${part || ''}`.trim())
+    .filter(Boolean);
+
+  if (!primary && unitParts.length === 0) {
+    return '';
+  }
+
+  if (!primary) {
+    return unitParts.join(', ');
+  }
+
+  if (unitParts.length === 0) {
+    return primary;
+  }
+
+  const unit = unitParts.join(', ');
+  return primary.includes(unit) ? primary : `${primary}, ${unit}`;
+}
+
+async function resolveSalonAddress(salon) {
+  if (salon?.addressDBS) {
+    return salon.addressDBS;
+  }
+
+  if (salon?.addressDBId) {
+    return addressDBS.findByPk(salon.addressDBId);
+  }
+
+  return null;
+}
+
+function buildTerminalAddressPayload(address) {
+  const line1 = resolveTerminalLine1(address);
+  const city = `${address.city || address.town || ''}`.trim();
+  const postalCode = `${address.postalCode || ''}`.trim();
+  const state = `${address.province || address.district || ''}`.trim();
+  const line2 = `${address.streetLineAddress2 || ''}`.trim();
+
+  const missing = [];
+  if (!line1) missing.push('street address (streetLineAddress1 or streetAddress)');
+  if (!city) missing.push('city');
+  if (!postalCode) missing.push('postcode');
+  if (!`${address.country || ''}`.trim()) missing.push('country');
+
+  if (missing.length > 0) {
+    throw new AppError(`Salon address incomplete: missing ${missing.join(', ')}`, 200);
+  }
+
+  return {
+    line1,
+    city,
+    postal_code: postalCode,
+    countryRaw: address.country,
+    state,
+    line2,
+  };
+}
+
+async function ensureTerminalLocation(connectAccountId, salon) {
+  if (!connectAccountId) {
+    throw new AppError('Salon Stripe Connect account is not configured', 200);
+  }
+
+  if (!salon) {
+    throw new AppError('Salon record is required', 200);
+  }
+
+  const existingLocationId = `${salon.terminalLocationId || ''}`.trim();
+  if (existingLocationId) {
+    return existingLocationId;
+  }
+
+  const address = await resolveSalonAddress(salon);
+  if (!address) {
+    throw new AppError('Salon address incomplete: no address record linked to salon', 200);
+  }
+
+  const terminalAddress = buildTerminalAddressPayload(address);
+  const country = toIsoCountryCode(terminalAddress.countryRaw);
+  if (!country) {
+    throw new AppError(
+      `Salon address incomplete: country "${terminalAddress.countryRaw}" is not a supported ISO country code`,
+      200,
+    );
+  }
+
+  const displayName = `${salon.salonName || 'Salon'}`.trim() || 'Salon';
+
+  const stripeAddress = {
+    line1: terminalAddress.line1,
+    city: terminalAddress.city,
+    postal_code: terminalAddress.postal_code,
+    country,
+  };
+
+  if (terminalAddress.state) {
+    stripeAddress.state = terminalAddress.state;
+  }
+
+  if (terminalAddress.line2) {
+    stripeAddress.line2 = terminalAddress.line2;
+  }
+
+  try {
+    const location = await stripe.terminal.locations.create(
+      {
+        display_name: displayName,
+        address: stripeAddress,
+      },
+      { stripeAccount: connectAccountId },
+    );
+
+    await salon.update({ terminalLocationId: location.id });
+
+    return location.id;
+  } catch (error) {
+    console.error('❌ ensureTerminalLocation error:', error.message);
+    throw new AppError(`Failed to create Terminal location: ${error.message}`, 200);
+  }
+}
 
 async function getTerminalLocation(
   locationId='tml_GP5oQgqIvzs3VW',
@@ -1844,8 +2067,10 @@ module.exports = {
   createConnectionToken,
   createOneTapePayment,
   getTerminalLocation,
+  ensureTerminalLocation,
   retrieveAndConfirmPaymentIntent,
-  retrievePaymentIntent
+  retrievePaymentIntent,
+  retrieveConnectPaymentIntent,
 };
 // sessionCheckoutPaymnet --- check payment destination
 // sessionCheckoutPaymnet --- check payment destination
