@@ -322,5 +322,5 @@ router.post('/send-appointment-reminders',
 catchAsync(appController.sendReminder),
 )
 
-
+/////customer routes end here
 module.exports = router
