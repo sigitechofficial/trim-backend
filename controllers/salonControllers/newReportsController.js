@@ -1242,12 +1242,18 @@ async function getRentChairPersonIncomeForMonth(
   year,
   month,
   minBookingDate,
+  maxBookingDate,
 ) {
   const replacements = { employeeId, salonDetailId, year, month }
   let minDateClause = ''
+  let maxDateClause = ''
   if (minBookingDate) {
     minDateClause = ' AND bookings.on >= :minBookingDate'
     replacements.minBookingDate = `${minBookingDate} 00:00:00`
+  }
+  if (maxBookingDate) {
+    maxDateClause = ' AND bookings.on <= :maxBookingDate'
+    replacements.maxBookingDate = `${maxBookingDate} 23:59:59`
   }
 
   const rows = await sequelize.query(`
@@ -1261,6 +1267,7 @@ async function getRentChairPersonIncomeForMonth(
       AND YEAR(bookings.on) = :year
       AND MONTH(bookings.on) = :month
       ${minDateClause}
+      ${maxDateClause}
   `, {
     replacements,
     type: sequelize.QueryTypes.SELECT,
@@ -1326,6 +1333,35 @@ function formatDateOnly(value) {
   return `${y}-${m}-${day}`
 }
 
+function getTodayDateOnly() {
+  return toDateOnly(new Date())
+}
+
+function isFutureDate(date) {
+  return toDateOnly(date) > getTodayDateOnly()
+}
+
+function clampPeriodEndToToday(periodEnd) {
+  const end = toDateOnly(periodEnd)
+  const today = getTodayDateOnly()
+  return end > today ? today : end
+}
+
+function shouldSkipFutureMonthBucket(monthStart, reportYear) {
+  const today = getTodayDateOnly()
+  const yearNum = parseInt(reportYear, 10)
+
+  if (yearNum > today.getFullYear()) return true
+  if (yearNum < today.getFullYear()) return false
+
+  return toDateOnly(monthStart) > today
+}
+
+function isCurrentMonthPeriod(year, monthNum) {
+  const today = getTodayDateOnly()
+  return year === today.getFullYear() && monthNum === today.getMonth() + 1
+}
+
 function isPeriodBeforeEmployee(periodEnd, employeeStartDate) {
   if (!employeeStartDate) return false
   return toDateOnly(periodEnd) < toDateOnly(employeeStartDate)
@@ -1346,9 +1382,11 @@ async function buildRentChairWeeklyReport(emp, startDate, endDate, includeProfit
   ]
   const incomeByDayName = {}
   const rentByDayName = {}
-  const dates = getCalendarDatesInRange(startDate, endDate)
+  const effectiveEndDate = formatDateOnly(clampPeriodEndToToday(endDate))
+  const dates = getCalendarDatesInRange(startDate, effectiveEndDate)
 
   await Promise.all(dates.map(async (date) => {
+    if (isFutureDate(date)) return
     const dayName = JS_DAY_NAMES[date.getDay()]
     if (isPeriodBeforeEmployee(date, empStart)) return
 
@@ -1384,10 +1422,14 @@ async function buildRentChairWeeklyReport(emp, startDate, endDate, includeProfit
 
 async function buildRentChairMonthlyReport(emp, year, includeProfit = false) {
   const empStart = getEmployeeRentStartDate(emp)
+  const today = getTodayDateOnly()
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ]
+
+  if (year > today.getFullYear()) return []
+
   const report = []
 
   for (let i = 0; i < monthNames.length; i += 1) {
@@ -1401,7 +1443,13 @@ async function buildRentChairMonthlyReport(emp, year, includeProfit = false) {
       `${year}-${String(monthNum).padStart(2, '0')}-${daysInMonth}`,
     )
 
-    if (isPeriodBeforeEmployee(monthEnd, empStart)) {
+    if (shouldSkipFutureMonthBucket(monthStart, year)) {
+      continue
+    }
+
+    const effectiveMonthEnd = clampPeriodEndToToday(monthEnd)
+
+    if (isPeriodBeforeEmployee(effectiveMonthEnd, empStart)) {
       const row = {
         month: monthName,
         income: '0.00',
@@ -1413,17 +1461,21 @@ async function buildRentChairMonthlyReport(emp, year, includeProfit = false) {
     }
 
     const minBookingDate = getMinBookingDateForMonth(monthStart, empStart)
+    const maxBookingDate = isCurrentMonthPeriod(year, monthNum)
+      ? formatDateOnly(today)
+      : null
     const income = await getRentChairPersonIncomeForMonth(
       emp.id,
       emp.salonDetailId,
       year,
       monthNum,
       minBookingDate,
+      maxBookingDate,
     )
     const chairRent = calculateExpectedRentForEmployee(
       emp.employeeWagesMethod,
       monthStart,
-      monthEnd,
+      effectiveMonthEnd,
       empStart,
     )
     const row = {
@@ -1736,26 +1788,31 @@ exports.rentalOverview = async (req, res, next) => {
   const thisMinBookingDate = getMinBookingDateForMonth(monthStart, empStart)
   const lastMinBookingDate = getMinBookingDateForMonth(lastMonthStart, empStart)
 
-  const [thisIncome, lastIncome] = await Promise.all([
-    isPeriodBeforeEmployee(monthEnd, empStart)
-      ? 0
-      : getRentChairPersonIncomeForMonth(
-        emp.id, emp.salonDetailId, thisYear, thisMonth, thisMinBookingDate,
-      ),
-    isPeriodBeforeEmployee(lastMonthEnd, empStart)
-      ? 0
-      : getRentChairPersonIncomeForMonth(
-        emp.id, emp.salonDetailId, lastMonthYear, lastMonth, lastMinBookingDate,
-      ),
-  ])
+  const effectiveMonthEnd = clampPeriodEndToToday(monthEnd)
+  const isFutureMonth = shouldSkipFutureMonthBucket(monthStart, thisYear)
+  const maxBookingDate = isCurrentMonthPeriod(thisYear, thisMonth)
+    ? formatDateOnly(getTodayDateOnly())
+    : null
 
-  const chairRent = isPeriodBeforeEmployee(monthEnd, empStart)
-    ? 0
-    : calculateExpectedRentForEmployee(
+  let thisIncome = 0
+  let chairRent = 0
+
+  if (!isFutureMonth && !isPeriodBeforeEmployee(effectiveMonthEnd, empStart)) {
+    thisIncome = await getRentChairPersonIncomeForMonth(
+      emp.id, emp.salonDetailId, thisYear, thisMonth, thisMinBookingDate, maxBookingDate,
+    )
+    chairRent = calculateExpectedRentForEmployee(
       emp.employeeWagesMethod,
       monthStart,
-      monthEnd,
+      effectiveMonthEnd,
       empStart,
+    )
+  }
+
+  const lastIncome = isPeriodBeforeEmployee(lastMonthEnd, empStart)
+    ? 0
+    : await getRentChairPersonIncomeForMonth(
+      emp.id, emp.salonDetailId, lastMonthYear, lastMonth, lastMinBookingDate,
     )
 
   const profit = thisIncome - chairRent
