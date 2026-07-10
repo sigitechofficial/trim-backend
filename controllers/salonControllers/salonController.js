@@ -635,10 +635,10 @@ exports.createOnboardingLink = async (req, res, next) => {
   })
   let account = salonData.connectAccountId
   if (!salonData.connectAccountId) {
-    connectAccount = await Stripe.createConnectAccount(salonData.user.email)
+    const connectAccount = await Stripe.createConnectAccount(salonData.user.email)
     salonData.connectAccountId = connectAccount.accountId
     await salonData.save()
-    account = connectAccount
+    account = connectAccount.accountId
   }
   //! Cusing mutiple wallets of sigle employee
   // await wallet.upsert({
