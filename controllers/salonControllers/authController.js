@@ -1588,22 +1588,62 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
 
 /**
  * Delayed / throttled Stripe Connect onboarding reminders.
- * Intended for Lambda / cron: GET /auth/stripe-onboarding-reminders
+ * Intended for Lambda / cron:
+ *   GET /salon/v1/auth/stripe-onboarding-reminders
+ *
+ * Query:
+ *   dryRun=true|false (default false)
+ *   salonDetailId=<id> optional
+ *   limit=<n> optional (default all matching, max 500 when set)
+ *
+ * dryRun=true: evaluate only — no emails, no push, no DB updates.
  */
 exports.sendStripeOnboardingReminders = async (req, res, next) => {
   try {
-    const salons = await salonDetail.findAll({
-      where: {
-        connectAccountId: { [Op.ne]: null },
-        deleted: false,
-        stripeOnboardingStatus: {
-          [Op.in]: [
-            STRIPE_STATUS.IN_PROGRESS,
-            STRIPE_STATUS.ACTION_REQUIRED,
-            STRIPE_STATUS.PAYOUTS_BLOCKED,
-          ],
-        },
+    const dryRun =
+      String(req.query.dryRun ?? 'false').toLowerCase() === 'true'
+    const salonDetailId = req.query.salonDetailId
+      ? parseInt(req.query.salonDetailId, 10)
+      : null
+    const limitRaw = req.query.limit
+      ? parseInt(req.query.limit, 10)
+      : null
+    const limit =
+      limitRaw && !Number.isNaN(limitRaw)
+        ? Math.min(Math.max(limitRaw, 1), 500)
+        : null
+
+    const whereClause = {
+      deleted: false,
+      connectAccountId: {
+        [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }],
       },
+      stripeOnboardingStatus: {
+        [Op.in]: [
+          STRIPE_STATUS.IN_PROGRESS,
+          STRIPE_STATUS.ACTION_REQUIRED,
+          STRIPE_STATUS.PAYOUTS_BLOCKED,
+        ],
+      },
+    }
+    if (salonDetailId) whereClause.id = salonDetailId
+
+    const query = {
+      where: whereClause,
+      attributes: [
+        'id',
+        'salonName',
+        'connectAccountId',
+        'createdAt',
+        'stripeOnboardingStatus',
+        'stripeOnboardingStartedAt',
+        'stripeLastStripeActivityAt',
+        'stripeLastReminderSentAt',
+        'stripeLastPayoutBlockedEmailSentAt',
+        'stripeReminderStage',
+        'stripeRequirementsHash',
+        'stripeDisabledReason',
+      ],
       include: [
         {
           model: user,
@@ -1611,14 +1651,29 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
           required: true,
         },
       ],
-    })
+      order: [['id', 'ASC']],
+    }
+    if (limit) query.limit = limit
+
+    const salons = await salonDetail.findAll(query)
 
     const results = []
+    const sampleSalonDetailIds = []
+    let wouldSendInProgress = 0
+    let wouldSendActionRequired = 0
+    let wouldSendPayoutsBlocked = 0
+    let emailsSent = 0
 
     for (const salon of salons) {
       const owner = salon.user
       if (!owner?.email) {
-        results.push({ salonId: salon.id, status: 'skipped', reason: 'no_email' })
+        results.push({
+          salonDetailId: salon.id,
+          status: salon.stripeOnboardingStatus,
+          intent: null,
+          reason: 'no_email',
+          action: 'skipped',
+        })
         continue
       }
 
@@ -1627,7 +1682,30 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
       if (state === STRIPE_STATUS.IN_PROGRESS) {
         const next = nextInProgressReminder(salon)
         if (!next) {
-          results.push({ salonId: salon.id, status: 'skipped', reason: 'not_due' })
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: null,
+            reason: 'not_due',
+            action: 'skipped',
+          })
+          continue
+        }
+
+        wouldSendInProgress += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'IN_PROGRESS_REMINDER',
+            reason: next.reason,
+            action: 'would_send',
+            stage: next.stage,
+          })
           continue
         }
 
@@ -1645,12 +1723,14 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
             next.stage === REMINDER_STAGE.D7 ? REMINDER_STAGE.DONE : next.stage,
         }
         await salon.update(stageUpdate)
+        emailsSent += 1
         results.push({
-          salonId: salon.id,
-          status: 'sent',
-          intent: STRIPE_STATUS.IN_PROGRESS,
-          stage: stageUpdate.stripeReminderStage,
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'IN_PROGRESS_REMINDER',
           reason: next.reason,
+          action: 'sent',
+          stage: stageUpdate.stripeReminderStage,
         })
         continue
       }
@@ -1662,9 +1742,27 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
         )
         if (!decision.allow) {
           results.push({
-            salonId: salon.id,
-            status: 'skipped',
+            salonDetailId: salon.id,
+            status: state,
+            intent: null,
             reason: decision.reason,
+            action: 'skipped',
+          })
+          continue
+        }
+
+        wouldSendActionRequired += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'ACTION_REQUIRED_REMINDER',
+            reason: decision.reason,
+            action: 'would_send',
           })
           continue
         }
@@ -1677,11 +1775,13 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
           intent: STRIPE_STATUS.ACTION_REQUIRED,
         })
         await salon.update({ stripeLastReminderSentAt: new Date() })
+        emailsSent += 1
         results.push({
-          salonId: salon.id,
-          status: 'sent',
-          intent: STRIPE_STATUS.ACTION_REQUIRED,
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'ACTION_REQUIRED_REMINDER',
           reason: decision.reason,
+          action: 'sent',
         })
         continue
       }
@@ -1693,9 +1793,27 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
         )
         if (!decision.allow) {
           results.push({
-            salonId: salon.id,
-            status: 'skipped',
+            salonDetailId: salon.id,
+            status: state,
+            intent: null,
             reason: decision.reason,
+            action: 'skipped',
+          })
+          continue
+        }
+
+        wouldSendPayoutsBlocked += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'PAYOUTS_BLOCKED_EMAIL',
+            reason: decision.reason,
+            action: 'would_send',
           })
           continue
         }
@@ -1711,22 +1829,31 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
           stripeLastPayoutBlockedEmailSentAt: new Date(),
           stripeLastReminderSentAt: new Date(),
         })
+        emailsSent += 1
         results.push({
-          salonId: salon.id,
-          status: 'sent',
-          intent: STRIPE_STATUS.PAYOUTS_BLOCKED,
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'PAYOUTS_BLOCKED_EMAIL',
           reason: decision.reason,
+          action: 'sent',
         })
       }
     }
 
-    const sent = results.filter((r) => r.status === 'sent').length
     return res.status(200).json({
       status: '1',
-      message: 'Stripe onboarding reminders processed',
+      message: dryRun
+        ? 'Stripe onboarding reminders dry-run complete (no emails, no DB updates)'
+        : 'Stripe onboarding reminders processed',
       data: {
+        dryRun,
         scanned: salons.length,
-        emailsSent: sent,
+        wouldSendInProgress,
+        wouldSendActionRequired,
+        wouldSendPayoutsBlocked,
+        emailsSent: dryRun ? 0 : emailsSent,
+        pushSent: 0,
+        sampleSalonDetailIds,
         results,
       },
       error: '',
