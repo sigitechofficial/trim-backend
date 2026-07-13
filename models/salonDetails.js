@@ -156,6 +156,63 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: false,
     },
+    stripeOnboardingStatus: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      defaultValue: 'NOT_STARTED',
+    },
+    stripeDetailsSubmitted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    stripeChargesEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    stripePayoutsEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    stripeCurrentlyDue: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    stripePastDue: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    stripeDisabledReason: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    stripeRequirementsHash: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+    },
+    stripeOnboardingStartedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    stripeLastStripeActivityAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    stripeLastReminderSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    stripeLastPayoutBlockedEmailSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    stripeReminderStage: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: 'none',
+    },
   })
 
   salonDetail.associate = (models) => {

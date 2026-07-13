@@ -29,6 +29,17 @@ const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
 const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
+const StripeOnboardingReminderEmail = require('../../helper/StripeOnboardingReminderEmail')
+const {
+  STRIPE_STATUS,
+  REMINDER_STAGE,
+  buildStripeStatusPayload,
+  buildSalonStripeStatusUpdate,
+  nextInProgressReminder,
+  shouldSendActionRequiredReminder,
+  shouldSendPayoutBlockedEmail,
+} = require('../../helper/stripeConnectStatusHelper')
+const PayoutBlockedEmail = require('../../helper/PayoutBlockedEmail')
 const redis_Client = require('../../routes/redis_connect')
 const VERIFICATION_BYPASS_OTP = '8798'
 
@@ -677,6 +688,19 @@ exports.login = async (req, res, next) => {
         accountConnected: false,
         employeeId: externalEmployeeId,
       };
+      response.data.stripeStatus = {
+        state: 'NOT_STARTED',
+        detailsSubmitted: false,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        disabledReason: null,
+        currentlyDue: [],
+        pastDue: [],
+        actionRequired: true,
+        title: 'Stripe setup required',
+        message: 'Connect Stripe to receive payouts.',
+        ctaText: 'Set up Stripe',
+      };
     } else {
       const isAllDataAvailable =
         salon.services.length !== 0 &&
@@ -718,6 +742,20 @@ exports.login = async (req, res, next) => {
 
         response.data.profileCompletion.accountConnected = isConnected;
         response.data.stripeRestrictions = { reason, currentlyDue };
+        try {
+          const liveAccount = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+          const { update } = buildSalonStripeStatusUpdate(liveAccount, salon)
+          await salon.update(update)
+          Object.assign(salon, update)
+        } catch (syncErr) {
+          console.error('❌ Stripe status sync on login failed:', syncErr.message)
+        }
+        response.data.stripeStatus = buildStripeStatusPayload(salon);
+      } else {
+        response.data.stripeStatus = buildStripeStatusPayload({
+          connectAccountId: null,
+          stripeOnboardingStatus: STRIPE_STATUS.NOT_STARTED,
+        });
       }
 
       // 🔹 Check subscription status
@@ -1138,10 +1176,24 @@ exports.session = async (req, res, next) => {
         })
         salon.wallet = await wallet.findOne({ where: { salonDetailId: salon.id } })
       }
+      try {
+        const liveAccount = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+        const { update } = buildSalonStripeStatusUpdate(liveAccount, salon)
+        await salon.update(update)
+        Object.assign(salon, update)
+      } catch (syncErr) {
+        console.error('❌ Stripe status sync in session failed:', syncErr.message)
+      }
     } catch (err) {
       console.error("❌ Stripe check in session failed:", err.message)
     }
   }
+
+  const stripeStatus = buildStripeStatusPayload(
+    salon?.connectAccountId
+      ? salon
+      : { connectAccountId: null, stripeOnboardingStatus: STRIPE_STATUS.NOT_STARTED },
+  )
 
   // 🔹 Check subscription status
   if (salon?.id) {
@@ -1206,6 +1258,7 @@ exports.session = async (req, res, next) => {
         employeeId: externalEmployeeId,
       },
       ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
+      stripeStatus,
     },
     error: '',
   })
@@ -1532,3 +1585,156 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
     );
   }
 };
+
+/**
+ * Delayed / throttled Stripe Connect onboarding reminders.
+ * Intended for Lambda / cron: GET /auth/stripe-onboarding-reminders
+ */
+exports.sendStripeOnboardingReminders = async (req, res, next) => {
+  try {
+    const salons = await salonDetail.findAll({
+      where: {
+        connectAccountId: { [Op.ne]: null },
+        deleted: false,
+        stripeOnboardingStatus: {
+          [Op.in]: [
+            STRIPE_STATUS.IN_PROGRESS,
+            STRIPE_STATUS.ACTION_REQUIRED,
+            STRIPE_STATUS.PAYOUTS_BLOCKED,
+          ],
+        },
+      },
+      include: [
+        {
+          model: user,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: true,
+        },
+      ],
+    })
+
+    const results = []
+
+    for (const salon of salons) {
+      const owner = salon.user
+      if (!owner?.email) {
+        results.push({ salonId: salon.id, status: 'skipped', reason: 'no_email' })
+        continue
+      }
+
+      const state = salon.stripeOnboardingStatus
+
+      if (state === STRIPE_STATUS.IN_PROGRESS) {
+        const next = nextInProgressReminder(salon)
+        if (!next) {
+          results.push({ salonId: salon.id, status: 'skipped', reason: 'not_due' })
+          continue
+        }
+
+        StripeOnboardingReminderEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          intent: STRIPE_STATUS.IN_PROGRESS,
+        })
+
+        const stageUpdate = {
+          stripeLastReminderSentAt: new Date(),
+          stripeReminderStage:
+            next.stage === REMINDER_STAGE.D7 ? REMINDER_STAGE.DONE : next.stage,
+        }
+        await salon.update(stageUpdate)
+        results.push({
+          salonId: salon.id,
+          status: 'sent',
+          intent: STRIPE_STATUS.IN_PROGRESS,
+          stage: stageUpdate.stripeReminderStage,
+          reason: next.reason,
+        })
+        continue
+      }
+
+      if (state === STRIPE_STATUS.ACTION_REQUIRED) {
+        const decision = shouldSendActionRequiredReminder(
+          salon,
+          salon.stripeRequirementsHash,
+        )
+        if (!decision.allow) {
+          results.push({
+            salonId: salon.id,
+            status: 'skipped',
+            reason: decision.reason,
+          })
+          continue
+        }
+
+        StripeOnboardingReminderEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          intent: STRIPE_STATUS.ACTION_REQUIRED,
+        })
+        await salon.update({ stripeLastReminderSentAt: new Date() })
+        results.push({
+          salonId: salon.id,
+          status: 'sent',
+          intent: STRIPE_STATUS.ACTION_REQUIRED,
+          reason: decision.reason,
+        })
+        continue
+      }
+
+      if (state === STRIPE_STATUS.PAYOUTS_BLOCKED) {
+        const decision = shouldSendPayoutBlockedEmail(
+          salon,
+          salon.stripeRequirementsHash,
+        )
+        if (!decision.allow) {
+          results.push({
+            salonId: salon.id,
+            status: 'skipped',
+            reason: decision.reason,
+          })
+          continue
+        }
+
+        PayoutBlockedEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          disabledReason: salon.stripeDisabledReason || 'Account restrictions',
+        })
+        await salon.update({
+          stripeLastPayoutBlockedEmailSentAt: new Date(),
+          stripeLastReminderSentAt: new Date(),
+        })
+        results.push({
+          salonId: salon.id,
+          status: 'sent',
+          intent: STRIPE_STATUS.PAYOUTS_BLOCKED,
+          reason: decision.reason,
+        })
+      }
+    }
+
+    const sent = results.filter((r) => r.status === 'sent').length
+    return res.status(200).json({
+      status: '1',
+      message: 'Stripe onboarding reminders processed',
+      data: {
+        scanned: salons.length,
+        emailsSent: sent,
+        results,
+      },
+      error: '',
+    })
+  } catch (error) {
+    console.error('❌ Stripe onboarding reminder process failed:', error)
+    return next(
+      new appError('Failed to process Stripe onboarding reminders.', 500),
+    )
+  }
+}
