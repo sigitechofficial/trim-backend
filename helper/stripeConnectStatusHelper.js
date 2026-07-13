@@ -192,13 +192,10 @@ function buildSalonStripeStatusUpdate(account, existingSalon = {}) {
     stripeLastStripeActivityAt: now,
   }
 
-  if (
-    !existingSalon.stripeOnboardingStartedAt &&
-    (status === STRIPE_STATUS.IN_PROGRESS ||
-      status === STRIPE_STATUS.ACTION_REQUIRED ||
-      status === STRIPE_STATUS.PAYOUTS_BLOCKED)
-  ) {
-    update.stripeOnboardingStartedAt = now
+  if (!existingSalon.stripeOnboardingStartedAt && account) {
+    update.stripeOnboardingStartedAt = existingSalon.createdAt
+      ? new Date(existingSalon.createdAt)
+      : now
   }
 
   if (status === STRIPE_STATUS.COMPLETE) {

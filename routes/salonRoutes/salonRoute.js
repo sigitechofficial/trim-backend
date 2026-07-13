@@ -22,6 +22,8 @@ const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
 const multer = require('multer')
 const catchAsync = require('../../middlewares/catchAync')
+const requireCronSecret = require('../../middlewares/requireCronSecret')
+const authController = require('../../controllers/salonControllers/authController')
 const path = require('path')
 
 // !Module:1 Auth
@@ -34,6 +36,13 @@ router.get(
 router.post(
   '/webhooks/revenuecat',
   catchAsync(revenueCatWebhookController.revenueCatWebhookHandler),
+)
+
+// Ops: Stripe Connect status backfill (cron secret; no emails/push)
+router.get(
+  '/stripe-connect-status-backfill',
+  requireCronSecret,
+  catchAsync(authController.backfillStripeConnectStatus),
 )
 
 router.use(validateToken)

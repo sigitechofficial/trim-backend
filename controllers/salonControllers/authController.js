@@ -1738,3 +1738,153 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
     )
   }
 }
+
+/**
+ * One-time / ops Stripe Connect status backfill.
+ * Syncs live Stripe account status into salonDetails (+ wallet.accountConnected).
+ * NEVER sends emails or push notifications.
+ *
+ * GET /salon/v1/stripe-connect-status-backfill?dryRun=true&limit=50&offset=0
+ * Optional: salonDetailId=
+ * Protected by requireCronSecret.
+ */
+exports.backfillStripeConnectStatus = async (req, res, next) => {
+  try {
+    const dryRun =
+      String(req.query.dryRun ?? 'true').toLowerCase() !== 'false'
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 50, 1),
+      500,
+    )
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
+    const salonDetailId = req.query.salonDetailId
+      ? parseInt(req.query.salonDetailId, 10)
+      : null
+
+    const whereClause = {
+      deleted: false,
+      connectAccountId: {
+        [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }],
+      },
+    }
+    if (salonDetailId) whereClause.id = salonDetailId
+
+    const salons = await salonDetail.findAll({
+      where: whereClause,
+      attributes: [
+        'id',
+        'salonName',
+        'connectAccountId',
+        'createdAt',
+        'stripeOnboardingStatus',
+        'stripeOnboardingStartedAt',
+        'stripeRequirementsHash',
+        'stripeDetailsSubmitted',
+        'stripeChargesEnabled',
+        'stripePayoutsEnabled',
+      ],
+      order: [['id', 'ASC']],
+      limit,
+      offset,
+    })
+
+    const countsByStatus = {
+      [STRIPE_STATUS.NOT_STARTED]: 0,
+      [STRIPE_STATUS.IN_PROGRESS]: 0,
+      [STRIPE_STATUS.ACTION_REQUIRED]: 0,
+      [STRIPE_STATUS.PAYOUTS_BLOCKED]: 0,
+      [STRIPE_STATUS.COMPLETE]: 0,
+    }
+
+    const sample = []
+    const failed = []
+    let wouldUpdate = 0
+    let updated = 0
+    let skipped = 0
+
+    for (const salon of salons) {
+      try {
+        const account = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+        const { update, status, isComplete } = buildSalonStripeStatusUpdate(
+          account,
+          salon,
+        )
+
+        countsByStatus[status] = (countsByStatus[status] || 0) + 1
+
+        const previousStatus = salon.stripeOnboardingStatus || STRIPE_STATUS.NOT_STARTED
+        const row = {
+          salonDetailId: salon.id,
+          connectAccountId: salon.connectAccountId,
+          previousStatus,
+          calculatedStatus: status,
+          detailsSubmitted: update.stripeDetailsSubmitted,
+          chargesEnabled: update.stripeChargesEnabled,
+          payoutsEnabled: update.stripePayoutsEnabled,
+          walletAccountConnected: isComplete,
+        }
+
+        if (sample.length < 10) sample.push(row)
+        wouldUpdate += 1
+
+        if (dryRun) continue
+
+        await salon.update(update)
+
+        const [walletRecord] = await wallet.findOrCreate({
+          where: { salonDetailId: salon.id },
+          defaults: {
+            salonDetailId: salon.id,
+            accountConnected: isComplete,
+          },
+        })
+        if (walletRecord.accountConnected !== isComplete) {
+          await walletRecord.update({ accountConnected: isComplete })
+        }
+
+        updated += 1
+      } catch (err) {
+        skipped += 1
+        failed.push({
+          salonDetailId: salon.id,
+          connectAccountId: salon.connectAccountId,
+          error: err.message || 'Stripe retrieve failed',
+        })
+        console.error(
+          '[stripe-backfill] failed salon',
+          salon.id,
+          salon.connectAccountId,
+          err.message,
+        )
+      }
+    }
+
+    return res.status(200).json({
+      status: '1',
+      message: dryRun
+        ? 'Stripe Connect status backfill dry-run complete (no DB writes)'
+        : 'Stripe Connect status backfill complete',
+      data: {
+        dryRun,
+        limit,
+        offset,
+        scanned: salons.length,
+        wouldUpdate: dryRun ? wouldUpdate : undefined,
+        updated: dryRun ? undefined : updated,
+        skipped,
+        failedCount: failed.length,
+        countsByStatus,
+        failed,
+        sample,
+        emailsSent: 0,
+        pushSent: 0,
+      },
+      error: '',
+    })
+  } catch (error) {
+    console.error('❌ Stripe Connect status backfill failed:', error)
+    return next(
+      new appError('Failed to backfill Stripe Connect status.', 500),
+    )
+  }
+}
