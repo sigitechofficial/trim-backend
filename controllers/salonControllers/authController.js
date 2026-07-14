@@ -1680,17 +1680,8 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
       const state = salon.stripeOnboardingStatus
 
       if (state === STRIPE_STATUS.IN_PROGRESS) {
+        // Cron-based: every eligible IN_PROGRESS salon is due each run.
         const next = nextInProgressReminder(salon)
-        if (!next) {
-          results.push({
-            salonDetailId: salon.id,
-            status: state,
-            intent: null,
-            reason: 'not_due',
-            action: 'skipped',
-          })
-          continue
-        }
 
         wouldSendInProgress += 1
         if (sampleSalonDetailIds.length < 10) {
@@ -1719,8 +1710,7 @@ exports.sendStripeOnboardingReminders = async (req, res, next) => {
 
         const stageUpdate = {
           stripeLastReminderSentAt: new Date(),
-          stripeReminderStage:
-            next.stage === REMINDER_STAGE.D7 ? REMINDER_STAGE.DONE : next.stage,
+          stripeReminderStage: REMINDER_STAGE.CRON,
         }
         await salon.update(stageUpdate)
         emailsSent += 1

@@ -10,15 +10,19 @@ const STRIPE_STATUS = {
 
 const REMINDER_STAGE = {
   NONE: 'none',
-  H24: '24h',
-  H72: '72h',
-  D7: '7d',
+  H24: '24h', // legacy (no longer used for IN_PROGRESS timing)
+  H72: '72h', // legacy (no longer used for IN_PROGRESS timing)
+  D7: '7d', // legacy (no longer used for IN_PROGRESS timing)
   DONE: 'done',
+  CRON: 'cron',
 }
 
 const PAYOUT_BLOCKED_EMAIL_COOLDOWN_MS = 72 * 60 * 60 * 1000 // 72 hours
+/** @deprecated IN_PROGRESS reminders are now cron-based (no 24h/72h/7d gating). */
 const REMINDER_24H_MS = 24 * 60 * 60 * 1000
+/** @deprecated IN_PROGRESS reminders are now cron-based (no 24h/72h/7d gating). */
 const REMINDER_72H_MS = 72 * 60 * 60 * 1000
+/** @deprecated IN_PROGRESS reminders are now cron-based (no 24h/72h/7d gating). */
 const REMINDER_7D_MS = 7 * 24 * 60 * 60 * 1000
 const ACTION_REQUIRED_REMINDER_COOLDOWN_MS = 72 * 60 * 60 * 1000
 
@@ -247,36 +251,16 @@ function getOnboardingAnchorDate(salon) {
   )
 }
 
-function nextInProgressReminder(salon) {
-  const stage = salon.stripeReminderStage || REMINDER_STAGE.NONE
-  if (stage === REMINDER_STAGE.DONE) return null
-
-  const anchor = getOnboardingAnchorDate(salon)
-  if (!anchor) return null
-
-  const ageMs = Date.now() - new Date(anchor).getTime()
-  const lastReminder = salon.stripeLastReminderSentAt
-    ? new Date(salon.stripeLastReminderSentAt).getTime()
-    : null
-
-  if (stage === REMINDER_STAGE.NONE && ageMs >= REMINDER_24H_MS) {
-    return { stage: REMINDER_STAGE.H24, reason: 'in_progress_24h' }
+/**
+ * IN_PROGRESS reminders are cron-driven: every eligible salon is due on each
+ * reminder job run (no 24h / 72h / 7d stage waiting).
+ * @param {_salon} unused — kept for call-site compatibility
+ */
+function nextInProgressReminder(_salon) {
+  return {
+    stage: REMINDER_STAGE.CRON,
+    reason: 'in_progress_cron',
   }
-  if (
-    stage === REMINDER_STAGE.H24 &&
-    ageMs >= REMINDER_72H_MS &&
-    (!lastReminder || Date.now() - lastReminder >= REMINDER_24H_MS)
-  ) {
-    return { stage: REMINDER_STAGE.H72, reason: 'in_progress_72h' }
-  }
-  if (
-    (stage === REMINDER_STAGE.H72 || stage === REMINDER_STAGE.H24) &&
-    ageMs >= REMINDER_7D_MS &&
-    (!lastReminder || Date.now() - lastReminder >= REMINDER_24H_MS)
-  ) {
-    return { stage: REMINDER_STAGE.D7, reason: 'in_progress_7d' }
-  }
-  return null
 }
 
 function shouldSendActionRequiredReminder(salon, requirementsHash) {
