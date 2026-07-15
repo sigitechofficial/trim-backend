@@ -60,6 +60,11 @@ const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
 const Stripe = require('../stripe')
 const {
+  STRIPE_STATUS,
+  buildStripeStatusPayload,
+  buildSalonStripeStatusUpdate,
+} = require('../../helper/stripeConnectStatusHelper')
+const {
   INVALID_TIP_MESSAGE,
   parseTapToPayTip,
   parseMetadataMinorUnits,
@@ -474,6 +479,10 @@ exports.choosePlan = async (req, res, next) => {
         console.log('  Creating Stripe Connect account...')
         connectAccount = await Stripe.createConnectAccount(salonData.user.email)
         salonData.connectAccountId = connectAccount?.accountId
+        salonData.stripeOnboardingStatus = 'IN_PROGRESS'
+        salonData.stripeOnboardingStartedAt = new Date()
+        salonData.stripeReminderStage = 'none'
+        salonData.stripeLastStripeActivityAt = new Date()
         await salonData.save()
         console.log('  ✅ Connect account created')
       }
@@ -635,10 +644,14 @@ exports.createOnboardingLink = async (req, res, next) => {
   })
   let account = salonData.connectAccountId
   if (!salonData.connectAccountId) {
-    connectAccount = await Stripe.createConnectAccount(salonData.user.email)
+    const connectAccount = await Stripe.createConnectAccount(salonData.user.email)
     salonData.connectAccountId = connectAccount.accountId
+    salonData.stripeOnboardingStatus = 'IN_PROGRESS'
+    salonData.stripeOnboardingStartedAt = new Date()
+    salonData.stripeReminderStage = 'none'
+    salonData.stripeLastStripeActivityAt = new Date()
     await salonData.save()
-    account = connectAccount
+    account = connectAccount.accountId
   }
   //! Cusing mutiple wallets of sigle employee
   // await wallet.upsert({
@@ -1099,7 +1112,23 @@ exports.salonProfile = async (req, res, next) => {
 
   console.log('Trying to create Stripe login link for accountId:', salonData?.connectAccountId)
 
+  let stripeStatus = buildStripeStatusPayload(
+    salonData?.connectAccountId
+      ? salonData
+      : { connectAccountId: null, stripeOnboardingStatus: STRIPE_STATUS.NOT_STARTED },
+  )
+
   if (salonData?.connectAccountId) {
+    try {
+      const liveAccount = await Stripe.retrieveConnectAccount(salonData.connectAccountId)
+      const { update } = buildSalonStripeStatusUpdate(liveAccount, salonData)
+      await salonData.update(update)
+      Object.assign(salonData, update)
+      stripeStatus = buildStripeStatusPayload(salonData)
+    } catch (syncErr) {
+      console.error('❌ Stripe status sync in salonProfile failed:', syncErr.message)
+    }
+
     let link = salonData?.connectAccountId
       ? await Stripe.createStripeLoginLink(salonData?.connectAccountId)
       : ''
@@ -1107,13 +1136,11 @@ exports.salonProfile = async (req, res, next) => {
     console.log("LINK ------------------------------------------------------...", link)
 
     if (!link) link = await Stripe.createStripeAccountLink(salonData?.connectAccountId)
-    const output = JSON.parse(JSON.stringify(salonData))
     let stripeDashboardlink = link
-    return res.json(returnFunction('1', 'Shop profile', { salonData, stripeDashboardlink }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData, stripeDashboardlink, stripeStatus }, ''))
 
   } else {
-    const output = JSON.parse(JSON.stringify(salonData))
-    return res.json(returnFunction('1', 'Shop profile', { salonData }, ''))
+    return res.json(returnFunction('1', 'Shop profile', { salonData, stripeStatus }, ''))
 
   }
 

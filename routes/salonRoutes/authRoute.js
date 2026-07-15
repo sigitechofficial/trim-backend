@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const authController = require('../../controllers/salonControllers/authController')
 const validateToken = require('../../middlewares/accessCheck')
+const requireCronSecret = require('../../middlewares/requireCronSecret')
 const catchAsync = require('../../middlewares/catchAync')
 
 // !Module:1 Auth
@@ -14,6 +15,11 @@ router.post('/forgotPassword', catchAsync(authController.forgotPassword))
 router.patch('/verifyPasswordOtp', catchAsync(authController.verifyPasswordOtp))
 router.get('/cling-reminder-email', catchAsync(authController.clingLambdaFunction))
 router.get('/incomplete-registration-reminder', catchAsync(authController.incompleteRegistrationReminder))
+router.get(
+  '/stripe-onboarding-reminders',
+  requireCronSecret,
+  catchAsync(authController.sendStripeOnboardingReminders),
+)
 router.use(validateToken)
 router.patch('/resetPassword', catchAsync(authController.resetPassword))
 router.patch('/updatePassword', catchAsync(authController.updatePassword))

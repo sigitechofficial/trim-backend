@@ -7,7 +7,97 @@ const AppError = require('../../utils/appError')
 const dateManipulation = require('../../utils/dateManipulation')
 const ThrowNotification = require('../../utils/throwNotification')
 const PayoutBlockedEmail = require('../../helper/PayoutBlockedEmail')
-const { salonDetail, user, subscriptions, deviceToken } = require('../../models')
+const {
+  STRIPE_STATUS,
+  buildSalonStripeStatusUpdate,
+  isActuallyPayoutBlocked,
+  shouldSendPayoutBlockedEmail,
+} = require('../../helper/stripeConnectStatusHelper')
+const { salonDetail, user, subscriptions, deviceToken, stripeWebhookEvent, wallet } = require('../../models')
+
+async function markStripeWebhookProcessed(event, accountId) {
+  if (!event?.id) return true
+  try {
+    const existing = await stripeWebhookEvent.findOne({
+      where: { eventId: event.id },
+      attributes: ['id'],
+    })
+    if (existing) return false
+    await stripeWebhookEvent.create({
+      eventId: event.id,
+      eventType: event.type,
+      accountId: accountId || null,
+      processedAt: new Date(),
+    })
+    return true
+  } catch (err) {
+    // Unique constraint race: treat as already processed
+    if (err?.name === 'SequelizeUniqueConstraintError') return false
+    console.error('[stripe-connect webhook] dedupe store failed:', err.message)
+    return true
+  }
+}
+
+async function syncWalletAccountConnected(salon, isConnected) {
+  try {
+    const [walletRecord] = await wallet.findOrCreate({
+      where: { salonDetailId: salon.id },
+      defaults: { salonDetailId: salon.id, accountConnected: isConnected },
+    })
+    if (walletRecord.accountConnected !== isConnected) {
+      await walletRecord.update({ accountConnected: isConnected })
+    }
+  } catch (err) {
+    console.error('[stripe-connect webhook] wallet sync failed:', err.message)
+  }
+}
+
+async function maybeSendPayoutBlockedEmail(
+  salon,
+  account,
+  requirementsHash,
+  capabilityStatus,
+  throttleSnapshot,
+) {
+  const throttleSalon = throttleSnapshot || salon
+  const throttle = shouldSendPayoutBlockedEmail(throttleSalon, requirementsHash)
+  console.log('[stripe-connect webhook]', {
+    accountId: account.id,
+    emailAction: throttle.allow ? 'send' : 'skip',
+    emailSkipReason: throttle.allow ? null : throttle.reason,
+  })
+
+  if (!throttle.allow) return false
+
+  const salonOwner = salon.user || await user.findByPk(salon.userId, {
+    attributes: ['id', 'firstName', 'lastName', 'email'],
+  })
+  if (!salonOwner?.email) return false
+
+  const tokens = await deviceToken.findAll({
+    where: { userId: salon.userId },
+    attributes: ['tokenId'],
+  })
+  const tokenArray = tokens.map((t) => t.tokenId)
+  if (tokenArray.length > 0) {
+    ThrowNotification(tokenArray, {
+      title: 'Payouts Blocked',
+      body: 'Your payouts have been temporarily paused. Please check your Stripe account for more details.',
+    })
+  }
+
+  PayoutBlockedEmail({
+    firstName: salonOwner.firstName,
+    lastName: salonOwner.lastName,
+    email: salonOwner.email,
+    salonName: salon.salonName || 'Your Shop',
+    disabledReason: account.requirements?.disabled_reason || 'Account restrictions',
+    capabilityStatus,
+  })
+
+  await salon.update({ stripeLastPayoutBlockedEmailSentAt: new Date() })
+  return true
+}
 
 // const subscriptions = require('../models/subscriptions')
 const DEMO = require('../../helper/demo')
@@ -394,6 +484,12 @@ exports.stripeConnectWebhookEventHandler = async (req, res) => {
 case 'account.updated': {
   const account = event.data.object;
 
+  const shouldProcess = await markStripeWebhookProcessed(event, account.id)
+  if (!shouldProcess) {
+    console.log('[stripe-connect webhook] duplicate event skipped:', event.id)
+    break
+  }
+
   const salon = await salonDetail.findOne({
     where: { connectAccountId: account.id },
     include: [
@@ -406,164 +502,171 @@ case 'account.updated': {
 
   if (!salon) break;
 
-  // Always fetch tokens once
-  const tokens = await deviceToken.findAll({
-    where: { userId: salon.userId },
-    attributes: ['tokenId'],
-  });
-  const tokenArray = tokens.map(t => t.tokenId);
+  const {
+    update,
+    status,
+    currentlyDue,
+    disabledReason,
+    requirementsHash,
+    isComplete,
+  } = buildSalonStripeStatusUpdate(account, salon)
 
-  // 🔹 Check if payouts are paused/blocked
-  if (account.payouts_enabled === false) {
-    console.log('⚠️ Payouts are blocked for account:', account.id);
-    
-    // Update salon account status
-    await salon.update({ accountConnected: false });
+  // Capture previous hash before DB update for throttle decisions
+  const previousHash = salon.stripeRequirementsHash
+  const previousLastBlockedEmailAt = salon.stripeLastPayoutBlockedEmailSentAt
 
-    // Get salon owner details for email
-    const salonOwner = salon.user || await user.findByPk(salon.userId, {
-      attributes: ['id', 'firstName', 'lastName', 'email'],
-    });
+  await salon.update(update)
+  await syncWalletAccountConnected(salon, isComplete)
 
-    // Send push notification
+  console.log('[stripe-connect webhook]', {
+    eventType: event.type,
+    accountId: account.id,
+    detailsSubmitted: account.details_submitted,
+    payoutsEnabled: account.payouts_enabled,
+    disabledReason: disabledReason || null,
+    status,
+  })
+
+  // No onboarding reminder emails from webhook.
+  // Payout-blocked emails only when actually blocked + throttle allows.
+  if (isActuallyPayoutBlocked(account)) {
+    try {
+      await maybeSendPayoutBlockedEmail(
+        salon,
+        account,
+        requirementsHash,
+        undefined,
+        {
+          stripeRequirementsHash: previousHash,
+          stripeLastPayoutBlockedEmailSentAt: previousLastBlockedEmailAt,
+        },
+      )
+    } catch (emailError) {
+      console.error('[stripe-connect webhook] PayoutBlockedEmail error:', emailError.message)
+    }
+  }
+
+  // Push only for submitted accounts with open requirements (not incomplete onboarding)
+  if (
+    account.details_submitted === true &&
+    currentlyDue.length > 0 &&
+    status === STRIPE_STATUS.ACTION_REQUIRED
+  ) {
+    const tokens = await deviceToken.findAll({
+      where: { userId: salon.userId },
+      attributes: ['tokenId'],
+    })
+    const tokenArray = tokens.map((t) => t.tokenId)
     if (tokenArray.length > 0) {
       ThrowNotification(tokenArray, {
-        title: 'Payouts Blocked',
-        body: 'Your payouts have been temporarily paused. Please check your Stripe account for more details.',
-      });
+        title: 'Action Required',
+        body: 'Your payout account needs additional documents.',
+      })
     }
-
-            // Send email notification
-            if (salonOwner?.email) {
-              try {
-                const emailData = {
-                  firstName: salonOwner.firstName,
-                  lastName: salonOwner.lastName,
-                  email: salonOwner.email,
-                  salonName: salon.salonName || 'Your Shop',
-                  disabledReason: account.requirements?.disabled_reason || 'Account restrictions',
-                };
-                
-                PayoutBlockedEmail(emailData);
-                console.log('✅ Payout blocked email sent to:', salonOwner.email);
-              } catch (emailError) {
-                console.error('❌ Error sending payout blocked email:', emailError.message);
-              }
-            }
-
-    // Log the event
-    console.log('🚨 Payouts blocked for salon:', {
-      salonId: salon.id,
-      salonName: salon.salonName,
-      connectAccountId: account.id,
-      disabledReason: account.requirements?.disabled_reason,
-    });
   }
 
-  // Check for additional requirements
-  if (account.requirements?.currently_due?.length > 0) {
-    await salon.update({ accountConnected: false });
-
-    const onboardingLink = await StripeHandler.createStripeAccountLink(account.id);
-
-    ThrowNotification(tokenArray, {
-      title: 'Action Required',
-      body: 'Your payout account needs additional documents.',
-      link: onboardingLink?.url,
-    });
-  }
-
-  // Check if account is fully verified and payouts are enabled
-  if (
-    account.payouts_enabled === true &&
-    account.requirements?.currently_due?.length === 0 &&
-    !account.requirements?.disabled_reason
-  ) {
-    await salon.update({ accountConnected: true });
-    ThrowNotification(tokenArray, {
-      title: 'Account Verified',
-      body: 'Your payout account is fully verified.',
-    });
+  if (isComplete) {
+    const tokens = await deviceToken.findAll({
+      where: { userId: salon.userId },
+      attributes: ['tokenId'],
+    })
+    const tokenArray = tokens.map((t) => t.tokenId)
+    if (tokenArray.length > 0) {
+      ThrowNotification(tokenArray, {
+        title: 'Account Verified',
+        body: 'Your payout account is fully verified.',
+      })
+    }
   }
   break;
 }
 
       case 'capability.updated': {
         const capability = event.data.object;
-        const accountId = event.account; // Connect account ID
+        const accountId = event.account;
 
-        // Only handle payout capability changes
-        if (capability.id === 'payouts') {
-          const salon = await salonDetail.findOne({
-            where: { connectAccountId: accountId },
-            include: [
-              {
-                model: user,
-                attributes: ['id', 'firstName', 'lastName', 'email'],
-              },
-            ],
-          });
+        if (capability.id !== 'payouts') break;
 
-          if (!salon) break;
+        const shouldProcess = await markStripeWebhookProcessed(event, accountId)
+        if (!shouldProcess) {
+          console.log('[stripe-connect webhook] duplicate event skipped:', event.id)
+          break
+        }
 
-          // Fetch tokens for notifications
-          const tokens = await deviceToken.findAll({
-            where: { userId: salon.userId },
-            attributes: ['tokenId'],
-          });
-          const tokenArray = tokens.map(t => t.tokenId);
-
-          // Check if payout capability is inactive or pending
-          if (capability.status === 'inactive' || capability.status === 'pending') {
-            console.log('⚠️ Payout capability is inactive/pending for account:', accountId);
-
-            // Update salon account status
-            await salon.update({ accountConnected: false });
-
-            // Get salon owner details
-            const salonOwner = salon.user || await user.findByPk(salon.userId, {
+        const salon = await salonDetail.findOne({
+          where: { connectAccountId: accountId },
+          include: [
+            {
+              model: user,
               attributes: ['id', 'firstName', 'lastName', 'email'],
-            });
+            },
+          ],
+        });
 
-            // Send push notification
-            if (tokenArray.length > 0) {
-              ThrowNotification(tokenArray, {
-                title: 'Payouts Blocked',
-                body: 'Your payouts have been temporarily paused. Please check your Stripe account for more details.',
-              });
-            }
+        if (!salon) break;
 
-            // Send email notification
-            if (salonOwner?.email) {
-              try {
-                const emailData = {
-                  firstName: salonOwner.firstName,
-                  lastName: salonOwner.lastName,
-                  email: salonOwner.email,
-                  salonName: salon.salonName || 'Your Shop',
-                  disabledReason: 'Capability restrictions',
-                  capabilityStatus: capability.status === 'inactive' ? 'inactive' : 'pending verification',
-                };
-                
-                PayoutBlockedEmail(emailData);
-                console.log('✅ Payout capability blocked email sent to:', salonOwner.email);
-              } catch (emailError) {
-                console.error('❌ Error sending payout capability blocked email:', emailError.message);
-              }
-            }
+        console.log('[stripe-connect webhook]', {
+          eventType: event.type,
+          accountId,
+          capabilityStatus: capability.status,
+        });
 
-            // Log the event
-            console.log('🚨 Payout capability blocked for salon:', {
-              salonId: salon.id,
-              salonName: salon.salonName,
-              connectAccountId: accountId,
-              capabilityStatus: capability.status,
-            });
-          } else if (capability.status === 'active') {
-            // Payouts are active - update account status
-            await salon.update({ accountConnected: true });
-            console.log('✅ Payout capability is active for salon:', salon.id);
+        if (capability.status === 'pending') {
+          await salon.update({
+            stripePayoutsEnabled: false,
+            stripeLastStripeActivityAt: new Date(),
+          })
+          await syncWalletAccountConnected(salon, false)
+          console.log('[stripe-connect webhook] capability pending — email skipped for account:', accountId)
+          break
+        }
+
+        let stripeAccount
+        try {
+          stripeAccount = await StripeHandler.retrieveConnectAccount(accountId)
+        } catch (retrieveError) {
+          console.error('[stripe-connect webhook] retrieveConnectAccount failed:', retrieveError.message)
+          break
+        }
+
+        const {
+          update,
+          status,
+          requirementsHash,
+          isComplete,
+        } = buildSalonStripeStatusUpdate(stripeAccount, salon)
+
+        const previousHash = salon.stripeRequirementsHash
+        const previousLastBlockedEmailAt = salon.stripeLastPayoutBlockedEmailSentAt
+
+        await salon.update(update)
+        await syncWalletAccountConnected(salon, isComplete)
+
+        if (capability.status === 'inactive' && isActuallyPayoutBlocked(stripeAccount)) {
+          try {
+            await maybeSendPayoutBlockedEmail(
+              salon,
+              stripeAccount,
+              requirementsHash,
+              'inactive',
+              {
+                stripeRequirementsHash: previousHash,
+                stripeLastPayoutBlockedEmailSentAt: previousLastBlockedEmailAt,
+              },
+            )
+          } catch (emailError) {
+            console.error('[stripe-connect webhook] PayoutBlockedEmail error:', emailError.message)
           }
+        } else {
+          console.log('[stripe-connect webhook]', {
+            accountId,
+            status,
+            emailAction: 'skip',
+            emailSkipReason:
+              capability.status === 'active'
+                ? 'capability_active'
+                : 'not_actually_blocked',
+          })
         }
         break;
       }

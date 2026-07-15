@@ -29,6 +29,17 @@ const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
 const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
+const StripeOnboardingReminderEmail = require('../../helper/StripeOnboardingReminderEmail')
+const {
+  STRIPE_STATUS,
+  REMINDER_STAGE,
+  buildStripeStatusPayload,
+  buildSalonStripeStatusUpdate,
+  nextInProgressReminder,
+  shouldSendActionRequiredReminder,
+  shouldSendPayoutBlockedEmail,
+} = require('../../helper/stripeConnectStatusHelper')
+const PayoutBlockedEmail = require('../../helper/PayoutBlockedEmail')
 const redis_Client = require('../../routes/redis_connect')
 const VERIFICATION_BYPASS_OTP = '8798'
 
@@ -677,6 +688,19 @@ exports.login = async (req, res, next) => {
         accountConnected: false,
         employeeId: externalEmployeeId,
       };
+      response.data.stripeStatus = {
+        state: 'NOT_STARTED',
+        detailsSubmitted: false,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        disabledReason: null,
+        currentlyDue: [],
+        pastDue: [],
+        actionRequired: true,
+        title: 'Stripe setup required',
+        message: 'Connect Stripe to receive payouts.',
+        ctaText: 'Set up Stripe',
+      };
     } else {
       const isAllDataAvailable =
         salon.services.length !== 0 &&
@@ -718,6 +742,20 @@ exports.login = async (req, res, next) => {
 
         response.data.profileCompletion.accountConnected = isConnected;
         response.data.stripeRestrictions = { reason, currentlyDue };
+        try {
+          const liveAccount = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+          const { update } = buildSalonStripeStatusUpdate(liveAccount, salon)
+          await salon.update(update)
+          Object.assign(salon, update)
+        } catch (syncErr) {
+          console.error('❌ Stripe status sync on login failed:', syncErr.message)
+        }
+        response.data.stripeStatus = buildStripeStatusPayload(salon);
+      } else {
+        response.data.stripeStatus = buildStripeStatusPayload({
+          connectAccountId: null,
+          stripeOnboardingStatus: STRIPE_STATUS.NOT_STARTED,
+        });
       }
 
       // 🔹 Check subscription status
@@ -1138,10 +1176,24 @@ exports.session = async (req, res, next) => {
         })
         salon.wallet = await wallet.findOne({ where: { salonDetailId: salon.id } })
       }
+      try {
+        const liveAccount = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+        const { update } = buildSalonStripeStatusUpdate(liveAccount, salon)
+        await salon.update(update)
+        Object.assign(salon, update)
+      } catch (syncErr) {
+        console.error('❌ Stripe status sync in session failed:', syncErr.message)
+      }
     } catch (err) {
       console.error("❌ Stripe check in session failed:", err.message)
     }
   }
+
+  const stripeStatus = buildStripeStatusPayload(
+    salon?.connectAccountId
+      ? salon
+      : { connectAccountId: null, stripeOnboardingStatus: STRIPE_STATUS.NOT_STARTED },
+  )
 
   // 🔹 Check subscription status
   if (salon?.id) {
@@ -1206,6 +1258,7 @@ exports.session = async (req, res, next) => {
         employeeId: externalEmployeeId,
       },
       ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
+      stripeStatus,
     },
     error: '',
   })
@@ -1532,3 +1585,423 @@ exports.incompleteRegistrationReminder = async (req, res, next) => {
     );
   }
 };
+
+/**
+ * Delayed / throttled Stripe Connect onboarding reminders.
+ * Intended for Lambda / cron:
+ *   GET /salon/v1/auth/stripe-onboarding-reminders
+ *
+ * Query:
+ *   dryRun=true|false (default false)
+ *   salonDetailId=<id> optional
+ *   limit=<n> optional (default all matching, max 500 when set)
+ *
+ * dryRun=true: evaluate only — no emails, no push, no DB updates.
+ */
+exports.sendStripeOnboardingReminders = async (req, res, next) => {
+  try {
+    const dryRun =
+      String(req.query.dryRun ?? 'false').toLowerCase() === 'true'
+    const salonDetailId = req.query.salonDetailId
+      ? parseInt(req.query.salonDetailId, 10)
+      : null
+    const limitRaw = req.query.limit
+      ? parseInt(req.query.limit, 10)
+      : null
+    const limit =
+      limitRaw && !Number.isNaN(limitRaw)
+        ? Math.min(Math.max(limitRaw, 1), 500)
+        : null
+
+    const whereClause = {
+      deleted: false,
+      connectAccountId: {
+        [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }],
+      },
+      stripeOnboardingStatus: {
+        [Op.in]: [
+          STRIPE_STATUS.IN_PROGRESS,
+          STRIPE_STATUS.ACTION_REQUIRED,
+          STRIPE_STATUS.PAYOUTS_BLOCKED,
+        ],
+      },
+    }
+    if (salonDetailId) whereClause.id = salonDetailId
+
+    const query = {
+      where: whereClause,
+      attributes: [
+        'id',
+        'salonName',
+        'connectAccountId',
+        'createdAt',
+        'stripeOnboardingStatus',
+        'stripeOnboardingStartedAt',
+        'stripeLastStripeActivityAt',
+        'stripeLastReminderSentAt',
+        'stripeLastPayoutBlockedEmailSentAt',
+        'stripeReminderStage',
+        'stripeRequirementsHash',
+        'stripeDisabledReason',
+      ],
+      include: [
+        {
+          model: user,
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: true,
+        },
+      ],
+      order: [['id', 'ASC']],
+    }
+    if (limit) query.limit = limit
+
+    const salons = await salonDetail.findAll(query)
+
+    const results = []
+    const sampleSalonDetailIds = []
+    let wouldSendInProgress = 0
+    let wouldSendActionRequired = 0
+    let wouldSendPayoutsBlocked = 0
+    let emailsSent = 0
+
+    for (const salon of salons) {
+      const owner = salon.user
+      if (!owner?.email) {
+        results.push({
+          salonDetailId: salon.id,
+          status: salon.stripeOnboardingStatus,
+          intent: null,
+          reason: 'no_email',
+          action: 'skipped',
+        })
+        continue
+      }
+
+      const state = salon.stripeOnboardingStatus
+
+      if (state === STRIPE_STATUS.IN_PROGRESS) {
+        // Cron-based: every eligible IN_PROGRESS salon is due each run.
+        const next = nextInProgressReminder(salon)
+
+        wouldSendInProgress += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'IN_PROGRESS_REMINDER',
+            reason: next.reason,
+            action: 'would_send',
+            stage: next.stage,
+          })
+          continue
+        }
+
+        StripeOnboardingReminderEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          intent: STRIPE_STATUS.IN_PROGRESS,
+        })
+
+        const stageUpdate = {
+          stripeLastReminderSentAt: new Date(),
+          stripeReminderStage: REMINDER_STAGE.CRON,
+        }
+        await salon.update(stageUpdate)
+        emailsSent += 1
+        results.push({
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'IN_PROGRESS_REMINDER',
+          reason: next.reason,
+          action: 'sent',
+          stage: stageUpdate.stripeReminderStage,
+        })
+        continue
+      }
+
+      if (state === STRIPE_STATUS.ACTION_REQUIRED) {
+        const decision = shouldSendActionRequiredReminder(
+          salon,
+          salon.stripeRequirementsHash,
+        )
+        if (!decision.allow) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: null,
+            reason: decision.reason,
+            action: 'skipped',
+          })
+          continue
+        }
+
+        wouldSendActionRequired += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'ACTION_REQUIRED_REMINDER',
+            reason: decision.reason,
+            action: 'would_send',
+          })
+          continue
+        }
+
+        StripeOnboardingReminderEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          intent: STRIPE_STATUS.ACTION_REQUIRED,
+        })
+        await salon.update({ stripeLastReminderSentAt: new Date() })
+        emailsSent += 1
+        results.push({
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'ACTION_REQUIRED_REMINDER',
+          reason: decision.reason,
+          action: 'sent',
+        })
+        continue
+      }
+
+      if (state === STRIPE_STATUS.PAYOUTS_BLOCKED) {
+        const decision = shouldSendPayoutBlockedEmail(
+          salon,
+          salon.stripeRequirementsHash,
+        )
+        if (!decision.allow) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: null,
+            reason: decision.reason,
+            action: 'skipped',
+          })
+          continue
+        }
+
+        wouldSendPayoutsBlocked += 1
+        if (sampleSalonDetailIds.length < 10) {
+          sampleSalonDetailIds.push(salon.id)
+        }
+
+        if (dryRun) {
+          results.push({
+            salonDetailId: salon.id,
+            status: state,
+            intent: 'PAYOUTS_BLOCKED_EMAIL',
+            reason: decision.reason,
+            action: 'would_send',
+          })
+          continue
+        }
+
+        PayoutBlockedEmail({
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          email: owner.email,
+          salonName: salon.salonName || 'Your Shop',
+          disabledReason: salon.stripeDisabledReason || 'Account restrictions',
+        })
+        await salon.update({
+          stripeLastPayoutBlockedEmailSentAt: new Date(),
+          stripeLastReminderSentAt: new Date(),
+        })
+        emailsSent += 1
+        results.push({
+          salonDetailId: salon.id,
+          status: state,
+          intent: 'PAYOUTS_BLOCKED_EMAIL',
+          reason: decision.reason,
+          action: 'sent',
+        })
+      }
+    }
+
+    return res.status(200).json({
+      status: '1',
+      message: dryRun
+        ? 'Stripe onboarding reminders dry-run complete (no emails, no DB updates)'
+        : 'Stripe onboarding reminders processed',
+      data: {
+        dryRun,
+        scanned: salons.length,
+        wouldSendInProgress,
+        wouldSendActionRequired,
+        wouldSendPayoutsBlocked,
+        emailsSent: dryRun ? 0 : emailsSent,
+        pushSent: 0,
+        sampleSalonDetailIds,
+        results,
+      },
+      error: '',
+    })
+  } catch (error) {
+    console.error('❌ Stripe onboarding reminder process failed:', error)
+    return next(
+      new appError('Failed to process Stripe onboarding reminders.', 500),
+    )
+  }
+}
+
+/**
+ * One-time / ops Stripe Connect status backfill.
+ * Syncs live Stripe account status into salonDetails (+ wallet.accountConnected).
+ * NEVER sends emails or push notifications.
+ *
+ * GET /salon/v1/stripe-connect-status-backfill?dryRun=true&limit=50&offset=0
+ * Optional: salonDetailId=
+ * Protected by requireCronSecret.
+ */
+exports.backfillStripeConnectStatus = async (req, res, next) => {
+  try {
+    const dryRun =
+      String(req.query.dryRun ?? 'true').toLowerCase() !== 'false'
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 50, 1),
+      500,
+    )
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
+    const salonDetailId = req.query.salonDetailId
+      ? parseInt(req.query.salonDetailId, 10)
+      : null
+
+    const whereClause = {
+      deleted: false,
+      connectAccountId: {
+        [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }],
+      },
+    }
+    if (salonDetailId) whereClause.id = salonDetailId
+
+    const salons = await salonDetail.findAll({
+      where: whereClause,
+      attributes: [
+        'id',
+        'salonName',
+        'connectAccountId',
+        'createdAt',
+        'stripeOnboardingStatus',
+        'stripeOnboardingStartedAt',
+        'stripeRequirementsHash',
+        'stripeDetailsSubmitted',
+        'stripeChargesEnabled',
+        'stripePayoutsEnabled',
+      ],
+      order: [['id', 'ASC']],
+      limit,
+      offset,
+    })
+
+    const countsByStatus = {
+      [STRIPE_STATUS.NOT_STARTED]: 0,
+      [STRIPE_STATUS.IN_PROGRESS]: 0,
+      [STRIPE_STATUS.ACTION_REQUIRED]: 0,
+      [STRIPE_STATUS.PAYOUTS_BLOCKED]: 0,
+      [STRIPE_STATUS.COMPLETE]: 0,
+    }
+
+    const sample = []
+    const failed = []
+    let wouldUpdate = 0
+    let updated = 0
+    let skipped = 0
+
+    for (const salon of salons) {
+      try {
+        const account = await Stripe.retrieveConnectAccount(salon.connectAccountId)
+        const { update, status, isComplete } = buildSalonStripeStatusUpdate(
+          account,
+          salon,
+        )
+
+        countsByStatus[status] = (countsByStatus[status] || 0) + 1
+
+        const previousStatus = salon.stripeOnboardingStatus || STRIPE_STATUS.NOT_STARTED
+        const row = {
+          salonDetailId: salon.id,
+          connectAccountId: salon.connectAccountId,
+          previousStatus,
+          calculatedStatus: status,
+          detailsSubmitted: update.stripeDetailsSubmitted,
+          chargesEnabled: update.stripeChargesEnabled,
+          payoutsEnabled: update.stripePayoutsEnabled,
+          walletAccountConnected: isComplete,
+        }
+
+        if (sample.length < 10) sample.push(row)
+        wouldUpdate += 1
+
+        if (dryRun) continue
+
+        await salon.update(update)
+
+        const [walletRecord] = await wallet.findOrCreate({
+          where: { salonDetailId: salon.id },
+          defaults: {
+            salonDetailId: salon.id,
+            accountConnected: isComplete,
+          },
+        })
+        if (walletRecord.accountConnected !== isComplete) {
+          await walletRecord.update({ accountConnected: isComplete })
+        }
+
+        updated += 1
+      } catch (err) {
+        skipped += 1
+        failed.push({
+          salonDetailId: salon.id,
+          connectAccountId: salon.connectAccountId,
+          error: err.message || 'Stripe retrieve failed',
+        })
+        console.error(
+          '[stripe-backfill] failed salon',
+          salon.id,
+          salon.connectAccountId,
+          err.message,
+        )
+      }
+    }
+
+    return res.status(200).json({
+      status: '1',
+      message: dryRun
+        ? 'Stripe Connect status backfill dry-run complete (no DB writes)'
+        : 'Stripe Connect status backfill complete',
+      data: {
+        dryRun,
+        limit,
+        offset,
+        scanned: salons.length,
+        wouldUpdate: dryRun ? wouldUpdate : undefined,
+        updated: dryRun ? undefined : updated,
+        skipped,
+        failedCount: failed.length,
+        countsByStatus,
+        failed,
+        sample,
+        emailsSent: 0,
+        pushSent: 0,
+      },
+      error: '',
+    })
+  } catch (error) {
+    console.error('❌ Stripe Connect status backfill failed:', error)
+    return next(
+      new appError('Failed to backfill Stripe Connect status.', 500),
+    )
+  }
+}
