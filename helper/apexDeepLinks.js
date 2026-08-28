@@ -16,6 +16,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const { renderBusinessDownloadHtml } = require('./businessDownloadPage')
 
 // --- App identity (override via env where useful) ---------------------------
 const ANDROID_PACKAGE =
@@ -180,6 +181,14 @@ function publishApexDeepLinkFiles() {
     )
     fs.writeFileSync(path.join(wellKnown, '.htaccess'), HTACCESS)
     console.log(`[apexDeepLinks] published .well-known files to ${wellKnown}`)
+
+    // Business app download page, served at https://trimworldwide.com/get-business-app
+    // (clean apex host — same URL the in-app Business QR encodes). As a directory
+    // with index.html so Apache serves it statically without any rewrite rule.
+    const bizDir = path.join(root, 'get-business-app')
+    fs.mkdirSync(bizDir, { recursive: true })
+    fs.writeFileSync(path.join(bizDir, 'index.html'), renderBusinessDownloadHtml())
+    console.log(`[apexDeepLinks] published business download page to ${bizDir}`)
 
     // Clean up any previously-written proxy block (reverted — see note above).
     removeRootHtaccessBlock(root)
