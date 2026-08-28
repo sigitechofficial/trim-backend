@@ -29,21 +29,38 @@ const IOS_BUNDLE_ID =
   process.env.DEEPLINK_IOS_BUNDLE_ID || 'com.sigitechnologies.trimios'
 const IOS_TEAM_ID = process.env.DEEPLINK_IOS_TEAM_ID || '69JDF2R4M8'
 
+// Business (salon-owner) app — its invite/login links (/LoginScreen, etc.) must
+// open ITS app, so it gets its own statement in these files too.
+const BUSINESS_ANDROID_PACKAGE =
+  process.env.DEEPLINK_ANDROID_PACKAGE_BUSINESS ||
+  'com.sigitechnologies.trim_saloon'
+const BUSINESS_IOS_APP_ID_FULL =
+  process.env.DEEPLINK_IOS_APPID_BUSINESS ||
+  '69JDF2R4M8.com.sigitechnologies.trimbusinessios'
+
 // SHA-256 signing fingerprints allowed to verify Android App Links.
-// Default = current debug keystore (for `flutter run` testing). Add the release
-// keystore AND the Google Play App Signing fingerprint for production via
-// DEEPLINK_ANDROID_SHA256 (comma-separated), no code change required.
+// Default = current debug keystore (for `flutter run` testing; shared across the
+// customer and business dev builds). Add each app's release keystore AND Google
+// Play App Signing fingerprint for production via the *_SHA256 envs.
 const DEFAULT_SHA256 =
   '0C:DD:31:87:1F:9D:78:86:90:CA:A2:7F:34:6A:37:AA:61:79:9F:F2:D0:99:1F:54:41:AB:F6:03:73:84:84:29'
 
-const ANDROID_SHA256_FINGERPRINTS = [
-  ...new Set(
-    `${DEFAULT_SHA256},${process.env.DEEPLINK_ANDROID_SHA256 || ''}`
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  ),
-]
+function buildFingerprints(extraEnv) {
+  return [
+    ...new Set(
+      `${DEFAULT_SHA256},${extraEnv || ''}`
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+const ANDROID_SHA256_FINGERPRINTS = buildFingerprints(
+  process.env.DEEPLINK_ANDROID_SHA256,
+)
+const BUSINESS_SHA256_FINGERPRINTS = buildFingerprints(
+  process.env.DEEPLINK_ANDROID_SHA256_BUSINESS,
+)
 
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
 const APP_STORE_URL = `https://apps.apple.com/app/id${IOS_APP_ID}`
@@ -80,6 +97,14 @@ router.get('/.well-known/assetlinks.json', (req, res) => {
             sha256_cert_fingerprints: ANDROID_SHA256_FINGERPRINTS,
           },
         },
+        {
+          relation: ['delegate_permission/common.handle_all_urls'],
+          target: {
+            namespace: 'android_app',
+            package_name: BUSINESS_ANDROID_PACKAGE,
+            sha256_cert_fingerprints: BUSINESS_SHA256_FINGERPRINTS,
+          },
+        },
       ],
       null,
       2,
@@ -104,6 +129,15 @@ router.get('/.well-known/apple-app-site-association', (req, res) => {
                 '/team-member/*',
                 '/appointmentDetail*',
                 '/SplashScreen*',
+              ],
+            },
+            {
+              appID: BUSINESS_IOS_APP_ID_FULL,
+              paths: [
+                '/LoginScreen*',
+                '/BusinessSplash*',
+                '/BookingDetailScreen*',
+                '/bookingDetails*',
               ],
             },
           ],
