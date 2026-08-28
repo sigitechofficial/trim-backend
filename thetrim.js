@@ -43,6 +43,7 @@ const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
 const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRoute')
 const deepLinkRoute = require('./routes/deepLinkRoutes/deepLinkRoute')
+const { publishApexDeepLinkFiles } = require('./helper/apexDeepLinks')
 
 // Load environment variables
 
@@ -205,6 +206,10 @@ server.listen(serverPort, (err) => {
   console.log('\x1b[36m%s\x1b[0m', `Server is listening on: ${baseUrl}`)
   console.log('\x1b[35m%s\x1b[0m', `Swagger Documentation: ${baseUrl}/api-docs`)
   console.log('\x1b[33m%s\x1b[0m', `Environment: ${env}`)
+
+  // Publish the App-Link / Universal-Link association files to the apex
+  // trimworldwide.com document root so tapped share links open the app.
+  publishApexDeepLinkFiles()
 })
 
 
