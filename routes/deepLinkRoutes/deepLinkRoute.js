@@ -38,6 +38,10 @@ const BUSINESS_IOS_APP_ID_FULL =
   process.env.DEEPLINK_IOS_APPID_BUSINESS ||
   '69JDF2R4M8.com.sigitechnologies.trimbusinessios'
 
+// Business app's numeric App Store id (for its download / store links).
+const BUSINESS_IOS_APPSTORE_ID =
+  process.env.DEEPLINK_IOS_APPSTORE_ID_BUSINESS || '6742323827'
+
 // SHA-256 signing fingerprints allowed to verify Android App Links.
 // Default = current debug keystore (for `flutter run` testing; shared across the
 // customer and business dev builds). Add each app's release keystore AND Google
@@ -64,6 +68,10 @@ const BUSINESS_SHA256_FINGERPRINTS = buildFingerprints(
 
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
 const APP_STORE_URL = `https://apps.apple.com/app/id${IOS_APP_ID}`
+
+// Business (salon-owner) app store links — used by the /get-business-app page.
+const BUSINESS_PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${BUSINESS_ANDROID_PACKAGE}`
+const BUSINESS_APP_STORE_URL = `https://apps.apple.com/app/id${BUSINESS_IOS_APPSTORE_ID}`
 
 // Public origin of THIS backend. Behind the Apache reverse proxy, req.protocol /
 // req.get('host') resolve to the internal 127.0.0.1:<port>, which would poison
@@ -291,6 +299,63 @@ router.get('/appointmentDetail', (req, res) => {
       canonicalUrl,
     }),
   )
+})
+
+// ─── 6. Business app download page: /get-business-app ────────────────────────
+// Self-contained "get the app" page for the Trim Business (salon-owner) app.
+// Encoded in the Business QR shown in-app. On scan the browser opens this page
+// and forwards to the correct store (iOS → App Store, Android → Play Store);
+// desktop shows both buttons. Mirrors the customer QR's smart-link behavior,
+// but on Trim's own domain.
+function renderBusinessDownloadPage() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Get Trim for Business</title>
+  <meta name="description" content="Download the Trim Business app to manage your shop, bookings and team." />
+  <meta name="apple-itunes-app" content="app-id=${BUSINESS_IOS_APPSTORE_ID}" />
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #0f0f10; color: #f5f5f7; display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; }
+    .card { width: 100%; max-width: 420px; text-align: center; }
+    h1 { font-size: 1.5rem; margin: 0 0 8px; color: #d4af37; }
+    p.desc { color: #b8b8bd; margin: 0 0 28px; line-height: 1.5; font-size: 0.95rem; }
+    a.btn { display: block; text-decoration: none; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0; }
+    a.store { background: #1f1f22; color: #f5f5f7; border: 1px solid #333; }
+    .hint { margin-top: 22px; font-size: 0.8rem; color: #7d7d82; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Trim for Business</h1>
+    <p class="desc">Manage your shop, bookings and team. Download the Trim Business app.</p>
+    <a class="btn store" href="${escapeHtml(BUSINESS_APP_STORE_URL)}">Download on the App Store</a>
+    <a class="btn store" href="${escapeHtml(BUSINESS_PLAY_STORE_URL)}">Get it on Google Play</a>
+    <p class="hint">You'll be sent to the store for your device.</p>
+  </div>
+  <script>
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isAndroid = /android/i.test(ua);
+      var isIOS = /iphone|ipad|ipod/i.test(ua);
+      var store = isIOS ? ${JSON.stringify(BUSINESS_APP_STORE_URL)}
+        : (isAndroid ? ${JSON.stringify(BUSINESS_PLAY_STORE_URL)} : null);
+      if (store) {
+        // Auto-forward to the matching store; buttons remain as a fallback.
+        setTimeout(function () { window.location.href = store; }, 400);
+      }
+    })();
+  </script>
+</body>
+</html>`
+}
+
+router.get('/get-business-app', (req, res) => {
+  res.status(200).send(renderBusinessDownloadPage())
 })
 
 module.exports = router
