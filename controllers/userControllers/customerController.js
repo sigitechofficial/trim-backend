@@ -1175,6 +1175,15 @@ exports.searchSalons = async (req, res, next) => {
       ? sequelize.escape(likePattern)
       : null
 
+    // Rental Chair tab: true / "true" / 1 / "1"
+    const rentChairRaw = req.body?.rentChairAdvertisement
+    const rentChairAdvertisement =
+      rentChairRaw === true ||
+      rentChairRaw === 1 ||
+      rentChairRaw === '1' ||
+      (typeof rentChairRaw === 'string' &&
+        rentChairRaw.trim().toLowerCase() === 'true')
+
     const baseSalonFilter = {
       [Op.or]: [
         {
@@ -1203,6 +1212,14 @@ exports.searchSalons = async (req, res, next) => {
     }
 
     const andFragments = [baseSalonFilter]
+
+    // Rental Chair search: active ads with at least one chair (not isExternalEmployee)
+    if (rentChairAdvertisement) {
+      andFragments.push({
+        rentChairAdvertisementStatus: true,
+        rentChairAdvertisementChairCount: { [Op.gt]: 0 },
+      })
+    }
 
     if (searchActive) {
       andFragments.push({
@@ -1386,6 +1403,8 @@ exports.searchSalons = async (req, res, next) => {
       'coverImage',
       'isExternalEmployee',
       'isOnline',
+      'rentChairAdvertisementStatus',
+      'rentChairAdvertisementChairCount',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1403,6 +1422,10 @@ exports.searchSalons = async (req, res, next) => {
         'ratingCount',
       ],
     ]
+
+    // Normal search keeps services required; rental chair mode must not hide
+    // shops that advertise chairs but have no matching service rows.
+    const serviceIncludeRequired = !rentChairAdvertisement
 
     const queryBody = {
       where: finalWhere,
@@ -1427,7 +1450,9 @@ exports.searchSalons = async (req, res, next) => {
         },
         {
           model: service,
-          required: true,
+          required: serviceIncludeRequired,
+          // separate query avoids JOIN+LIMIT subquery stripping salon attributes
+          separate: rentChairAdvertisement,
           attributes: ['id', 'serviceName', 'price', 'discount'],
         },
         {
@@ -1450,23 +1475,46 @@ exports.searchSalons = async (req, res, next) => {
     }
 
     const rows = await salonDetail.findAll(queryBody)
+    const countIncludes = [
+      {
+        model: user,
+        where: { status: true, deleted: 0 },
+        required: true,
+      },
+    ]
+    if (serviceIncludeRequired) {
+      countIncludes.unshift({
+        model: service,
+        required: true,
+      })
+    }
     const count = await salonDetail.count({
       where: finalWhere,
-      include: [
-        {
-          model: service,
-          required: true,
-        },
-        {
-          model: user,
-          where: { status: true, deleted: 0 },
-          required: true,
-        },
-      ],
+      include: countIncludes,
       distinct: true,
     })
 
-    let salons = JSON.parse(JSON.stringify(rows))
+    // Always emit exact field names for Flutter Rental Chair filtering
+    let salons = rows.map((row) => {
+      const plain = typeof row.toJSON === 'function' ? row.toJSON() : { ...row }
+      const rawStatus =
+        (typeof row.get === 'function'
+          ? row.get('rentChairAdvertisementStatus')
+          : undefined) ??
+        row.dataValues?.rentChairAdvertisementStatus ??
+        plain.rentChairAdvertisementStatus
+      const rawCount =
+        (typeof row.get === 'function'
+          ? row.get('rentChairAdvertisementChairCount')
+          : undefined) ??
+        row.dataValues?.rentChairAdvertisementChairCount ??
+        plain.rentChairAdvertisementChairCount
+
+      plain.rentChairAdvertisementStatus =
+        rawStatus === true || rawStatus === 1 || rawStatus === '1'
+      plain.rentChairAdvertisementChairCount = Number(rawCount ?? 0)
+      return plain
+    })
 
     const payload = {
       status: '1',
