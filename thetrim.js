@@ -42,6 +42,7 @@ const performanceRoute = require('./routes/salonRoutes/performanceRoute')
 const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
 const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRoute')
+const deepLinkRoute = require('./routes/deepLinkRoutes/deepLinkRoute')
 
 // Load environment variables
 
@@ -119,6 +120,10 @@ app.get('/app-config.json', async (req, res) => {
     })
   }
 })
+
+// ─── Deep linking: App Links / Universal Links verification + share fallbacks ─
+// Mounted at root so it serves /.well-known/* and /salon-detail/:id etc.
+app.use('/', deepLinkRoute)
 
 // Handle undefined routes
 app.use((req, res, next) => {
