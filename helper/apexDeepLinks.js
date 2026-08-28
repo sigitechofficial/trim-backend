@@ -91,6 +91,74 @@ function isDir(p) {
   }
 }
 
+// Backend to reverse-proxy the deep-link pages to (so shared links keep their
+// rich OG preview). test -> stage, production -> backend.
+function backendOrigin() {
+  if (process.env.DEEPLINK_PROXY_TARGET) {
+    return process.env.DEEPLINK_PROXY_TARGET.replace(/\/+$/, '')
+  }
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return 'https://backend.trimworldwide.com'
+    default:
+      return 'https://stage.trimworldwide.com'
+  }
+}
+
+const HT_BEGIN = '# BEGIN trim-deeplinks   (managed by helper/apexDeepLinks.js)'
+const HT_END = '# END trim-deeplinks'
+
+// Root .htaccess block that reverse-proxies ONLY the deep-link path prefixes to
+// the backend, so the apex serves the OG-rich salon/team/appointment pages.
+// Wrapped in IfModule guards so a host without mod_proxy/mod_rewrite ignores it
+// instead of returning 500 for the whole site.
+function htaccessBlock() {
+  const b = backendOrigin()
+  return [
+    HT_BEGIN,
+    '<IfModule mod_proxy.c>',
+    '<IfModule mod_rewrite.c>',
+    '  RewriteEngine On',
+    `  RewriteRule ^salon-detail/(.*)$ ${b}/salon-detail/$1 [P,L]`,
+    `  RewriteRule ^team-member/(.*)$ ${b}/team-member/$1 [P,L]`,
+    `  RewriteRule ^appointmentDetail(.*)$ ${b}/appointmentDetail$1 [P,L]`,
+    '</IfModule>',
+    '</IfModule>',
+    HT_END,
+    '',
+  ].join('\n')
+}
+
+// Insert or replace ONLY our marked block in the apex root .htaccess; every other
+// rule in the file is preserved untouched.
+function upsertRootHtaccess(root) {
+  const file = path.join(root, '.htaccess')
+  const block = htaccessBlock()
+  let existing = ''
+  try {
+    existing = fs.readFileSync(file, 'utf8')
+  } catch (e) {
+    existing = ''
+  }
+  const begin = existing.indexOf(HT_BEGIN)
+  let next
+  if (begin !== -1) {
+    const end = existing.indexOf(HT_END, begin)
+    if (end !== -1) {
+      const tail = existing.slice(end + HT_END.length).replace(/^\n/, '')
+      next = existing.slice(0, begin) + block + tail
+    } else {
+      // marker corrupted (BEGIN without END): drop from BEGIN, re-append clean
+      next = existing.slice(0, begin) + block
+    }
+  } else if (existing.trim()) {
+    next = existing.replace(/\n*$/, '\n\n') + block
+  } else {
+    next = block
+  }
+  fs.writeFileSync(file, next)
+}
+
 function publishApexDeepLinkFiles() {
   if (process.env.PUBLISH_APEX_DEEPLINKS === 'false') return
   try {
@@ -112,6 +180,16 @@ function publishApexDeepLinkFiles() {
     )
     fs.writeFileSync(path.join(wellKnown, '.htaccess'), HTACCESS)
     console.log(`[apexDeepLinks] published .well-known files to ${wellKnown}`)
+
+    // Also proxy the deep-link pages to the backend so shared links keep their
+    // rich preview card (og:title/og:image). Scoped + IfModule-guarded.
+    upsertRootHtaccess(root)
+    console.log(
+      `[apexDeepLinks] ensured deep-link proxy block in ${path.join(
+        root,
+        '.htaccess',
+      )} -> ${backendOrigin()}`,
+    )
   } catch (err) {
     console.error('[apexDeepLinks] failed to publish:', err.message)
   }
