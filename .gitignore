@@ -1,6 +1,9 @@
 # Ignore Bruno API collection
 Trim/
 
+# Ignore frontend admin panel (separate project / own git repo)
+trim-admin-vite/
+
 # Ignore env
 .env
 
