@@ -99,6 +99,7 @@ router.get('/.well-known/apple-app-site-association', (req, res) => {
             {
               appID: `${IOS_TEAM_ID}.${IOS_BUNDLE_ID}`,
               paths: [
+                '/shop-detail/*',
                 '/salon-detail/*',
                 '/team-member/*',
                 '/appointmentDetail*',
@@ -192,15 +193,17 @@ function renderLandingPage({ req, title, description, imageUrl, canonicalUrl }) 
 </html>`
 }
 
-// ─── 3. Salon profile fallback: /salon-detail/:id ────────────────────────────
-router.get('/salon-detail/:id', async (req, res) => {
+// ─── 3. Shop profile fallback: /shop-detail/:id (and legacy /salon-detail/:id) ─
+// The user-facing path is /shop-detail; /salon-detail is kept for links shared
+// before the rename. Both render the same page from the same salon data.
+async function shopDetailHandler(req, res) {
   const { id } = req.params
   const origin = publicOrigin()
   const canonicalUrl = `${origin}${req.originalUrl}`
 
-  let title = 'Salon on Trim'
+  let title = 'Shop on Trim'
   let description =
-    'View this salon, browse services and book your appointment in the Trim app.'
+    'View this shop, browse services and book your appointment in the Trim app.'
   let imageUrl = ''
 
   try {
@@ -217,13 +220,16 @@ router.get('/salon-detail/:id', async (req, res) => {
     }
   } catch (err) {
     // Never let a DB hiccup turn the share link back into a 404.
-    console.error('[deepLink] /salon-detail lookup failed:', err.message)
+    console.error('[deepLink] /shop-detail lookup failed:', err.message)
   }
 
   res
     .status(200)
     .send(renderLandingPage({ req, title, description, imageUrl, canonicalUrl }))
-})
+}
+
+router.get('/shop-detail/:id', shopDetailHandler)
+router.get('/salon-detail/:id', shopDetailHandler)
 
 // ─── 4. Team member fallback: /team-member/:salonId/:employeeId ──────────────
 router.get('/team-member/:salonId/:employeeId', (req, res) => {

@@ -60,6 +60,7 @@ const AASA = JSON.stringify(
         {
           appID: IOS_APP_ID_FULL,
           paths: [
+            '/shop-detail/*',
             '/salon-detail/*',
             '/team-member/*',
             '/appointmentDetail*',
