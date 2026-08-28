@@ -48,6 +48,25 @@ const ANDROID_SHA256_FINGERPRINTS = [
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
 const APP_STORE_URL = `https://apps.apple.com/app/id${IOS_APP_ID}`
 
+// Public origin of THIS backend. Behind the Apache reverse proxy, req.protocol /
+// req.get('host') resolve to the internal 127.0.0.1:<port>, which would poison
+// the self-referential landing-page URLs (og:url, the Open-in-app link, the iOS
+// smart-banner app-argument). Derive it deterministically from NODE_ENV instead
+// (same mapping thetrim.js uses), overridable via DEEPLINK_PUBLIC_ORIGIN.
+function publicOrigin() {
+  if (process.env.DEEPLINK_PUBLIC_ORIGIN) {
+    return process.env.DEEPLINK_PUBLIC_ORIGIN.replace(/\/+$/, '')
+  }
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return 'https://backend.trimworldwide.com'
+    case 'test':
+      return 'https://stage.trimworldwide.com'
+    default:
+      return `http://localhost:${process.env.PORT || 3000}`
+  }
+}
+
 // ─── 1. Android App Links verification ───────────────────────────────────────
 router.get('/.well-known/assetlinks.json', (req, res) => {
   res.type('application/json').send(
@@ -176,7 +195,8 @@ function renderLandingPage({ req, title, description, imageUrl, canonicalUrl }) 
 // ─── 3. Salon profile fallback: /salon-detail/:id ────────────────────────────
 router.get('/salon-detail/:id', async (req, res) => {
   const { id } = req.params
-  const canonicalUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`
+  const origin = publicOrigin()
+  const canonicalUrl = `${origin}${req.originalUrl}`
 
   let title = 'Salon on Trim'
   let description =
@@ -191,9 +211,7 @@ router.get('/salon-detail/:id', async (req, res) => {
       if (salon.salonName) title = salon.salonName
       if (salon.coverImage) {
         // coverImage is stored like "Public/Gallery/GalleryImg-101-...jpg"
-        imageUrl = `${req.protocol}://${req.get('host')}/${String(
-          salon.coverImage,
-        ).replace(/^\/+/, '')}`
+        imageUrl = `${origin}/${String(salon.coverImage).replace(/^\/+/, '')}`
       }
       description = `Book services at ${title} on Trim.`
     }
@@ -209,7 +227,7 @@ router.get('/salon-detail/:id', async (req, res) => {
 
 // ─── 4. Team member fallback: /team-member/:salonId/:employeeId ──────────────
 router.get('/team-member/:salonId/:employeeId', (req, res) => {
-  const canonicalUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`
+  const canonicalUrl = `${publicOrigin()}${req.originalUrl}`
   res.status(200).send(
     renderLandingPage({
       req,
@@ -223,7 +241,7 @@ router.get('/team-member/:salonId/:employeeId', (req, res) => {
 
 // ─── 5. Appointment fallback: /appointmentDetail?id=... ──────────────────────
 router.get('/appointmentDetail', (req, res) => {
-  const canonicalUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`
+  const canonicalUrl = `${publicOrigin()}${req.originalUrl}`
   res.status(200).send(
     renderLandingPage({
       req,
