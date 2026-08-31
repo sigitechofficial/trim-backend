@@ -4177,7 +4177,12 @@ exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
 exports.getStaffAdvertisementStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
-    attributes: ['staffAdvertisementCount', 'staffAdvertisementStatus'],
+    attributes: [
+      'staffAdvertisementCount',
+      'staffAdvertisementStatus',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
+    ],
   })
 
   if (!salon) {
@@ -4190,12 +4195,23 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
     returnFunction('1', 'success', {
       staffAdvertisementCount: salon.staffAdvertisementCount ?? 0,
       staffAdvertisementStatus: salon.staffAdvertisementStatus ? 1 : 0,
+      staffAdvertisementWagesType: salon.staffAdvertisementWagesType ?? null,
+      staffAdvertisementWagesAmount:
+        salon.staffAdvertisementWagesAmount === null ||
+        salon.staffAdvertisementWagesAmount === undefined
+          ? null
+          : Number(salon.staffAdvertisementWagesAmount),
     }, ''),
   )
 }
 
 exports.updateStaffAdvertisement = async (req, res, next) => {
-  const { staffAdvertisementCount, staffAdvertisementStatus } = req.body
+  const {
+    staffAdvertisementCount,
+    staffAdvertisementStatus,
+    staffAdvertisementWagesType,
+    staffAdvertisementWagesAmount,
+  } = req.body
 
   if (
     staffAdvertisementCount === undefined ||
@@ -4250,6 +4266,51 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     )
   }
 
+  // Wages (optional): owner picks 'salary' or 'commission' + one amount.
+  // Empty / null type clears both. Commission amount is a percentage (<= 100).
+  let normalizedWagesType = null
+  let normalizedWagesAmount = null
+  if (
+    staffAdvertisementWagesType !== undefined &&
+    staffAdvertisementWagesType !== null &&
+    String(staffAdvertisementWagesType).trim() !== ''
+  ) {
+    const wagesType = String(staffAdvertisementWagesType).trim().toLowerCase()
+    if (wagesType !== 'salary' && wagesType !== 'commission') {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          "staffAdvertisementWagesType must be 'salary', 'commission', or empty",
+          {},
+          '',
+        ),
+      )
+    }
+    const wagesAmount = Number(staffAdvertisementWagesAmount)
+    if (!Number.isFinite(wagesAmount) || wagesAmount < 0) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'staffAdvertisementWagesAmount must be a number >= 0 when a wages type is set',
+          {},
+          '',
+        ),
+      )
+    }
+    if (wagesType === 'commission' && wagesAmount > 100) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'Commission amount must be a percentage between 0 and 100',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedWagesType = wagesType
+    normalizedWagesAmount = wagesAmount
+  }
+
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
     attributes: ['id'],
@@ -4265,6 +4326,8 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     {
       staffAdvertisementCount: count,
       staffAdvertisementStatus: normalizedStatus === 1,
+      staffAdvertisementWagesType: normalizedWagesType,
+      staffAdvertisementWagesAmount: normalizedWagesAmount,
     },
     { where: { userId: req.user.id } },
   )
@@ -4273,6 +4336,8 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     returnFunction('1', 'Success', {
       staffAdvertisementCount: count,
       staffAdvertisementStatus: normalizedStatus,
+      staffAdvertisementWagesType: normalizedWagesType,
+      staffAdvertisementWagesAmount: normalizedWagesAmount,
     }, ''),
   )
 }

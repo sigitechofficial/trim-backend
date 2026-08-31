@@ -33,6 +33,16 @@ async function ensureAdvertSchema(db) {
       allowNull: false,
       defaultValue: false,
     },
+    staffAdvertisementWagesType: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
+    staffAdvertisementWagesAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null,
+    },
   }
 
   let existingColumns = {}

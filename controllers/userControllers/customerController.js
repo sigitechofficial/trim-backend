@@ -1433,6 +1433,8 @@ exports.searchSalons = async (req, res, next) => {
       'rentChairAdvertisementRentAmount',
       'staffAdvertisementStatus',
       'staffAdvertisementCount',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1578,6 +1580,25 @@ exports.searchSalons = async (req, res, next) => {
       plain.staffAdvertisementStatus =
         rawStaffStatus === true || rawStaffStatus === 1 || rawStaffStatus === '1'
       plain.staffAdvertisementCount = Number(rawStaffCount ?? 0)
+
+      // Staff advert wages
+      const rawWagesType =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesType')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesType ??
+        plain.staffAdvertisementWagesType
+      const rawWagesAmount =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesAmount')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesAmount ??
+        plain.staffAdvertisementWagesAmount
+      plain.staffAdvertisementWagesType = rawWagesType || null
+      plain.staffAdvertisementWagesAmount =
+        rawWagesAmount === null || rawWagesAmount === undefined
+          ? null
+          : Number(rawWagesAmount)
       return plain
     })
 
@@ -1638,6 +1659,8 @@ exports.salonDetails = async (req, res, next) => {
       'rentChairAdvertisementRentAmount',
       'staffAdvertisementCount',
       'staffAdvertisementStatus',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',

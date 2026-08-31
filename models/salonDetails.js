@@ -180,6 +180,18 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: false,
     },
+    // Staff advert wages method (advert info): owner picks 'salary' or
+    // 'commission' plus one amount (£ for salary, % for commission). Optional.
+    staffAdvertisementWagesType: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
+    staffAdvertisementWagesAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null,
+    },
     stripeOnboardingStatus: {
       type: DataTypes.STRING(32),
       allowNull: true,
