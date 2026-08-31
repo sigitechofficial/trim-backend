@@ -152,6 +152,13 @@ if (syncDb) {
     })
 }
 
+// Global sync is disabled above, so ensure ONLY the advert columns/tables exist
+// (idempotent, targeted — does not touch the rest of the schema).
+const { ensureAdvertSchema } = require('./helper/advertSchema')
+ensureAdvertSchema(db)
+  .then(() => console.log('[advertSchema] ensured'))
+  .catch((err) => console.error('[advertSchema] failed:', err.message))
+
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)
