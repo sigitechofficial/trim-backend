@@ -43,6 +43,11 @@ async function ensureAdvertSchema(db) {
       allowNull: true,
       defaultValue: null,
     },
+    staffAdvertisementWagesCycle: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
   }
 
   let existingColumns = {}

@@ -4182,6 +4182,7 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
       'staffAdvertisementStatus',
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
     ],
   })
 
@@ -4201,6 +4202,7 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
         salon.staffAdvertisementWagesAmount === undefined
           ? null
           : Number(salon.staffAdvertisementWagesAmount),
+      staffAdvertisementWagesCycle: salon.staffAdvertisementWagesCycle ?? null,
     }, ''),
   )
 }
@@ -4211,6 +4213,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     staffAdvertisementStatus,
     staffAdvertisementWagesType,
     staffAdvertisementWagesAmount,
+    staffAdvertisementWagesCycle,
   } = req.body
 
   if (
@@ -4311,6 +4314,17 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     normalizedWagesAmount = wagesAmount
   }
 
+  // Salary pay frequency (only meaningful for salary). Commission → null.
+  let normalizedWagesCycle = null
+  if (
+    normalizedWagesType === 'salary' &&
+    staffAdvertisementWagesCycle !== undefined &&
+    staffAdvertisementWagesCycle !== null &&
+    String(staffAdvertisementWagesCycle).trim() !== ''
+  ) {
+    normalizedWagesCycle = String(staffAdvertisementWagesCycle).trim()
+  }
+
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
     attributes: ['id'],
@@ -4328,6 +4342,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementStatus: normalizedStatus === 1,
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
+      staffAdvertisementWagesCycle: normalizedWagesCycle,
     },
     { where: { userId: req.user.id } },
   )
@@ -4338,6 +4353,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementStatus: normalizedStatus,
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
+      staffAdvertisementWagesCycle: normalizedWagesCycle,
     }, ''),
   )
 }

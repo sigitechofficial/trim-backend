@@ -192,6 +192,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: null,
     },
+    // Salary pay frequency (Weekly / Bi-weekly / Monthly); null for commission.
+    staffAdvertisementWagesCycle: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
     stripeOnboardingStatus: {
       type: DataTypes.STRING(32),
       allowNull: true,

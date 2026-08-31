@@ -1435,6 +1435,7 @@ exports.searchSalons = async (req, res, next) => {
       'staffAdvertisementCount',
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1599,6 +1600,13 @@ exports.searchSalons = async (req, res, next) => {
         rawWagesAmount === null || rawWagesAmount === undefined
           ? null
           : Number(rawWagesAmount)
+      const rawWagesCycle =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesCycle')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesCycle ??
+        plain.staffAdvertisementWagesCycle
+      plain.staffAdvertisementWagesCycle = rawWagesCycle || null
       return plain
     })
 
@@ -1661,6 +1669,7 @@ exports.salonDetails = async (req, res, next) => {
       'staffAdvertisementStatus',
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
