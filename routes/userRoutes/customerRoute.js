@@ -92,6 +92,37 @@ router.post(
   catchAsync(appController.sendRentChairAdvertisementEnquiryMessage),
 )
 
+//! Staff advertisement (customer side)
+router.post(
+  '/staff-advertisement-enquiry',
+  publicProtected,
+  catchAsync(appController.submitStaffAdvertisementEnquiry),
+)
+
+router.get(
+  '/staff-advertisement-enquiries',
+  protect,
+  catchAsync(appController.listStaffAdvertisementEnquiries),
+)
+
+router.get(
+  '/staff-advertisement-enquiry/by-salon/:salonDetailId',
+  protect,
+  catchAsync(appController.getStaffAdvertisementEnquiryBySalon),
+)
+
+router.get(
+  '/staff-advertisement-enquiry/:enquiryId/messages',
+  protect,
+  catchAsync(appController.getStaffAdvertisementEnquiryMessages),
+)
+
+router.post(
+  '/staff-advertisement-enquiry/:enquiryId/messages',
+  protect,
+  catchAsync(appController.sendStaffAdvertisementEnquiryMessage),
+)
+
 router.get('/salon-times/:salon', catchAsync(appController.salonTimes))
 router.get('/employee-times/:employee', catchAsync(appController.employeeTimes))
 router.get('/employee-detail/:id', catchAsync(appController.employeeDetails))
