@@ -39,18 +39,32 @@ const BUSINESS_IOS_APP_ID_FULL =
 // Google Play App Signing SHA-256 for production via the *_SHA256 envs.
 const DEFAULT_SHA256 =
   '0C:DD:31:87:1F:9D:78:86:90:CA:A2:7F:34:6A:37:AA:61:79:9F:F2:D0:99:1F:54:41:AB:F6:03:73:84:84:29'
-function fingerprints(extraEnv) {
+// Release signing certs of the installed (non-debug) builds — read from the
+// device. Needed so release/store builds verify App Links (debug fp = flutter run).
+const CUSTOMER_RELEASE_SHA256 =
+  'E7:DC:E4:5C:D0:9F:3F:DD:B4:89:B1:1B:F5:0A:E1:64:B2:DD:5B:73:58:B8:27:2B:92:52:27:FB:AC:BE:66:1D'
+const BUSINESS_RELEASE_SHA256 =
+  '42:C0:FD:1C:EC:3C:D8:97:2F:51:A0:E4:FC:E5:EA:26:70:1A:7A:D2:9A:93:DC:AA:D6:05:5A:42:DF:48:BE:F9'
+function fingerprints(...sources) {
   return [
     ...new Set(
-      `${DEFAULT_SHA256},${extraEnv || ''}`
+      sources
+        .filter(Boolean)
+        .join(',')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
     ),
   ]
 }
-const FINGERPRINTS = fingerprints(process.env.DEEPLINK_ANDROID_SHA256)
+const FINGERPRINTS = fingerprints(
+  DEFAULT_SHA256,
+  CUSTOMER_RELEASE_SHA256,
+  process.env.DEEPLINK_ANDROID_SHA256,
+)
 const BUSINESS_FINGERPRINTS = fingerprints(
+  DEFAULT_SHA256,
+  BUSINESS_RELEASE_SHA256,
   process.env.DEEPLINK_ANDROID_SHA256_BUSINESS,
 )
 
@@ -109,7 +123,9 @@ const AASA = JSON.stringify(
 )
 
 const HTACCESS =
-  '<Files "apple-app-site-association">\n  ForceType application/json\n</Files>\n'
+  '<Files "apple-app-site-association">\n  ForceType application/json\n</Files>\n' +
+  '# Short cache so fingerprint/path changes propagate to the verifier fast.\n' +
+  '<IfModule mod_headers.c>\n  Header set Cache-Control "public, max-age=60"\n</IfModule>\n'
 
 // Candidate apex document roots, most specific first. APEX_DOCROOT can pin it.
 const CANDIDATES = [

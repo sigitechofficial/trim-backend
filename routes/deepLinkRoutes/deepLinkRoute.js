@@ -50,10 +50,21 @@ const BUSINESS_IOS_APPSTORE_ID =
 const DEFAULT_SHA256 =
   '0C:DD:31:87:1F:9D:78:86:90:CA:A2:7F:34:6A:37:AA:61:79:9F:F2:D0:99:1F:54:41:AB:F6:03:73:84:84:29'
 
-function buildFingerprints(extraEnv) {
+// Release signing certs of the installed (non-debug) builds, read from the
+// device via `pm get-app-links`. Required so the release/store apps verify
+// App Links — the debug fp above only covers `flutter run` builds.
+const CUSTOMER_RELEASE_SHA256 =
+  'E7:DC:E4:5C:D0:9F:3F:DD:B4:89:B1:1B:F5:0A:E1:64:B2:DD:5B:73:58:B8:27:2B:92:52:27:FB:AC:BE:66:1D'
+const BUSINESS_RELEASE_SHA256 =
+  '42:C0:FD:1C:EC:3C:D8:97:2F:51:A0:E4:FC:E5:EA:26:70:1A:7A:D2:9A:93:DC:AA:D6:05:5A:42:DF:48:BE:F9'
+
+// Merge any number of comma-separated fingerprint sources, de-duplicated.
+function buildFingerprints(...sources) {
   return [
     ...new Set(
-      `${DEFAULT_SHA256},${extraEnv || ''}`
+      sources
+        .filter(Boolean)
+        .join(',')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
@@ -61,9 +72,13 @@ function buildFingerprints(extraEnv) {
   ]
 }
 const ANDROID_SHA256_FINGERPRINTS = buildFingerprints(
+  DEFAULT_SHA256,
+  CUSTOMER_RELEASE_SHA256,
   process.env.DEEPLINK_ANDROID_SHA256,
 )
 const BUSINESS_SHA256_FINGERPRINTS = buildFingerprints(
+  DEFAULT_SHA256,
+  BUSINESS_RELEASE_SHA256,
   process.env.DEEPLINK_ANDROID_SHA256_BUSINESS,
 )
 
