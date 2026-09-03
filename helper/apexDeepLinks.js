@@ -17,6 +17,7 @@
 const fs = require('fs')
 const path = require('path')
 const { renderBusinessDownloadHtml } = require('./businessDownloadPage')
+const { renderCustomerDownloadHtml } = require('./customerDownloadPage')
 
 // --- App identity (override via env where useful) ---------------------------
 const ANDROID_PACKAGE =
@@ -205,6 +206,14 @@ function publishApexDeepLinkFiles() {
     fs.mkdirSync(bizDir, { recursive: true })
     fs.writeFileSync(path.join(bizDir, 'index.html'), renderBusinessDownloadHtml())
     console.log(`[apexDeepLinks] published business download page to ${bizDir}`)
+
+    // Customer app download page, served at https://trimworldwide.com/get-customer-app
+    // (clean apex host — same URL the in-app Customer QR encodes). Twin of the
+    // business page above.
+    const custDir = path.join(root, 'get-customer-app')
+    fs.mkdirSync(custDir, { recursive: true })
+    fs.writeFileSync(path.join(custDir, 'index.html'), renderCustomerDownloadHtml())
+    console.log(`[apexDeepLinks] published customer download page to ${custDir}`)
 
     // Clean up any previously-written proxy block (reverted — see note above).
     removeRootHtaccessBlock(root)

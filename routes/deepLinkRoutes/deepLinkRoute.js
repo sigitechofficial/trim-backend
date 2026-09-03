@@ -20,6 +20,7 @@ const express = require('express')
 const router = express.Router()
 const db = require('../../models')
 const { renderBusinessDownloadHtml } = require('../../helper/businessDownloadPage')
+const { renderCustomerDownloadHtml } = require('../../helper/customerDownloadPage')
 
 // ─── App identity constants (override via env where useful) ──────────────────
 const ANDROID_PACKAGE =
@@ -326,6 +327,14 @@ router.get('/appointmentDetail', (req, res) => {
 // (helper/apexDeepLinks.js) can serve the identical page from trimworldwide.com.
 router.get('/get-business-app', (req, res) => {
   res.status(200).send(renderBusinessDownloadHtml())
+})
+
+// ─── 7. Customer app download page: /get-customer-app ────────────────────────
+// Twin of /get-business-app for the customer app, encoded in the Customer QR
+// shown in-app (Shop management → Customer App Links). Same look; forwards to
+// the correct store (iOS App Store 6742999519 / Android trim_user Play listing).
+router.get('/get-customer-app', (req, res) => {
+  res.status(200).send(renderCustomerDownloadHtml())
 })
 
 module.exports = router
