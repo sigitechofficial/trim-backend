@@ -215,6 +215,19 @@ function publishApexDeepLinkFiles() {
     fs.writeFileSync(path.join(custDir, 'index.html'), renderCustomerDownloadHtml())
     console.log(`[apexDeepLinks] published customer download page to ${custDir}`)
 
+    // QR PNG used as the customer page's og:image, so a shared link renders a
+    // preview card (QR + caption) in Instagram/Facebook/WhatsApp messaging.
+    // Encodes the same URL the page lives at, so the card's QR is scannable.
+    const QRCode = require('qrcode')
+    QRCode.toFile(
+      path.join(custDir, 'qr.png'),
+      'https://trimworldwide.com/get-customer-app',
+      { width: 600, margin: 2, errorCorrectionLevel: 'H',
+        color: { dark: '#000000', light: '#FFFFFF' } },
+    )
+      .then(() => console.log('[apexDeepLinks] wrote customer QR png'))
+      .catch((e) => console.error('[apexDeepLinks] QR png failed:', e.message))
+
     // Clean up any previously-written proxy block (reverted — see note above).
     removeRootHtaccessBlock(root)
     console.log('[apexDeepLinks] ensured no deep-link proxy block in apex .htaccess')

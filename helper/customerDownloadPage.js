@@ -8,10 +8,30 @@
 
 const { renderBusinessDownloadHtml } = require('./businessDownloadPage')
 
+// og:image (QR) + rich description so a shared LINK renders a preview card
+// (QR + caption) in Instagram/Facebook/WhatsApp messaging — image-file shares
+// can't carry a caption in Meta apps, but link previews can.
+const OG_IMAGE = 'https://trimworldwide.com/get-customer-app/qr.png'
+const OG_DESC =
+  'Book anytime, anywhere — book barbers across the UK with the free Trim app ' +
+  'for iOS & Android. Trim Business: diary, staff, payments & reports for barber ' +
+  'shops. www.trimworldwide.co.uk'
+
 // Order matters: replace the longest/most-specific strings first so shorter
 // substrings (e.g. "Download the Trim Business app") don't clobber them.
 function renderCustomerDownloadHtml() {
   return renderBusinessDownloadHtml()
+    .split('<meta property="og:title" content="Trim for Business" />')
+    .join('<meta property="og:title" content="Trim — book barbers near you" />')
+    .split('<meta property="og:description" content="Manage your shop, bookings and team." />')
+    .join(
+      '<meta property="og:description" content="' + OG_DESC + '" />\n' +
+      '  <meta property="og:image" content="' + OG_IMAGE + '" />\n' +
+      '  <meta property="og:url" content="https://trimworldwide.com/get-customer-app" />\n' +
+      '  <meta property="og:type" content="website" />\n' +
+      '  <meta name="twitter:card" content="summary_large_image" />\n' +
+      '  <meta name="twitter:image" content="' + OG_IMAGE + '" />',
+    )
     .split('Download the Trim Business app to manage your shop, bookings and team.')
     .join('Download the Trim app to find and book barbers and salons near you.')
     .split('Manage your shop, bookings and team.')
