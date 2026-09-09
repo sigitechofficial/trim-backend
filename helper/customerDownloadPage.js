@@ -12,10 +12,14 @@ const { renderBusinessDownloadHtml } = require('./businessDownloadPage')
 // (QR + caption) in Instagram/Facebook/WhatsApp messaging — image-file shares
 // can't carry a caption in Meta apps, but link previews can.
 const OG_IMAGE = 'https://trimworldwide.com/get-customer-app/qr.png'
-// Keep this SHORT and distinct from the app's shared body caption, so the
-// preview card's description line doesn't duplicate the full caption that the
-// app puts in the message body (WhatsApp showed it twice otherwise).
-const OG_DESC = 'Find and book barbers near you with Trim.'
+// Full description shown in the preview card (WhatsApp/Facebook show it in full;
+// Instagram shows a one-line card). The app shares only the link, so this text
+// is never duplicated in the message body. Names the website for the reader;
+// tapping the card opens this page which forwards to the app store.
+const OG_DESC =
+  'Book anytime, anywhere — book barbers across the UK with the free Trim app ' +
+  'for iOS & Android. Trim Business: diary, staff, payments & reports for barber ' +
+  'shops. www.trimworldwide.co.uk'
 
 // Order matters: replace the longest/most-specific strings first so shorter
 // substrings (e.g. "Download the Trim Business app") don't clobber them.
