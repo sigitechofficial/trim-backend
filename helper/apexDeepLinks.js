@@ -222,7 +222,7 @@ function publishApexDeepLinkFiles() {
     QRCode.toFile(
       path.join(custDir, 'qr.png'),
       'https://trimworldwide.com/get-customer-app',
-      { width: 600, margin: 2, errorCorrectionLevel: 'H',
+      { width: 1080, margin: 4, errorCorrectionLevel: 'H',
         color: { dark: '#000000', light: '#FFFFFF' } },
     )
       .then(() => console.log('[apexDeepLinks] wrote customer QR png'))

@@ -31,6 +31,8 @@ function renderCustomerDownloadHtml() {
     .join(
       '<meta property="og:description" content="' + OG_DESC + '" />\n' +
       '  <meta property="og:image" content="' + OG_IMAGE + '" />\n' +
+      '  <meta property="og:image:width" content="1080" />\n' +
+      '  <meta property="og:image:height" content="1080" />\n' +
       '  <meta property="og:url" content="https://trimworldwide.com/get-customer-app" />\n' +
       '  <meta property="og:type" content="website" />\n' +
       '  <meta name="twitter:card" content="summary_large_image" />\n' +
