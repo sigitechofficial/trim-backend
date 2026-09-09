@@ -135,6 +135,22 @@ const CANDIDATES = [
   '/home/trimworldwide/public_html',
 ].filter(Boolean)
 
+// The .co.uk marketing site is a SEPARATE static Apache site. We mirror the
+// customer download page there at /get-app so a shared link's preview card shows
+// the `trimworldwide.co.uk` domain (WhatsApp/Facebook label the card with the
+// shared URL's host, not og:url). COUK_DOCROOT pins it; otherwise try the usual
+// addon-domain roots. If none is writable by this process, we log and skip (the
+// .com page keeps working).
+const COUK_BASE_URL =
+  process.env.COUK_BASE_URL || 'https://www.trimworldwide.co.uk/get-app'
+const COUK_CANDIDATES = [
+  process.env.COUK_DOCROOT,
+  '/home/trimworldwide/trimworldwide.co.uk',
+  '/home/trimworldwide/public_html/trimworldwide.co.uk',
+  '/home/trimworldwide/www.trimworldwide.co.uk',
+  '/home/trimworldwide/public_html/www.trimworldwide.co.uk',
+].filter(Boolean)
+
 function isDir(p) {
   try {
     return fs.existsSync(p) && fs.statSync(p).isDirectory()
@@ -227,6 +243,42 @@ function publishApexDeepLinkFiles() {
     )
       .then(() => console.log('[apexDeepLinks] wrote customer QR png'))
       .catch((e) => console.error('[apexDeepLinks] QR png failed:', e.message))
+
+    // Mirror the customer download page onto the separate .co.uk site at
+    // /get-app, so the shared link's card shows the trimworldwide.co.uk domain
+    // and still forwards to the correct app store. Same OG card + redirect JS.
+    try {
+      const coukRoot = COUK_CANDIDATES.find(isDir)
+      if (!coukRoot) {
+        console.log(
+          `[apexDeepLinks] .co.uk docroot not found; skipping /get-app mirror (candidates: ${COUK_CANDIDATES.join(
+            ', ',
+          )})`,
+        )
+      } else {
+        const getAppDir = path.join(coukRoot, 'get-app')
+        fs.mkdirSync(getAppDir, { recursive: true })
+        fs.writeFileSync(
+          path.join(getAppDir, 'index.html'),
+          renderCustomerDownloadHtml(COUK_BASE_URL),
+        )
+        console.log(
+          `[apexDeepLinks] published .co.uk customer page to ${getAppDir} (base ${COUK_BASE_URL})`,
+        )
+        QRCode.toFile(
+          path.join(getAppDir, 'qr.png'),
+          COUK_BASE_URL,
+          { width: 1080, margin: 4, errorCorrectionLevel: 'H',
+            color: { dark: '#000000', light: '#FFFFFF' } },
+        )
+          .then(() => console.log('[apexDeepLinks] wrote .co.uk customer QR png'))
+          .catch((e) =>
+            console.error('[apexDeepLinks] .co.uk QR png failed:', e.message),
+          )
+      }
+    } catch (e) {
+      console.error('[apexDeepLinks] .co.uk mirror failed:', e.message)
+    }
 
     // Clean up any previously-written proxy block (reverted — see note above).
     removeRootHtaccessBlock(root)
