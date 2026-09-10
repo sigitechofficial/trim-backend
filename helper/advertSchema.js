@@ -73,6 +73,8 @@ async function ensureAdvertSchema(db) {
   for (const modelName of [
     'staffAdvertisementEnquiry',
     'staffAdvertisementEnquiryMessage',
+    // Membership table linking a salon to its clients (CSV import / manual add).
+    'salonClient',
   ]) {
     const model = db[modelName]
     if (!model) {

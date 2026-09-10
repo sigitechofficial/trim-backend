@@ -32,7 +32,8 @@ const {
   clientNotes,
   couponOnBooking,
   couponTimeSlot,
-  subscriptions
+  subscriptions,
+  salonClient,
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')
@@ -1707,7 +1708,18 @@ exports.getSalonCustomer = async (req, res, next) => {
   })
 
 
-  const salonCustomers = await booking.findAll({
+  const customerAttributes = [
+    'id',
+    'firstName',
+    'lastName',
+    'email',
+    'countryCode',
+    'phoneNum',
+    'image',
+  ]
+
+  // 1. Customers derived from bookings (historical behavior).
+  const bookingCustomers = await booking.findAll({
     where: {
       salonDetailId: SalonDetail.id,
       customerId: { [Op.ne]: null },
@@ -1715,23 +1727,162 @@ exports.getSalonCustomer = async (req, res, next) => {
     include: [
       {
         model: user,
-        attributes: [
-          'id',
-          'firstName',
-          'lastName',
-          'email',
-          'countryCode',
-          'phoneNum',
-          'image',
-        ],
+        attributes: customerAttributes,
       },
     ],
     attributes: ['customerId'],
     group: ['customerId'], // Group by customerId to ensure uniqueness
   })
 
+  // 2. Clients linked directly to the salon (CSV import / manual add) — these may
+  //    have no booking yet, so they would otherwise never show in the list.
+  const importedClients = await salonClient.findAll({
+    where: { salonDetailId: SalonDetail.id },
+    include: [
+      {
+        model: user,
+        as: 'customer',
+        attributes: customerAttributes,
+      },
+    ],
+    attributes: ['customerId'],
+  })
+
+  // Merge + dedupe by customerId, keeping the booking-shaped payload the app expects
+  // (each row exposes `customerId` and a nested `user`).
+  const byCustomerId = new Map()
+  for (const row of bookingCustomers) {
+    if (row.customerId == null) continue
+    byCustomerId.set(row.customerId, { customerId: row.customerId, user: row.user })
+  }
+  for (const row of importedClients) {
+    if (row.customerId == null || byCustomerId.has(row.customerId)) continue
+    byCustomerId.set(row.customerId, { customerId: row.customerId, user: row.customer })
+  }
+
+  const salonCustomers = Array.from(byCustomerId.values())
+
   return res.json(
     returnFunction('1', 'Customer added successfully!', { salonCustomers }, ''),
+  )
+}
+/*
+              Bulk import clients (e.g. from a Fresha CSV export)
+      ________________________________________
+  Creates/links each client to the salon so they appear in the Client List,
+  and (when notify=true) emails an announcement to clients who are NOT already
+  registered Trim users.
+*/
+exports.bulkImportClients = async (req, res, next) => {
+  const userId = req.user.id
+  const notify = req.body.notify === true || req.body.notify === 'true'
+  const rawClients = Array.isArray(req.body.clients) ? req.body.clients : []
+
+  const SalonDetail = await salonDetail.findOne({ where: { userId } })
+  if (!SalonDetail) {
+    return res.json(returnFunction('0', 'Salon not found.', {}, ''))
+  }
+
+  // Registered Trim users (should NOT receive the announcement email).
+  const registeredSignedFrom = ['email', 'google', 'apple', 'facebook']
+  const isRegisteredTrimUser = (u) =>
+    !!u &&
+    (registeredSignedFrom.includes(u.signedFrom) ||
+      (u.password && `${u.password}`.trim() !== '') ||
+      u.verifiedAt != null)
+
+  let added = 0
+  let alreadyOnTrim = 0
+  let skippedNoEmail = 0
+  const emailTargets = [] // { email, firstName } for not-on-Trim clients
+
+  for (const row of rawClients) {
+    const email = (row.email || '').trim()
+    const firstName = (row.firstName || '').trim()
+    const lastName = (row.lastName || '').trim()
+    const phoneNum = (row.phoneNum || '').trim()
+    const countryCode = (row.countryCode || '').trim()
+
+    // Rows without an email can't be deduped or emailed, and can't be persisted
+    // meaningfully (mirrors addWalkinCustomer) — skip and report the count.
+    if (!email) {
+      skippedNoEmail += 1
+      continue
+    }
+
+    let customer = await user.findOne({
+      where: { email, deletedAt: { [Op.is]: null } },
+    })
+
+    const registered = isRegisteredTrimUser(customer)
+    if (registered) alreadyOnTrim += 1
+
+    // Create the user if they don't exist yet (walk-in style, unregistered).
+    if (!customer) {
+      const fullName = `${firstName || 'Walkin'} ${lastName || 'Customer'}`
+      const stripeCustomerId = await Stripe.addCustomer(fullName, email)
+      customer = await user.create({
+        email,
+        countryCode: phoneNum ? countryCode : '',
+        phoneNum: phoneNum || '',
+        signedFrom: 'walkin',
+        firstName: firstName || 'Walkin',
+        lastName: lastName || 'Customer',
+        stripeCustomerId,
+        userTypeId: 1,
+      })
+    }
+
+    // Link the client to this salon (idempotent via unique index).
+    const [, created] = await salonClient.findOrCreate({
+      where: { salonDetailId: SalonDetail.id, customerId: customer.id },
+      defaults: {
+        salonDetailId: SalonDetail.id,
+        customerId: customer.id,
+        source: 'import',
+      },
+    })
+    if (created) added += 1
+
+    // Email only the clients who are not already on Trim.
+    if (!registered) {
+      emailTargets.push({ email, firstName: firstName || customer.firstName })
+    }
+  }
+
+  let emailed = 0
+  if (notify && emailTargets.length) {
+    const { default: pLimit } = await import('p-limit')
+    const limit = pLimit(10)
+    const ClientInviteEmail = require('../../helper/ClientInviteEmail')
+
+    const jobs = emailTargets.map((t) =>
+      limit(async () => {
+        await ClientInviteEmail({
+          email: t.email,
+          firstName: t.firstName,
+          salonName: SalonDetail.salonName,
+        })
+        return true
+      }),
+    )
+    const results = await Promise.allSettled(jobs)
+    emailed = results.filter((r) => r.status === 'fulfilled').length
+  }
+
+  return res.json(
+    returnFunction(
+      '1',
+      'Clients imported successfully.',
+      {
+        total: rawClients.length,
+        added,
+        alreadyOnTrim,
+        emailed,
+        skippedNoEmail,
+      },
+      '',
+    ),
   )
 }
 /*
