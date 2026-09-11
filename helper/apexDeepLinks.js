@@ -46,6 +46,14 @@ const CUSTOMER_RELEASE_SHA256 =
   'E7:DC:E4:5C:D0:9F:3F:DD:B4:89:B1:1B:F5:0A:E1:64:B2:DD:5B:73:58:B8:27:2B:92:52:27:FB:AC:BE:66:1D'
 const BUSINESS_RELEASE_SHA256 =
   '42:C0:FD:1C:EC:3C:D8:97:2F:51:A0:E4:FC:E5:EA:26:70:1A:7A:D2:9A:93:DC:AA:D6:05:5A:42:DF:48:BE:F9'
+// Google Play App Signing key for the BUSINESS app (com.sigitechnologies.trim_saloon).
+// Play re-signs store builds with this key, so App Links from the Play Store build
+// only verify if THIS fingerprint is present (the value above is the upload key).
+// Source: Play Console → Protected with Play → Play Store protection → Manage Play
+// app signing → Digital Asset Links JSON. Fixes the employee-invite /LoginScreen link
+// opening Chrome ("Not found") instead of the app on store builds.
+const BUSINESS_PLAY_APP_SIGNING_SHA256 =
+  '4B:A0:52:6D:17:F1:8A:B8:04:BB:95:11:BC:17:6F:46:58:2D:29:9B:E6:D2:0B:17:A0:84:AD:FA:8F:10:FB:BC'
 function fingerprints(...sources) {
   return [
     ...new Set(
@@ -66,6 +74,7 @@ const FINGERPRINTS = fingerprints(
 const BUSINESS_FINGERPRINTS = fingerprints(
   DEFAULT_SHA256,
   BUSINESS_RELEASE_SHA256,
+  BUSINESS_PLAY_APP_SIGNING_SHA256,
   process.env.DEEPLINK_ANDROID_SHA256_BUSINESS,
 )
 
