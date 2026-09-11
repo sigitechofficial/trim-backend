@@ -202,6 +202,52 @@ function removeRootHtaccessBlock(root) {
   }
 }
 
+// Generic "open the app" fallback page for Business App Link paths (/LoginScreen,
+// /BookingDetailScreen, ...). Android email clients (Gmail) open links in an in-app
+// browser / Custom Tab that does NOT fire verified App Links, so an email button
+// lands on this page instead of the app. The page uses an Android `intent://` URL —
+// which the in-app browser hands off to the system — to open the app by package
+// (preserving the path + query so the app routes to the right screen), falling back
+// to the Play Store only if the app isn't installed. iOS opens Universal Links from
+// Mail directly; if this page still loads there, it offers the App Store.
+const BUSINESS_ANDROID_PKG = 'com.sigitechnologies.trim_saloon'
+const BUSINESS_IOS_STORE = 'https://apps.apple.com/app/id6742323827'
+const BUSINESS_PLAY_STORE =
+  'https://play.google.com/store/apps/details?id=com.sigitechnologies.trim_saloon'
+function renderBusinessAppOpenPage() {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Trim Business…</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#111;text-align:center;padding:56px 24px}a{display:inline-block;margin:8px 6px;color:#1c1c1c;font-weight:600}h1{font-size:1.4rem;margin:12px 0}</style>
+</head><body>
+<h1>Opening the Trim Business app…</h1>
+<p>If it doesn't open automatically, use a button below.</p>
+<p>
+  <a href="${BUSINESS_PLAY_STORE}">Get it on Google Play</a>
+  <a href="${BUSINESS_IOS_STORE}">Download on the App Store</a>
+</p>
+<script>
+(function(){
+  var ua = navigator.userAgent || "";
+  var isAndroid = /android/i.test(ua);
+  var isIOS = /iphone|ipad|ipod/i.test(ua);
+  var path = location.pathname || "/";
+  if (path.length > 1 && path.charAt(path.length - 1) === "/") path = path.slice(0, -1);
+  var search = location.search || "";
+  if (isAndroid) {
+    var intent = "intent://trimworldwide.com" + path + search +
+      "#Intent;scheme=https;package=${BUSINESS_ANDROID_PKG};" +
+      "S.browser_fallback_url=" + encodeURIComponent("${BUSINESS_PLAY_STORE}") + ";end";
+    window.location.href = intent;
+  } else if (isIOS) {
+    setTimeout(function(){ window.location.href = "${BUSINESS_IOS_STORE}"; }, 1500);
+  }
+})();
+</script>
+</body></html>`
+}
+
 function publishApexDeepLinkFiles() {
   if (process.env.PUBLISH_APEX_DEEPLINKS === 'false') return
   try {
@@ -232,18 +278,19 @@ function publishApexDeepLinkFiles() {
     fs.writeFileSync(path.join(bizDir, 'index.html'), renderBusinessDownloadHtml())
     console.log(`[apexDeepLinks] published business download page to ${bizDir}`)
 
-    // Fallback web page for the employee-invite App Link (/LoginScreen). The invite
-    // email's "Accept invite" button points at https://trimworldwide.com/LoginScreen,
-    // an Android App Link / iOS Universal Link that should open the Trim Business app.
-    // When the OS can't open the app (App Links unverified for a Play-signed store
-    // build, or app not installed), the browser loads this URL — without a page here
-    // it 404s ("Not found"). Serve the branded Business download/open page so the
-    // fallback is graceful (Open / download Trim Business + store buttons). Published
-    // as a directory with index.html so Apache serves /LoginScreen with no rewrite.
-    const loginDir = path.join(root, 'LoginScreen')
-    fs.mkdirSync(loginDir, { recursive: true })
-    fs.writeFileSync(path.join(loginDir, 'index.html'), renderBusinessDownloadHtml())
-    console.log(`[apexDeepLinks] published /LoginScreen invite fallback page to ${loginDir}`)
+    // Business App Link fallback pages (/LoginScreen = invite; /BookingDetailScreen =
+    // booking email). Email clients on Android (Gmail) open these links in an in-app
+    // browser that does NOT fire verified App Links, so they land on the web page
+    // instead of the app. The opener page uses an Android `intent://` to open the app
+    // by package (preserving the path + ?id=), falling back to the store if not
+    // installed. Published as directories with index.html so Apache serves them with
+    // no rewrite; the page's JS reads its own path+query, so one template fits both.
+    for (const p of ['LoginScreen', 'BookingDetailScreen']) {
+      const dir = path.join(root, p)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'index.html'), renderBusinessAppOpenPage())
+      console.log(`[apexDeepLinks] published /${p} app-open fallback page to ${dir}`)
+    }
 
     // Customer app download page, served at https://trimworldwide.com/get-customer-app
     // (clean apex host — same URL the in-app Customer QR encodes). Twin of the
