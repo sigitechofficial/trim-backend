@@ -223,6 +223,19 @@ function publishApexDeepLinkFiles() {
     fs.writeFileSync(path.join(bizDir, 'index.html'), renderBusinessDownloadHtml())
     console.log(`[apexDeepLinks] published business download page to ${bizDir}`)
 
+    // Fallback web page for the employee-invite App Link (/LoginScreen). The invite
+    // email's "Accept invite" button points at https://trimworldwide.com/LoginScreen,
+    // an Android App Link / iOS Universal Link that should open the Trim Business app.
+    // When the OS can't open the app (App Links unverified for a Play-signed store
+    // build, or app not installed), the browser loads this URL — without a page here
+    // it 404s ("Not found"). Serve the branded Business download/open page so the
+    // fallback is graceful (Open / download Trim Business + store buttons). Published
+    // as a directory with index.html so Apache serves /LoginScreen with no rewrite.
+    const loginDir = path.join(root, 'LoginScreen')
+    fs.mkdirSync(loginDir, { recursive: true })
+    fs.writeFileSync(path.join(loginDir, 'index.html'), renderBusinessDownloadHtml())
+    console.log(`[apexDeepLinks] published /LoginScreen invite fallback page to ${loginDir}`)
+
     // Customer app download page, served at https://trimworldwide.com/get-customer-app
     // (clean apex host — same URL the in-app Customer QR encodes). Twin of the
     // business page above.
