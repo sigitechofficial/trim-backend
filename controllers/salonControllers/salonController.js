@@ -46,6 +46,8 @@ const {
   zones,
   rentChairAdvertisementEnquiry,
   rentChairAdvertisementEnquiryMessage,
+  staffAdvertisementEnquiry,
+  staffAdvertisementEnquiryMessage,
 } = require('../../models')
 const {
   formatEnquiryResponse,
@@ -55,6 +57,11 @@ const {
   getLatestMessagesByEnquiryIds,
   dedupeSalonEnquiryRows,
 } = require('../../utils/rentChairEnquiryHelper')
+const {
+  MESSAGE_ATTRIBUTES: STAFF_MESSAGE_ATTRIBUTES,
+  formatStaffEnquiryForSalon,
+  getLatestMessagesByEnquiryIds: getStaffLatestMessagesByEnquiryIds,
+} = require('../../utils/staffAdvertisementEnquiryHelper')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
@@ -3672,6 +3679,8 @@ exports.getRentChairAdvertisementStatus = async (req, res, next) => {
     attributes: [
       'rentChairAdvertisementChairCount',
       'rentChairAdvertisementStatus',
+      'rentChairAdvertisementRentType',
+      'rentChairAdvertisementRentAmount',
     ],
   })
 
@@ -3686,13 +3695,24 @@ exports.getRentChairAdvertisementStatus = async (req, res, next) => {
       rentChairAdvertisementChairCount:
         salon.rentChairAdvertisementChairCount ?? 0,
       rentChairAdvertisementStatus: salon.rentChairAdvertisementStatus ? 1 : 0,
+      rentChairAdvertisementRentType:
+        salon.rentChairAdvertisementRentType ?? null,
+      rentChairAdvertisementRentAmount:
+        salon.rentChairAdvertisementRentAmount === null ||
+        salon.rentChairAdvertisementRentAmount === undefined
+          ? null
+          : Number(salon.rentChairAdvertisementRentAmount),
     }, ''),
   )
 }
 
 exports.updateRentChairAdvertisement = async (req, res, next) => {
-  const { rentChairAdvertisementChairCount, rentChairAdvertisementStatus } =
-    req.body
+  const {
+    rentChairAdvertisementChairCount,
+    rentChairAdvertisementStatus,
+    rentChairAdvertisementRentType,
+    rentChairAdvertisementRentAmount,
+  } = req.body
 
   if (
     rentChairAdvertisementChairCount === undefined ||
@@ -3754,6 +3774,41 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
     )
   }
 
+  // Rent (optional): owner picks EITHER 'daily' or 'weekly' plus one amount.
+  // Empty / null type clears both. If a type is given, amount must be >= 0.
+  let normalizedRentType = null
+  let normalizedRentAmount = null
+  if (
+    rentChairAdvertisementRentType !== undefined &&
+    rentChairAdvertisementRentType !== null &&
+    String(rentChairAdvertisementRentType).trim() !== ''
+  ) {
+    const rentType = String(rentChairAdvertisementRentType).trim().toLowerCase()
+    if (rentType !== 'daily' && rentType !== 'weekly') {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          "rentChairAdvertisementRentType must be 'daily', 'weekly', or empty",
+          {},
+          '',
+        ),
+      )
+    }
+    const rentAmount = Number(rentChairAdvertisementRentAmount)
+    if (!Number.isFinite(rentAmount) || rentAmount < 0) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'rentChairAdvertisementRentAmount must be a number >= 0 when a rent type is set',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedRentType = rentType
+    normalizedRentAmount = rentAmount
+  }
+
   const salon = await salonDetail.findOne({
     where: { userId: req.user.id },
     attributes: ['id'],
@@ -3769,6 +3824,8 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
     {
       rentChairAdvertisementChairCount: chairCount,
       rentChairAdvertisementStatus: normalizedStatus === 1,
+      rentChairAdvertisementRentType: normalizedRentType,
+      rentChairAdvertisementRentAmount: normalizedRentAmount,
     },
     { where: { userId: req.user.id } },
   )
@@ -3777,6 +3834,8 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
     returnFunction('1', 'Success', {
       rentChairAdvertisementChairCount: chairCount,
       rentChairAdvertisementStatus: normalizedStatus,
+      rentChairAdvertisementRentType: normalizedRentType,
+      rentChairAdvertisementRentAmount: normalizedRentAmount,
     }, ''),
   )
 }
@@ -4099,6 +4158,413 @@ exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
     },
     {
       type: 'rentChairAdvertisementEnquiryMessage',
+      enquiryId: String(enquiry.id),
+      messageId: String(createdMessage.id),
+      salonDetailId: String(enquiry.salonDetailId),
+    },
+    enquiry.customerUserId,
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Message sent successfully', { message: createdMessage }, ''),
+  )
+}
+
+// ─── Staff advertisement (owner side) ────────────────────────────────────────
+// Same shape as the rent-a-chair advert (on/off + count), but no rent. Backed by
+// the staffAdvertisement* columns and the staffAdvertisementEnquiry* tables.
+
+exports.getStaffAdvertisementStatus = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: [
+      'staffAdvertisementCount',
+      'staffAdvertisementStatus',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
+    ],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', {
+      staffAdvertisementCount: salon.staffAdvertisementCount ?? 0,
+      staffAdvertisementStatus: salon.staffAdvertisementStatus ? 1 : 0,
+      staffAdvertisementWagesType: salon.staffAdvertisementWagesType ?? null,
+      staffAdvertisementWagesAmount:
+        salon.staffAdvertisementWagesAmount === null ||
+        salon.staffAdvertisementWagesAmount === undefined
+          ? null
+          : Number(salon.staffAdvertisementWagesAmount),
+      staffAdvertisementWagesCycle: salon.staffAdvertisementWagesCycle ?? null,
+    }, ''),
+  )
+}
+
+exports.updateStaffAdvertisement = async (req, res, next) => {
+  const {
+    staffAdvertisementCount,
+    staffAdvertisementStatus,
+    staffAdvertisementWagesType,
+    staffAdvertisementWagesAmount,
+    staffAdvertisementWagesCycle,
+  } = req.body
+
+  if (
+    staffAdvertisementCount === undefined ||
+    staffAdvertisementStatus === undefined
+  ) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'staffAdvertisementCount and staffAdvertisementStatus are required',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const count = Number(staffAdvertisementCount)
+  if (!Number.isInteger(count) || count < 0 || count > 99) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'staffAdvertisementCount must be an integer between 0 and 99',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const statusType = typeof staffAdvertisementStatus
+  let normalizedStatus
+  if (statusType === 'boolean') {
+    normalizedStatus = staffAdvertisementStatus ? 1 : 0
+  } else if (statusType === 'number') {
+    if (staffAdvertisementStatus !== 0 && staffAdvertisementStatus !== 1) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'staffAdvertisementStatus must be 0, 1, true, or false',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedStatus = staffAdvertisementStatus
+  } else {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'staffAdvertisementStatus must be 0, 1, true, or false',
+        {},
+        '',
+      ),
+    )
+  }
+
+  // Wages (optional): owner picks 'salary' or 'commission' + one amount.
+  // Empty / null type clears both. Commission amount is a percentage (<= 100).
+  let normalizedWagesType = null
+  let normalizedWagesAmount = null
+  if (
+    staffAdvertisementWagesType !== undefined &&
+    staffAdvertisementWagesType !== null &&
+    String(staffAdvertisementWagesType).trim() !== ''
+  ) {
+    const wagesType = String(staffAdvertisementWagesType).trim().toLowerCase()
+    if (wagesType !== 'salary' && wagesType !== 'commission') {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          "staffAdvertisementWagesType must be 'salary', 'commission', or empty",
+          {},
+          '',
+        ),
+      )
+    }
+    const wagesAmount = Number(staffAdvertisementWagesAmount)
+    if (!Number.isFinite(wagesAmount) || wagesAmount < 0) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'staffAdvertisementWagesAmount must be a number >= 0 when a wages type is set',
+          {},
+          '',
+        ),
+      )
+    }
+    if (wagesType === 'commission' && wagesAmount > 100) {
+      return res.status(200).json(
+        returnFunction(
+          '0',
+          'Commission amount must be a percentage between 0 and 100',
+          {},
+          '',
+        ),
+      )
+    }
+    normalizedWagesType = wagesType
+    normalizedWagesAmount = wagesAmount
+  }
+
+  // Salary pay frequency (only meaningful for salary). Commission → null.
+  let normalizedWagesCycle = null
+  if (
+    normalizedWagesType === 'salary' &&
+    staffAdvertisementWagesCycle !== undefined &&
+    staffAdvertisementWagesCycle !== null &&
+    String(staffAdvertisementWagesCycle).trim() !== ''
+  ) {
+    normalizedWagesCycle = String(staffAdvertisementWagesCycle).trim()
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  await salonDetail.update(
+    {
+      staffAdvertisementCount: count,
+      staffAdvertisementStatus: normalizedStatus === 1,
+      staffAdvertisementWagesType: normalizedWagesType,
+      staffAdvertisementWagesAmount: normalizedWagesAmount,
+      staffAdvertisementWagesCycle: normalizedWagesCycle,
+    },
+    { where: { userId: req.user.id } },
+  )
+
+  return res.status(200).json(
+    returnFunction('1', 'Success', {
+      staffAdvertisementCount: count,
+      staffAdvertisementStatus: normalizedStatus,
+      staffAdvertisementWagesType: normalizedWagesType,
+      staffAdvertisementWagesAmount: normalizedWagesAmount,
+      staffAdvertisementWagesCycle: normalizedWagesCycle,
+    }, ''),
+  )
+}
+
+exports.listStaffAdvertisementEnquiries = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiries = await staffAdvertisementEnquiry.findAll({
+    where: { salonDetailId: salon.id },
+    order: [['updatedAt', 'DESC']],
+  })
+
+  const latestMap = await getStaffLatestMessagesByEnquiryIds(
+    enquiries.map((enquiry) => enquiry.id),
+  )
+
+  const formattedEnquiries = enquiries.map((enquiry) =>
+    formatStaffEnquiryForSalon(enquiry, latestMap.get(enquiry.id)),
+  )
+
+  const enquiriesList = dedupeSalonEnquiryRows(formattedEnquiries)
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiries: enquiriesList }, ''),
+  )
+}
+
+exports.getStaffAdvertisementEnquiryDetail = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'customerUserId',
+      'firstName',
+      'lastName',
+      'email',
+      'phoneNumber',
+      'currentLocation',
+      'yearsExperience',
+      'socialMedia',
+      'preferredWorkingDays',
+      'notes',
+      'status',
+      'createdAt',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { enquiry: formatEnquiryResponse(enquiry) }, ''),
+  )
+}
+
+exports.getStaffAdvertisementEnquiryMessages = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: ['id'],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  const messages = await staffAdvertisementEnquiryMessage.findAll({
+    where: { staffAdvertisementEnquiryId: enquiry.id },
+    attributes: STAFF_MESSAGE_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+  })
+
+  return res.status(200).json(
+    returnFunction('1', 'success', { messages }, ''),
+  )
+}
+
+exports.sendStaffAdvertisementEnquiryMessage = async (req, res, next) => {
+  const salon = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id', 'userId', 'salonName'],
+  })
+
+  if (!salon) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Shop not found', {}, ''))
+  }
+
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      salonDetailId: salon.id,
+    },
+    attributes: [
+      'id',
+      'salonDetailId',
+      'customerUserId',
+      'firstName',
+      'lastName',
+    ],
+  })
+
+  if (!enquiry) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'Enquiry not found', {}, ''))
+  }
+
+  if (!enquiry.customerUserId) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'This enquiry was submitted by a guest. Please contact them using their email or phone number.',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const permission = await canSalonReplyToEnquiry(req, salon)
+  if (!permission.allowed) {
+    return res.status(200).json(
+      returnFunction(
+        '0',
+        'You do not have permission to respond to enquiries',
+        {},
+        '',
+      ),
+    )
+  }
+
+  const trimmedMessage =
+    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+
+  if (!trimmedMessage) {
+    return res
+      .status(200)
+      .json(returnFunction('0', 'message is required', {}, ''))
+  }
+
+  if (trimmedMessage.length > 2000) {
+    return res.status(200).json(
+      returnFunction('0', 'message must be at most 2000 characters', {}, ''),
+    )
+  }
+
+  const createdMessage = await staffAdvertisementEnquiryMessage.create({
+    staffAdvertisementEnquiryId: enquiry.id,
+    senderRole: 'salon',
+    senderUserId: permission.actingUserId,
+    message: trimmedMessage,
+  })
+
+  const customerTokens = await deviceToken.findAll({
+    where: { userId: enquiry.customerUserId },
+    attributes: ['tokenId'],
+  })
+
+  const tokens = customerTokens.map((row) => row.tokenId).filter(Boolean)
+
+  await ThrowNotification(
+    tokens,
+    {
+      title: 'Staff enquiry reply',
+      body: `${salon.salonName || 'Shop'} replied to your staff enquiry.`,
+    },
+    {
+      type: 'staffAdvertisementEnquiryMessage',
       enquiryId: String(enquiry.id),
       messageId: String(createdMessage.id),
       salonDetailId: String(enquiry.salonDetailId),

@@ -49,6 +49,8 @@ const {
   helpSupport,
   rentChairAdvertisementEnquiry,
   rentChairAdvertisementEnquiryMessage,
+  staffAdvertisementEnquiry,
+  staffAdvertisementEnquiryMessage,
 } = require('../../models')
 const {
   parsePreferredWorkingDays,
@@ -56,6 +58,11 @@ const {
   formatRentChairEnquiryForCustomer,
   getLatestMessagesByEnquiryIds,
 } = require('../../utils/rentChairEnquiryHelper')
+const {
+  MESSAGE_ATTRIBUTES: STAFF_MESSAGE_ATTRIBUTES,
+  formatStaffEnquiryForCustomer,
+  getLatestMessagesByEnquiryIds: getStaffLatestMessagesByEnquiryIds,
+} = require('../../utils/staffAdvertisementEnquiryHelper')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
 const Custom = require('../../utils/customFunctions')
@@ -1184,6 +1191,15 @@ exports.searchSalons = async (req, res, next) => {
       (typeof rentChairRaw === 'string' &&
         rentChairRaw.trim().toLowerCase() === 'true')
 
+    // Staff advert tab: true / "true" / 1 / "1"
+    const staffAdvertRaw = req.body?.staffAdvertisement
+    const staffAdvertisement =
+      staffAdvertRaw === true ||
+      staffAdvertRaw === 1 ||
+      staffAdvertRaw === '1' ||
+      (typeof staffAdvertRaw === 'string' &&
+        staffAdvertRaw.trim().toLowerCase() === 'true')
+
     const baseSalonFilter = {
       [Op.or]: [
         {
@@ -1218,6 +1234,14 @@ exports.searchSalons = async (req, res, next) => {
       andFragments.push({
         rentChairAdvertisementStatus: true,
         rentChairAdvertisementChairCount: { [Op.gt]: 0 },
+      })
+    }
+
+    // Staff advert search: active ads with at least one position
+    if (staffAdvertisement) {
+      andFragments.push({
+        staffAdvertisementStatus: true,
+        staffAdvertisementCount: { [Op.gt]: 0 },
       })
     }
 
@@ -1405,6 +1429,13 @@ exports.searchSalons = async (req, res, next) => {
       'isOnline',
       'rentChairAdvertisementStatus',
       'rentChairAdvertisementChairCount',
+      'rentChairAdvertisementRentType',
+      'rentChairAdvertisementRentAmount',
+      'staffAdvertisementStatus',
+      'staffAdvertisementCount',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1423,9 +1454,10 @@ exports.searchSalons = async (req, res, next) => {
       ],
     ]
 
-    // Normal search keeps services required; rental chair mode must not hide
-    // shops that advertise chairs but have no matching service rows.
-    const serviceIncludeRequired = !rentChairAdvertisement
+    // Normal search keeps services required; rental-chair / staff-advert modes
+    // must not hide shops that advertise but have no matching service rows.
+    const advertisementMode = rentChairAdvertisement || staffAdvertisement
+    const serviceIncludeRequired = !advertisementMode
 
     const queryBody = {
       where: finalWhere,
@@ -1452,7 +1484,7 @@ exports.searchSalons = async (req, res, next) => {
           model: service,
           required: serviceIncludeRequired,
           // separate query avoids JOIN+LIMIT subquery stripping salon attributes
-          separate: rentChairAdvertisement,
+          separate: advertisementMode,
           attributes: ['id', 'serviceName', 'price', 'discount'],
         },
         {
@@ -1513,6 +1545,68 @@ exports.searchSalons = async (req, res, next) => {
       plain.rentChairAdvertisementStatus =
         rawStatus === true || rawStatus === 1 || rawStatus === '1'
       plain.rentChairAdvertisementChairCount = Number(rawCount ?? 0)
+
+      // Rent (daily/weekly) — emit normalized values for Flutter
+      const rawRentType =
+        (typeof row.get === 'function'
+          ? row.get('rentChairAdvertisementRentType')
+          : undefined) ??
+        row.dataValues?.rentChairAdvertisementRentType ??
+        plain.rentChairAdvertisementRentType
+      const rawRentAmount =
+        (typeof row.get === 'function'
+          ? row.get('rentChairAdvertisementRentAmount')
+          : undefined) ??
+        row.dataValues?.rentChairAdvertisementRentAmount ??
+        plain.rentChairAdvertisementRentAmount
+      plain.rentChairAdvertisementRentType = rawRentType || null
+      plain.rentChairAdvertisementRentAmount =
+        rawRentAmount === null || rawRentAmount === undefined
+          ? null
+          : Number(rawRentAmount)
+
+      // Staff advert
+      const rawStaffStatus =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementStatus')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementStatus ??
+        plain.staffAdvertisementStatus
+      const rawStaffCount =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementCount')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementCount ??
+        plain.staffAdvertisementCount
+      plain.staffAdvertisementStatus =
+        rawStaffStatus === true || rawStaffStatus === 1 || rawStaffStatus === '1'
+      plain.staffAdvertisementCount = Number(rawStaffCount ?? 0)
+
+      // Staff advert wages
+      const rawWagesType =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesType')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesType ??
+        plain.staffAdvertisementWagesType
+      const rawWagesAmount =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesAmount')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesAmount ??
+        plain.staffAdvertisementWagesAmount
+      plain.staffAdvertisementWagesType = rawWagesType || null
+      plain.staffAdvertisementWagesAmount =
+        rawWagesAmount === null || rawWagesAmount === undefined
+          ? null
+          : Number(rawWagesAmount)
+      const rawWagesCycle =
+        (typeof row.get === 'function'
+          ? row.get('staffAdvertisementWagesCycle')
+          : undefined) ??
+        row.dataValues?.staffAdvertisementWagesCycle ??
+        plain.staffAdvertisementWagesCycle
+      plain.staffAdvertisementWagesCycle = rawWagesCycle || null
       return plain
     })
 
@@ -1569,6 +1663,13 @@ exports.salonDetails = async (req, res, next) => {
       'platformFee',
       'rentChairAdvertisementChairCount',
       'rentChairAdvertisementStatus',
+      'rentChairAdvertisementRentType',
+      'rentChairAdvertisementRentAmount',
+      'staffAdvertisementCount',
+      'staffAdvertisementStatus',
+      'staffAdvertisementWagesType',
+      'staffAdvertisementWagesAmount',
+      'staffAdvertisementWagesCycle',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
@@ -2296,6 +2397,549 @@ exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
       },
       {
         type: 'rentChairAdvertisementEnquiryMessage',
+        enquiryId: String(enquiry.id),
+        messageId: String(createdMessage.id),
+        salonDetailId: String(enquiry.salonDetailId),
+      },
+      salon.userId,
+    )
+  }
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'Message sent successfully',
+      data: { message: createdMessage },
+    }),
+  )
+}
+
+// ─── Staff advertisement (customer side) ─────────────────────────────────────
+// Mirror of the rent-a-chair enquiry flow, gated on the staffAdvertisement*
+// fields. Same enquiry form fields; no rent involved.
+
+exports.submitStaffAdvertisementEnquiry = async (req, res, next) => {
+  const {
+    salonDetailId,
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    currentLocation,
+    yearsExperience,
+    socialMedia,
+    preferredWorkingDays,
+    notes,
+  } = req.body
+
+  const salonId = Number(salonDetailId)
+  if (!Number.isInteger(salonId) || salonId <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'salonDetailId is required and must be a valid integer',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const trimmedFirstName =
+    typeof firstName === 'string' ? firstName.trim() : ''
+  const trimmedLastName = typeof lastName === 'string' ? lastName.trim() : ''
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedPhone =
+    typeof phoneNumber === 'string' ? phoneNumber.trim() : ''
+  const trimmedLocation =
+    typeof currentLocation === 'string' ? currentLocation.trim() : ''
+  const trimmedSocialMedia =
+    socialMedia === undefined || socialMedia === null
+      ? ''
+      : typeof socialMedia === 'string'
+        ? socialMedia.trim()
+        : null
+  const trimmedNotes =
+    notes === undefined || notes === null
+      ? ''
+      : typeof notes === 'string'
+        ? notes.trim()
+        : null
+
+  if (!trimmedFirstName || trimmedFirstName.length > 100) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'firstName is required and must be at most 100 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedLastName || trimmedLastName.length > 100) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'lastName is required and must be at most 100 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedEmail || trimmedEmail.length > 255 || !EMAIL_REGEX.test(trimmedEmail)) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'A valid email is required and must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedPhone || trimmedPhone.length > 72) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'phoneNumber is required and must be at most 72 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!trimmedLocation || trimmedLocation.length > 255) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'currentLocation is required and must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const parsedYearsExperience = Number(yearsExperience)
+  if (
+    yearsExperience === undefined ||
+    yearsExperience === null ||
+    yearsExperience === '' ||
+    !Number.isInteger(parsedYearsExperience) ||
+    parsedYearsExperience < 0
+  ) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'yearsExperience is required and must be an integer >= 0',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedSocialMedia === null) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'socialMedia must be a string when provided',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedSocialMedia.length > 255) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'socialMedia must be at most 255 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const preferredDaysResult = parsePreferredWorkingDays(preferredWorkingDays)
+  if (preferredDaysResult.error) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: preferredDaysResult.error,
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedNotes === null) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'notes must be a string when provided',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedNotes.length > 2000) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'notes must be at most 2000 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const salon = await salonDetail.findOne({
+    where: { id: salonId },
+    attributes: [
+      'id',
+      'salonName',
+      'userId',
+      'staffAdvertisementStatus',
+      'staffAdvertisementCount',
+    ],
+    include: {
+      model: user,
+      attributes: ['id'],
+      include: { model: deviceToken, attributes: ['tokenId'] },
+    },
+  })
+
+  if (!salon) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Shop not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (!salon.staffAdvertisementStatus) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'This shop is not accepting staff enquiries',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if ((salon.staffAdvertisementCount ?? 0) <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'This shop is not hiring staff',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const customerUserId = req.user?.id ?? null
+  const storedPreferredWorkingDays = JSON.stringify(preferredDaysResult.days)
+
+  if (customerUserId) {
+    const existingEnquiry = await staffAdvertisementEnquiry.findOne({
+      where: {
+        customerUserId,
+        salonDetailId: salon.id,
+      },
+      include: [
+        {
+          model: salonDetail,
+          attributes: ['id', 'salonName', 'coverImage'],
+        },
+      ],
+    })
+
+    if (existingEnquiry) {
+      const latestMap = await getStaffLatestMessagesByEnquiryIds([
+        existingEnquiry.id,
+      ])
+
+      return res.status(200).json(
+        response({
+          status: '1',
+          message: 'You already have an enquiry with this shop.',
+          data: {
+            enquiryId: existingEnquiry.id,
+            alreadyExists: true,
+            enquiry: formatStaffEnquiryForCustomer(
+              existingEnquiry,
+              latestMap.get(existingEnquiry.id),
+            ),
+          },
+        }),
+      )
+    }
+  }
+
+  const enquiry = await staffAdvertisementEnquiry.create({
+    salonDetailId: salon.id,
+    customerUserId,
+    firstName: trimmedFirstName,
+    lastName: trimmedLastName,
+    email: trimmedEmail,
+    phoneNumber: trimmedPhone,
+    currentLocation: trimmedLocation,
+    yearsExperience: parsedYearsExperience,
+    socialMedia: trimmedSocialMedia || null,
+    preferredWorkingDays: storedPreferredWorkingDays,
+    notes: trimmedNotes || null,
+    status: 0,
+  })
+
+  const ownerTokens =
+    salon.user?.deviceTokens
+      ?.map((token) => token?.tokenId)
+      .filter(Boolean) ?? []
+
+  const notificationData = {
+    enquiryId: String(enquiry.id),
+    salonDetailId: String(salon.id),
+    type: 'staffAdvertisementEnquiry',
+    firstName: trimmedFirstName,
+    lastName: trimmedLastName,
+    email: trimmedEmail,
+    phoneNumber: trimmedPhone,
+    currentLocation: trimmedLocation,
+    yearsExperience: String(parsedYearsExperience),
+    socialMedia: trimmedSocialMedia || '',
+    preferredWorkingDays: storedPreferredWorkingDays,
+    notes: trimmedNotes || '',
+    customerUserId: customerUserId ? String(customerUserId) : '',
+    canReplyInApp: customerUserId ? 'true' : 'false',
+  }
+
+  await ThrowNotification(
+    ownerTokens,
+    {
+      title: 'Staff enquiry',
+      body: `${trimmedFirstName} ${trimmedLastName} sent a staff enquiry.`,
+    },
+    notificationData,
+    salon.userId,
+  )
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'Enquiry sent successfully',
+      data: { enquiryId: enquiry.id, alreadyExists: false },
+    }),
+  )
+}
+
+exports.listStaffAdvertisementEnquiries = async (req, res, next) => {
+  const enquiries = await staffAdvertisementEnquiry.findAll({
+    where: { customerUserId: req.user.id },
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'salonName', 'coverImage'],
+      },
+    ],
+  })
+
+  const latestMap = await getStaffLatestMessagesByEnquiryIds(
+    enquiries.map((enquiry) => enquiry.id),
+  )
+
+  const formattedEnquiries = enquiries
+    .map((enquiry) =>
+      formatStaffEnquiryForCustomer(enquiry, latestMap.get(enquiry.id)),
+    )
+    .sort((a, b) => {
+      const aTime = new Date(
+        a.latestMessageAt || a.updatedAt || a.createdAt,
+      ).getTime()
+      const bTime = new Date(
+        b.latestMessageAt || b.updatedAt || b.createdAt,
+      ).getTime()
+      return bTime - aTime
+    })
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: { enquiries: formattedEnquiries },
+    }),
+  )
+}
+
+exports.getStaffAdvertisementEnquiryBySalon = async (req, res, next) => {
+  const salonId = Number(req.params.salonDetailId)
+
+  if (!Number.isInteger(salonId) || salonId <= 0) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'salonDetailId must be a valid integer',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      customerUserId: req.user.id,
+      salonDetailId: salonId,
+    },
+    include: [
+      {
+        model: salonDetail,
+        attributes: ['id', 'salonName', 'coverImage'],
+      },
+    ],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '1',
+        message: 'success',
+        data: { exists: false, enquiry: null },
+      }),
+    )
+  }
+
+  const latestMap = await getStaffLatestMessagesByEnquiryIds([enquiry.id])
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: {
+        exists: true,
+        enquiry: formatStaffEnquiryForCustomer(
+          enquiry,
+          latestMap.get(enquiry.id),
+        ),
+      },
+    }),
+  )
+}
+
+exports.getStaffAdvertisementEnquiryMessages = async (req, res, next) => {
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      customerUserId: req.user.id,
+    },
+    attributes: ['id'],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Enquiry not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const messages = await staffAdvertisementEnquiryMessage.findAll({
+    where: { staffAdvertisementEnquiryId: enquiry.id },
+    attributes: STAFF_MESSAGE_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+  })
+
+  return res.status(200).json(
+    response({
+      status: '1',
+      message: 'success',
+      data: { messages },
+    }),
+  )
+}
+
+exports.sendStaffAdvertisementEnquiryMessage = async (req, res, next) => {
+  const enquiry = await staffAdvertisementEnquiry.findOne({
+    where: {
+      id: req.params.enquiryId,
+      customerUserId: req.user.id,
+    },
+    attributes: ['id', 'salonDetailId', 'firstName', 'lastName'],
+  })
+
+  if (!enquiry) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'Enquiry not found',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const trimmedMessage =
+    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+
+  if (!trimmedMessage) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'message is required',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  if (trimmedMessage.length > 2000) {
+    return res.status(200).json(
+      response({
+        status: '0',
+        message: 'message must be at most 2000 characters',
+        data: {},
+        error: '',
+      }),
+    )
+  }
+
+  const createdMessage = await staffAdvertisementEnquiryMessage.create({
+    staffAdvertisementEnquiryId: enquiry.id,
+    senderRole: 'customer',
+    senderUserId: req.user.id,
+    message: trimmedMessage,
+  })
+
+  const salon = await salonDetail.findOne({
+    where: { id: enquiry.salonDetailId },
+    attributes: ['id', 'userId', 'salonName'],
+    include: {
+      model: user,
+      attributes: ['id'],
+      include: { model: deviceToken, attributes: ['tokenId'] },
+    },
+  })
+
+  if (salon?.user) {
+    const ownerTokens =
+      salon.user.deviceTokens?.map((token) => token?.tokenId).filter(Boolean) ??
+      []
+
+    await ThrowNotification(
+      ownerTokens,
+      {
+        title: 'Staff enquiry reply',
+        body: `${enquiry.firstName} ${enquiry.lastName} replied to their staff enquiry.`,
+      },
+      {
+        type: 'staffAdvertisementEnquiryMessage',
         enquiryId: String(enquiry.id),
         messageId: String(createdMessage.id),
         salonDetailId: String(enquiry.salonDetailId),

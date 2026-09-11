@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "69JDF2R4M8.com.sigitechnologies.trimios",
+        "paths": [
+          "/salon-detail/*",
+          "/team-member/*",
+          "/appointmentDetail*",
+          "/SplashScreen*"
+        ]
+      }
+    ]
+  }
+}

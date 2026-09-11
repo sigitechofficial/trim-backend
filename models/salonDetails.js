@@ -156,6 +156,48 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: false,
     },
+    // Rent-a-chair advert rent: owner picks EITHER 'daily' or 'weekly' plus a
+    // single amount (optional). Null/empty means no rent advertised.
+    rentChairAdvertisementRentType: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
+    rentChairAdvertisementRentAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null,
+    },
+    // Staff advert: same shape as the rent-a-chair advert (on/off + count),
+    // but WITHOUT any rent. Advertises staff positions the shop is hiring.
+    staffAdvertisementCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    staffAdvertisementStatus: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    // Staff advert wages method (advert info): owner picks 'salary' or
+    // 'commission' plus one amount (£ for salary, % for commission). Optional.
+    staffAdvertisementWagesType: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
+    staffAdvertisementWagesAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null,
+    },
+    // Salary pay frequency (Weekly / Bi-weekly / Monthly); null for commission.
+    staffAdvertisementWagesCycle: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
     stripeOnboardingStatus: {
       type: DataTypes.STRING(32),
       allowNull: true,
@@ -273,6 +315,8 @@ module.exports = (sequelize, DataTypes) => {
     models.rentCollection.belongsTo(salonDetail)
 
     salonDetail.hasMany(models.rentChairAdvertisementEnquiry)
+
+    salonDetail.hasMany(models.staffAdvertisementEnquiry)
   }
 
   return salonDetail

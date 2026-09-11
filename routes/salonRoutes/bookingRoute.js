@@ -46,6 +46,11 @@ router.post(
   '/addWalkinBooking',
   catchAsync(bookingsController.addWalkinBooking),
 )
+//Bulk import clients (CSV / Fresha) + optional announcement email
+router.post(
+  '/importClients',
+  catchAsync(bookingsController.bulkImportClients),
+)
 //
 router.post('/jobStatus', catchAsync(bookingsController.jobStatus))
 //Get All Bookings of a Customer
