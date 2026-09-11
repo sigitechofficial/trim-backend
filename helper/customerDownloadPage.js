@@ -22,13 +22,15 @@ const DEFAULT_BASE_URL = 'https://trimworldwide.com/get-customer-app'
 const OG_DESC =
   'Book anytime, anywhere — book barbers across the UK with the free Trim app ' +
   'for iOS & Android. Trim Business: diary, staff, payments & reports for barber ' +
-  'shops. www.trimworldwide.co.uk'
+  'shops. www.trimworldwide.com'
 
 // Order matters: replace the longest/most-specific strings first so shorter
 // substrings (e.g. "Download the Trim Business app") don't clobber them.
 function renderCustomerDownloadHtml(baseUrl = DEFAULT_BASE_URL) {
   const base = baseUrl.replace(/\/+$/, '') // no trailing slash
-  const ogImage = base + '/qr.png'
+  // ?v= cache-buster: WhatsApp/Facebook cache og:image per URL; bump this when the
+  // QR/card needs to be re-scraped so new shares fetch the current image.
+  const ogImage = base + '/qr.png?v=3'
   return renderBusinessDownloadHtml()
     .split('<meta property="og:title" content="Trim for Business" />')
     .join('<meta property="og:title" content="Trim — book barbers near you" />')
