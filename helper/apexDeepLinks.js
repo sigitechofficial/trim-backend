@@ -202,30 +202,42 @@ function removeRootHtaccessBlock(root) {
   }
 }
 
-// Generic "open the app" fallback page for Business App Link paths (/LoginScreen,
-// /BookingDetailScreen, ...). Android email clients (Gmail) open links in an in-app
-// browser / Custom Tab that does NOT fire verified App Links, so an email button
-// lands on this page instead of the app. The page uses an Android `intent://` URL —
-// which the in-app browser hands off to the system — to open the app by package
-// (preserving the path + query so the app routes to the right screen), falling back
-// to the Play Store only if the app isn't installed. iOS opens Universal Links from
-// Mail directly; if this page still loads there, it offers the App Store.
-const BUSINESS_ANDROID_PKG = 'com.sigitechnologies.trim_saloon'
-const BUSINESS_IOS_STORE = 'https://apps.apple.com/app/id6742323827'
-const BUSINESS_PLAY_STORE =
-  'https://play.google.com/store/apps/details?id=com.sigitechnologies.trim_saloon'
-function renderBusinessAppOpenPage() {
+// Generic "open the app" fallback page for App Link paths (business: /LoginScreen,
+// /BookingDetailScreen, /bookingDetails, /BusinessSplash; customer: /appointmentDetail,
+// /SplashScreen). Android email clients (Gmail) open links in an in-app browser /
+// Custom Tab that does NOT fire verified App Links, so an email button lands on this
+// page instead of the app — and if no page exists there, it's a 404 ("Not found").
+// This page uses an Android `intent://` URL — which the in-app browser hands off to
+// the system — to open the app by package (preserving the path + query so the app
+// routes to the right screen), falling back to the Play Store only if not installed.
+// iOS opens Universal Links from Mail directly; if this page still loads there, it
+// offers the App Store.
+const APP_OPEN = {
+  business: {
+    name: 'Trim Business',
+    pkg: 'com.sigitechnologies.trim_saloon',
+    ios: 'https://apps.apple.com/app/id6742323827',
+    play: 'https://play.google.com/store/apps/details?id=com.sigitechnologies.trim_saloon',
+  },
+  customer: {
+    name: 'Trim',
+    pkg: 'com.sigitechnologies.trim_user',
+    ios: 'https://apps.apple.com/app/id6742999519',
+    play: 'https://play.google.com/store/apps/details?id=com.sigitechnologies.trim_user',
+  },
+}
+function renderAppOpenPage(app) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Opening Trim Business…</title>
+<title>Opening ${app.name}…</title>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#111;text-align:center;padding:56px 24px}a{display:inline-block;margin:8px 6px;color:#1c1c1c;font-weight:600}h1{font-size:1.4rem;margin:12px 0}</style>
 </head><body>
-<h1>Opening the Trim Business app…</h1>
+<h1>Opening the ${app.name} app…</h1>
 <p>If it doesn't open automatically, use a button below.</p>
 <p>
-  <a href="${BUSINESS_PLAY_STORE}">Get it on Google Play</a>
-  <a href="${BUSINESS_IOS_STORE}">Download on the App Store</a>
+  <a href="${app.play}">Get it on Google Play</a>
+  <a href="${app.ios}">Download on the App Store</a>
 </p>
 <script>
 (function(){
@@ -237,11 +249,11 @@ function renderBusinessAppOpenPage() {
   var search = location.search || "";
   if (isAndroid) {
     var intent = "intent://trimworldwide.com" + path + search +
-      "#Intent;scheme=https;package=${BUSINESS_ANDROID_PKG};" +
-      "S.browser_fallback_url=" + encodeURIComponent("${BUSINESS_PLAY_STORE}") + ";end";
+      "#Intent;scheme=https;package=${app.pkg};" +
+      "S.browser_fallback_url=" + encodeURIComponent("${app.play}") + ";end";
     window.location.href = intent;
   } else if (isIOS) {
-    setTimeout(function(){ window.location.href = "${BUSINESS_IOS_STORE}"; }, 1500);
+    setTimeout(function(){ window.location.href = "${app.ios}"; }, 1500);
   }
 })();
 </script>
@@ -278,18 +290,24 @@ function publishApexDeepLinkFiles() {
     fs.writeFileSync(path.join(bizDir, 'index.html'), renderBusinessDownloadHtml())
     console.log(`[apexDeepLinks] published business download page to ${bizDir}`)
 
-    // Business App Link fallback pages (/LoginScreen = invite; /BookingDetailScreen =
-    // booking email). Email clients on Android (Gmail) open these links in an in-app
-    // browser that does NOT fire verified App Links, so they land on the web page
-    // instead of the app. The opener page uses an Android `intent://` to open the app
-    // by package (preserving the path + ?id=), falling back to the store if not
-    // installed. Published as directories with index.html so Apache serves them with
-    // no rewrite; the page's JS reads its own path+query, so one template fits both.
-    for (const p of ['LoginScreen', 'BookingDetailScreen']) {
+    // App-opener fallback pages for EVERY email/notification deep-link path, so none
+    // 404 on Android (email clients open links in an in-app browser that bypasses App
+    // Links). Each page's intent:// opens the correct app (business vs customer),
+    // store fallback if not installed. Published as directories with index.html so
+    // Apache serves them with no rewrite; the page JS reads its own path+query.
+    const openerPaths = [
+      ['LoginScreen', 'business'],          // employee invite "Accept invite"
+      ['BookingDetailScreen', 'business'],  // salon booking email "Booking Detail"
+      ['bookingDetails', 'business'],       // legacy/alt booking path
+      ['BusinessSplash', 'business'],       // business reminders
+      ['appointmentDetail', 'customer'],    // customer booking email
+      ['SplashScreen', 'customer'],         // customer generic
+    ]
+    for (const [p, app] of openerPaths) {
       const dir = path.join(root, p)
       fs.mkdirSync(dir, { recursive: true })
-      fs.writeFileSync(path.join(dir, 'index.html'), renderBusinessAppOpenPage())
-      console.log(`[apexDeepLinks] published /${p} app-open fallback page to ${dir}`)
+      fs.writeFileSync(path.join(dir, 'index.html'), renderAppOpenPage(APP_OPEN[app]))
+      console.log(`[apexDeepLinks] published /${p} app-open page (${app}) to ${dir}`)
     }
 
     // Customer app download page, served at https://trimworldwide.com/get-customer-app
