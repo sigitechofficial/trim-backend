@@ -34,6 +34,7 @@ const {
   couponTimeSlot,
   subscriptions,
   salonClient,
+  allergies,
 } = require('../../models')
 const Stripe = require('../stripe')
 const appError = require('../../utils/appError')
@@ -1794,6 +1795,8 @@ exports.bulkImportClients = async (req, res, next) => {
   let added = 0
   let alreadyOnTrim = 0
   let skippedNoEmail = 0
+  let notesAdded = 0
+  let allergiesAdded = 0
   const emailTargets = [] // { email, firstName } for not-on-Trim clients
 
   for (const row of rawClients) {
@@ -1802,6 +1805,8 @@ exports.bulkImportClients = async (req, res, next) => {
     const lastName = (row.lastName || '').trim()
     const phoneNum = (row.phoneNum || '').trim()
     const countryCode = (row.countryCode || '').trim()
+    const note = (row.note || '').trim()
+    const allergyText = (row.allergies || '').trim()
 
     // Rows without an email can't be deduped or emailed, and can't be persisted
     // meaningfully (mirrors addWalkinCustomer) — skip and report the count.
@@ -1844,6 +1849,59 @@ exports.bulkImportClients = async (req, res, next) => {
     })
     if (created) added += 1
 
+    // Optional: client note (upsert per salon+customer — mirrors addUpdateClientNote).
+    if (note) {
+      try {
+        const existingNote = await clientNotes.findOne({
+          where: { userId: customer.id, salonDetailId: SalonDetail.id },
+        })
+        if (existingNote) {
+          await clientNotes.update(
+            { customerNote: note },
+            { where: { userId: customer.id, salonDetailId: SalonDetail.id } },
+          )
+        } else {
+          await clientNotes.create({
+            customerNote: note,
+            userId: customer.id,
+            salonDetailId: SalonDetail.id,
+          })
+        }
+        notesAdded += 1
+      } catch (e) {
+        console.error('[importClients] note failed for', email, e.message)
+      }
+    }
+
+    // Optional: allergies (one row per entry; split on newlines/semicolons).
+    if (allergyText) {
+      const entries = allergyText
+        .split(/[\n;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      for (const name of entries) {
+        try {
+          const existingAllergy = await allergies.findOne({
+            where: { userId: customer.id, salonDetailId: SalonDetail.id, name },
+          })
+          if (!existingAllergy) {
+            await allergies.create({
+              name,
+              allergyType: 'Non-drug',
+              severity: 'Unknown',
+              reaction: '',
+              note: '',
+              userId: customer.id,
+              salonDetailId: SalonDetail.id,
+            })
+            allergiesAdded += 1
+          }
+        } catch (e) {
+          console.error('[importClients] allergy failed for', email, e.message)
+        }
+      }
+    }
+
     // Email only the clients who are not already on Trim.
     if (!registered) {
       emailTargets.push({ email, firstName: firstName || customer.firstName })
@@ -1880,6 +1938,8 @@ exports.bulkImportClients = async (req, res, next) => {
         alreadyOnTrim,
         emailed,
         skippedNoEmail,
+        notesAdded,
+        allergiesAdded,
       },
       '',
     ),
