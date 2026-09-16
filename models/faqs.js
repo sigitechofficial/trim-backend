@@ -18,7 +18,23 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 'general',
     },
+    faqCategoryId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    sortOrder: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
   })
+
+  faqs.associate = (models) => {
+    faqs.belongsTo(models.faqCategory, {
+      foreignKey: 'faqCategoryId',
+      as: 'category',
+    })
+  }
 
   return faqs
 }

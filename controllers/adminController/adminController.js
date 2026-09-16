@@ -34,6 +34,7 @@ const {
   reason,
   subscriptions,
   faqs,
+  faqCategory,
   commissionPayout,
   rentChairPayout,
   rentChairEarning,
@@ -3233,11 +3234,266 @@ exports.updateAllSalonsVatAndPlatformFee = async (req, res, next) => {
 
 //! .Reason Fro subscriptions and appointments -------------------------------------------------------------------------------
 
+const FAQ_FOR_VALUES = ['general', 'salon', 'customer', 'external-employee']
+
+function normalizeFaqFor(value) {
+  if (!value) return null
+  const v = String(value).trim()
+  return FAQ_FOR_VALUES.includes(v) ? v : null
+}
+
+function mapFaqCategoryPlain(cat) {
+  if (!cat) return null
+  const plain = typeof cat.toJSON === 'function' ? cat.toJSON() : cat
+  return {
+    id: plain.id,
+    name: plain.name,
+    sortOrder: plain.sortOrder ?? 0,
+  }
+}
+
+function mapFaqReasonPlain(row) {
+  const plain = typeof row.toJSON === 'function' ? row.toJSON() : row
+  const category = mapFaqCategoryPlain(plain.category)
+  return {
+    id: plain.id,
+    status: plain.status,
+    question: plain.question,
+    answer: plain.answer,
+    faqFor: plain.faqFor,
+    createdAt: plain.createdAt,
+    sortOrder: plain.sortOrder ?? 0,
+    faqCategoryId: plain.faqCategoryId ?? null,
+    category,
+  }
+}
+
+function sortFaqsForResponse(rows) {
+  return [...rows].sort((a, b) => {
+    const aCatOrder =
+      a.category?.sortOrder ?? Number.MAX_SAFE_INTEGER
+    const bCatOrder =
+      b.category?.sortOrder ?? Number.MAX_SAFE_INTEGER
+    if (aCatOrder !== bCatOrder) return aCatOrder - bCatOrder
+    const aCatName = (a.category?.name || '').toLowerCase()
+    const bCatName = (b.category?.name || '').toLowerCase()
+    if (aCatName !== bCatName) return aCatName.localeCompare(bCatName)
+    if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+    }
+    return (a.id || 0) - (b.id || 0)
+  })
+}
+
+function buildCategoriesList(reasons, allAudienceCategories = []) {
+  const byId = new Map()
+  for (const cat of allAudienceCategories) {
+    if (!cat || cat.status === false) continue
+    byId.set(cat.id, {
+      id: cat.id,
+      name: cat.name,
+      sortOrder: cat.sortOrder ?? 0,
+    })
+  }
+  for (const reason of reasons) {
+    if (reason.category?.id != null) {
+      byId.set(reason.category.id, {
+        id: reason.category.id,
+        name: reason.category.name,
+        sortOrder: reason.category.sortOrder ?? 0,
+      })
+    }
+  }
+  return [...byId.values()].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+    return String(a.name).localeCompare(String(b.name))
+  })
+}
+
+//^ FAQ Categories ----------------------------
+
+exports.addFaqCategory = async (req, res, next) => {
+  const faqFor = normalizeFaqFor(req.body?.faqFor)
+  const name = String(req.body?.name || '').trim()
+  if (!faqFor) {
+    return next(new appError('faqFor is required', 400))
+  }
+  if (!name) {
+    return next(new appError('Category name is required', 400))
+  }
+  const sortOrder =
+    req.body?.sortOrder !== undefined && req.body?.sortOrder !== null
+      ? parseInt(req.body.sortOrder, 10) || 0
+      : 0
+  const status =
+    req.body?.status === undefined || req.body?.status === null
+      ? true
+      : Boolean(req.body.status)
+
+  const data = await faqCategory.create({
+    name,
+    faqFor,
+    sortOrder,
+    status,
+  })
+
+  return res.status(200).json(
+    response({
+      message: 'FAQ category created',
+      data: { category: data },
+    }),
+  )
+}
+
+exports.fetchFaqCategories = async (req, res, next) => {
+  const faqFor = normalizeFaqFor(req.params?.type || req.query?.faqFor)
+  const condition = {}
+  if (faqFor) condition.faqFor = faqFor
+  // Admin web: return all statuses unless explicitly filtered
+  if (req.query?.status === 'true') condition.status = true
+  if (req.query?.status === 'false') condition.status = false
+
+  const data = await faqCategory.findAll({
+    where: condition,
+    order: [
+      ['sortOrder', 'ASC'],
+      ['name', 'ASC'],
+      ['id', 'ASC'],
+    ],
+  })
+
+  return res.status(200).json(
+    response({
+      data: { categories: data },
+    }),
+  )
+}
+
+exports.updateFaqCategory = async (req, res, next) => {
+  const id = parseInt(req.params?.id, 10)
+  const existing = await faqCategory.findByPk(id)
+  if (!existing) {
+    return next(new appError('FAQ category not found', 404))
+  }
+
+  const updates = {}
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name || '').trim()
+    if (!name) return next(new appError('Category name is required', 400))
+    updates.name = name
+  }
+  if (req.body?.sortOrder !== undefined) {
+    updates.sortOrder = parseInt(req.body.sortOrder, 10) || 0
+  }
+  if (req.body?.status !== undefined) {
+    updates.status = Boolean(req.body.status)
+  }
+  if (req.body?.faqFor !== undefined) {
+    const faqFor = normalizeFaqFor(req.body.faqFor)
+    if (!faqFor) return next(new appError('Invalid faqFor', 400))
+    updates.faqFor = faqFor
+  }
+
+  await existing.update(updates)
+
+  return res.status(200).json(
+    response({
+      message: 'FAQ category updated',
+      data: { category: existing },
+    }),
+  )
+}
+
+/**
+ * Delete category without deleting FAQs.
+ * Body: { moveToCategoryId: <id>|null }
+ * - null / omitted / "uncategorised" → set faqCategoryId = null
+ * - number → reassign FAQs to that category (same faqFor preferred)
+ */
+exports.deleteFaqCategory = async (req, res, next) => {
+  const id = parseInt(req.params?.id, 10)
+  const existing = await faqCategory.findByPk(id)
+  if (!existing) {
+    return next(new appError('FAQ category not found', 404))
+  }
+
+  let moveTo =
+    req.body?.moveToCategoryId ?? req.query?.moveToCategoryId
+  if (
+    moveTo === undefined ||
+    moveTo === null ||
+    moveTo === '' ||
+    moveTo === 'uncategorised' ||
+    moveTo === 'null'
+  ) {
+    moveTo = null
+  } else {
+    moveTo = parseInt(moveTo, 10)
+    if (Number.isNaN(moveTo)) {
+      return next(new appError('Invalid moveToCategoryId', 400))
+    }
+    if (moveTo === id) {
+      return next(
+        new appError('Cannot move FAQs to the category being deleted', 400),
+      )
+    }
+    const target = await faqCategory.findByPk(moveTo)
+    if (!target) {
+      return next(new appError('Target category not found', 404))
+    }
+  }
+
+  await faqs.update(
+    { faqCategoryId: moveTo },
+    { where: { faqCategoryId: id } },
+  )
+  await existing.destroy()
+
+  return res.status(200).json(
+    response({
+      message: 'FAQ category deleted; questions were preserved',
+      data: {},
+    }),
+  )
+}
+
+exports.reorderFaqCategories = async (req, res, next) => {
+  const items = Array.isArray(req.body?.categories) ? req.body.categories : []
+  if (!items.length) {
+    return next(new appError('categories array is required', 400))
+  }
+
+  for (const item of items) {
+    const id = parseInt(item.id, 10)
+    if (!id) continue
+    await faqCategory.update(
+      { sortOrder: parseInt(item.sortOrder, 10) || 0 },
+      { where: { id } },
+    )
+  }
+
+  return res.status(200).json(
+    response({
+      message: 'FAQ categories reordered',
+      data: {},
+    }),
+  )
+}
+
 //^ 1.Add FAQs  ----------------------------
 
 exports.addFAQs = async (req, res, next) => {
-  req.body.status = true
-  const data = await faqs.create(req.body)
+  const payload = { ...req.body, status: true }
+  if (payload.faqCategoryId === '' || payload.faqCategoryId === 'null') {
+    payload.faqCategoryId = null
+  }
+  if (payload.faqCategoryId != null) {
+    payload.faqCategoryId = parseInt(payload.faqCategoryId, 10) || null
+  }
+  if (payload.sortOrder !== undefined) {
+    payload.sortOrder = parseInt(payload.sortOrder, 10) || 0
+  }
+  const data = await faqs.create(payload)
 
   return res.status(200).json(
     response({
@@ -3249,22 +3505,102 @@ exports.addFAQs = async (req, res, next) => {
 //^ 2.Fetch FAQs  ----------------------------
 
 exports.fetchFAQs = async (req, res, next) => {
-  const faqFor = req.params?.type
+  const faqFor = normalizeFaqFor(req.params?.type)
+  const accessFrom = req.params?.accessFrom
+  const isMobile = accessFrom === 'mobile'
 
   const condition = {}
   if (faqFor) condition.faqFor = faqFor
-  if (faqFor) condition.faqFor = faqFor
 
-  if (req.params.accessFrom == 'mobile' && faqFor != 'general') {
+  if (isMobile && faqFor && faqFor !== 'general') {
     condition.faqFor = { [Op.or]: ['general', faqFor] }
+    condition.status = true
+  } else if (isMobile) {
     condition.status = true
   }
 
-  console.log('🚀 ~ exports.fetchFAQs= ~ condition:', condition)
-  const data = await faqs.findAll({
+  const rows = await faqs.findAll({
     where: condition,
     attributes: { exclude: ['updatedAt'] },
+    include: [
+      {
+        model: faqCategory,
+        as: 'category',
+        required: false,
+        attributes: ['id', 'name', 'sortOrder', 'status', 'faqFor'],
+      },
+    ],
   })
+
+  // Mobile: only expose active categories on nested objects
+  let reasons = rows.map((row) => {
+    const mapped = mapFaqReasonPlain(row)
+    if (isMobile && mapped.category) {
+      const rawCat =
+        typeof row.category?.toJSON === 'function'
+          ? row.category.toJSON()
+          : row.category
+      if (rawCat && rawCat.status === false) {
+        mapped.category = null
+        mapped.faqCategoryId = null
+      }
+    }
+    return mapped
+  })
+
+  if (isMobile) {
+    reasons = reasons.filter((r) => r.status === true)
+  }
+
+  reasons = sortFaqsForResponse(reasons)
+
+  // Categories list for apps:
+  // - audience categories (salon/customer/...) that are active
+  // - plus any general categories that appear on FAQs in this response
+  // Admin (web) also gets categories for the requested faqFor for convenience.
+  let categories = []
+  if (faqFor) {
+    const audienceCats = await faqCategory.findAll({
+      where: {
+        faqFor,
+        ...(isMobile ? { status: true } : {}),
+      },
+      attributes: ['id', 'name', 'sortOrder', 'status', 'faqFor'],
+      order: [
+        ['sortOrder', 'ASC'],
+        ['name', 'ASC'],
+      ],
+    })
+
+    let generalCats = []
+    if (isMobile && faqFor !== 'general') {
+      const generalIdsInResponse = [
+        ...new Set(
+          reasons
+            .filter((r) => r.faqFor === 'general' && r.category?.id)
+            .map((r) => r.category.id),
+        ),
+      ]
+      if (generalIdsInResponse.length) {
+        generalCats = await faqCategory.findAll({
+          where: {
+            id: { [Op.in]: generalIdsInResponse },
+            faqFor: 'general',
+            status: true,
+          },
+          attributes: ['id', 'name', 'sortOrder', 'status', 'faqFor'],
+        })
+      }
+    }
+
+    categories = buildCategoriesList(reasons, [
+      ...audienceCats.map((c) => c.toJSON()),
+      ...generalCats.map((c) => c.toJSON()),
+    ])
+  } else {
+    categories = buildCategoriesList(reasons, [])
+  }
+
   const support = await helpSupport.findOne({
     attributes: ['email'],
     order: [['createdAt', 'DESC']],
@@ -3273,7 +3609,8 @@ exports.fetchFAQs = async (req, res, next) => {
   return res.status(200).json(
     response({
       data: {
-        reasons: data.reverse(),
+        categories,
+        reasons,
         support: {
           email: support?.email || '',
         },
@@ -3285,7 +3622,17 @@ exports.fetchFAQs = async (req, res, next) => {
 //^ 2.Update FAQs  ----------------------------
 
 exports.updateFAQs = async (req, res, next) => {
-  await faqs.update(req.body, { where: { id: req.params?.id } })
+  const payload = { ...req.body }
+  if (payload.faqCategoryId === '' || payload.faqCategoryId === 'null') {
+    payload.faqCategoryId = null
+  }
+  if (payload.faqCategoryId !== undefined && payload.faqCategoryId !== null) {
+    payload.faqCategoryId = parseInt(payload.faqCategoryId, 10) || null
+  }
+  if (payload.sortOrder !== undefined) {
+    payload.sortOrder = parseInt(payload.sortOrder, 10) || 0
+  }
+  await faqs.update(payload, { where: { id: req.params?.id } })
 
   return res.status(200).json(
     response({

@@ -557,6 +557,26 @@ router.put('/edit-faq/:id', catchAsync(adminController.updateFAQs))
 router.put('/change-faq-status/:id', catchAsync(adminController.updateFAQs))
 router.delete('/delete-faq/:id', catchAsync(adminController.deleteFAQs))
 
+//! FAQ Categories
+router.post('/faq-categories', catchAsync(adminController.addFaqCategory))
+router.put(
+  '/faq-categories-reorder',
+  catchAsync(adminController.reorderFaqCategories),
+)
+router.get(
+  '/faq-categories/:type?',
+  catchAsync(adminController.fetchFaqCategories),
+)
+router.put('/faq-categories/:id', catchAsync(adminController.updateFaqCategory))
+router.post(
+  '/faq-categories/:id/delete',
+  catchAsync(adminController.deleteFaqCategory),
+)
+router.delete(
+  '/faq-categories/:id',
+  catchAsync(adminController.deleteFaqCategory),
+)
+
 
 
 // Admin Report Summary Data
