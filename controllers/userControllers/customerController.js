@@ -1182,23 +1182,50 @@ exports.searchSalons = async (req, res, next) => {
       ? sequelize.escape(likePattern)
       : null
 
-    // Rental Chair tab: true / "true" / 1 / "1"
-    const rentChairRaw = req.body?.rentChairAdvertisement
-    const rentChairAdvertisement =
-      rentChairRaw === true ||
-      rentChairRaw === 1 ||
-      rentChairRaw === '1' ||
-      (typeof rentChairRaw === 'string' &&
-        rentChairRaw.trim().toLowerCase() === 'true')
+    // --- Advert tab (Staff / Chair to rent) ------------------------------
+    // New: `advertType` ('staff' | 'chair') from the combined-tab toggle.
+    // Back-compat: fall back to the old rentChairAdvertisement/staffAdvertisement booleans.
+    const truthy = (v) =>
+      v === true ||
+      v === 1 ||
+      v === '1' ||
+      (typeof v === 'string' && v.trim().toLowerCase() === 'true')
 
-    // Staff advert tab: true / "true" / 1 / "1"
-    const staffAdvertRaw = req.body?.staffAdvertisement
-    const staffAdvertisement =
-      staffAdvertRaw === true ||
-      staffAdvertRaw === 1 ||
-      staffAdvertRaw === '1' ||
-      (typeof staffAdvertRaw === 'string' &&
-        staffAdvertRaw.trim().toLowerCase() === 'true')
+    const advertTypeRaw =
+      typeof req.body?.advertType === 'string'
+        ? req.body.advertType.trim().toLowerCase()
+        : null
+
+    const rentChairAdvertisement = truthy(req.body?.rentChairAdvertisement)
+    const staffAdvertisement = truthy(req.body?.staffAdvertisement)
+
+    const chairMode =
+      advertTypeRaw === 'chair' ||
+      (advertTypeRaw === null && rentChairAdvertisement)
+    const staffMode =
+      advertTypeRaw === 'staff' ||
+      (advertTypeRaw === null && staffAdvertisement)
+
+    // Parse a numeric range value; NaN for empty/invalid (so it is ignored).
+    const num = (v) => {
+      if (v === undefined || v === null || v === '') return NaN
+      const n = Number(v)
+      return Number.isFinite(n) ? n : NaN
+    }
+    const salaryMin = num(req.body?.salaryMin)
+    const salaryMax = num(req.body?.salaryMax)
+    const commissionMin = num(req.body?.commissionMin)
+    const commissionMax = num(req.body?.commissionMax)
+    const chairRentMin = num(req.body?.chairRentMin)
+    const chairRentMax = num(req.body?.chairRentMax)
+
+    // Build a { [Op.gte]: min, [Op.lte]: max } amount filter, or null if none.
+    const amountRange = (min, max) => {
+      const c = {}
+      if (!Number.isNaN(min)) c[Op.gte] = min
+      if (!Number.isNaN(max)) c[Op.lte] = max
+      return Object.getOwnPropertySymbols(c).length ? c : null
+    }
 
     const baseSalonFilter = {
       [Op.or]: [
@@ -1229,20 +1256,49 @@ exports.searchSalons = async (req, res, next) => {
 
     const andFragments = [baseSalonFilter]
 
-    // Rental Chair search: active ads with at least one chair (not isExternalEmployee)
-    if (rentChairAdvertisement) {
-      andFragments.push({
+    // Advert fragments (staff / chair) with optional pay-range filters.
+    const advertFragments = []
+
+    if (chairMode) {
+      const chairFrag = {
         rentChairAdvertisementStatus: true,
         rentChairAdvertisementChairCount: { [Op.gt]: 0 },
-      })
+      }
+      const rentRange = amountRange(chairRentMin, chairRentMax)
+      if (rentRange) chairFrag.rentChairAdvertisementRentAmount = rentRange
+      advertFragments.push(chairFrag)
     }
 
-    // Staff advert search: active ads with at least one position
-    if (staffAdvertisement) {
-      andFragments.push({
+    if (staffMode) {
+      const staffFrag = {
         staffAdvertisementStatus: true,
         staffAdvertisementCount: { [Op.gt]: 0 },
-      })
+      }
+      // A shop advertises EITHER salary OR commission — match whichever range(s) sent.
+      const wageOr = []
+      const salaryRange = amountRange(salaryMin, salaryMax)
+      const commissionRange = amountRange(commissionMin, commissionMax)
+      if (salaryRange) {
+        wageOr.push({
+          staffAdvertisementWagesType: 'salary',
+          staffAdvertisementWagesAmount: salaryRange,
+        })
+      }
+      if (commissionRange) {
+        wageOr.push({
+          staffAdvertisementWagesType: 'commission',
+          staffAdvertisementWagesAmount: commissionRange,
+        })
+      }
+      if (wageOr.length) staffFrag[Op.or] = wageOr
+      advertFragments.push(staffFrag)
+    }
+
+    // Combined tab: staff OR chair — never require both.
+    if (advertFragments.length === 1) {
+      andFragments.push(advertFragments[0])
+    } else if (advertFragments.length > 1) {
+      andFragments.push({ [Op.or]: advertFragments })
     }
 
     if (searchActive) {
@@ -1456,7 +1512,7 @@ exports.searchSalons = async (req, res, next) => {
 
     // Normal search keeps services required; rental-chair / staff-advert modes
     // must not hide shops that advertise but have no matching service rows.
-    const advertisementMode = rentChairAdvertisement || staffAdvertisement
+    const advertisementMode = chairMode || staffMode
     const serviceIncludeRequired = !advertisementMode
 
     const queryBody = {
