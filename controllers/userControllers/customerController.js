@@ -4368,7 +4368,9 @@ exports.fetchAppointments = async (req, res, next) => {
     include: [
       {
         model: salonDetail,
-        attributes: ['salonName', 'coverImage'],
+        // `id` + `isOnline` power the Home "Rebook" button (open salon / offline check),
+        // matching the appointment-detail endpoint used by "Book again".
+        attributes: ['id', 'salonName', 'coverImage', 'isOnline'],
         include: { model: addressDBS, attributes: ['streetAddress', 'city'] },
       },
     ],
