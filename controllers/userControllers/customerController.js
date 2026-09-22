@@ -4371,7 +4371,11 @@ exports.fetchAppointments = async (req, res, next) => {
         // `id` + `isOnline` power the Home "Rebook" button (open salon / offline check),
         // matching the appointment-detail endpoint used by "Book again".
         attributes: ['id', 'salonName', 'coverImage', 'isOnline'],
-        include: { model: addressDBS, attributes: ['streetAddress', 'city'] },
+        include: {
+          model: addressDBS,
+          // `postalCode` powers the Home "Rebook last" card's postcode line.
+          attributes: ['streetAddress', 'city', 'postalCode'],
+        },
       },
     ],
   })
