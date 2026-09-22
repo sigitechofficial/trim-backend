@@ -4339,11 +4339,37 @@ exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
 
 //* 5.fetch Appointments -----------------
 
+// Salon "subscription active" rule — IDENTICAL to POST /customer/home's salon filter.
+// Normal salon (isExternalEmployee=0): registrationExpiryDate >= today
+//   AND subscriptionLatestPaymentStatus IS NOT NULL
+//   AND subscriptionLatestPaymentStatus NOT IN ('expired','payment_failed','paused','refunded').
+// External-employee salon: same rule evaluated against its parentSalonId (Home Branch A),
+//   where a NULL parent status counts as active and 'cancelled'/'canceled' are also blocked.
+// `dateOnly` is the server-computed 'YYYY-MM-DD' (CustomDate.currentDay().currentDateOnly),
+// same value Home uses. Returns 1/0; callers coerce to a real boolean before responding.
+// Must be selected inside the `salonDetail` include so the `salonDetail` alias is in scope.
+const salonSubscriptionActiveLiteral = (dateOnly) =>
+  literal(`(CASE
+    WHEN \`salonDetail\`.\`isExternalEmployee\` = 1 THEN (
+      SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+      FROM salonDetails AS parentSalon
+      WHERE parentSalon.id = \`salonDetail\`.\`parentSalonId\`
+        AND parentSalon.registrationExpiryDate >= '${dateOnly}'
+        AND (parentSalon.subscriptionLatestPaymentStatus IS NULL
+             OR parentSalon.subscriptionLatestPaymentStatus NOT IN ('expired','cancelled','canceled','payment_failed','paused','refunded')))
+    ELSE (CASE
+      WHEN \`salonDetail\`.\`registrationExpiryDate\` >= '${dateOnly}'
+        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` IS NOT NULL
+        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` NOT IN ('expired','payment_failed','paused','refunded')
+      THEN 1 ELSE 0 END)
+  END)`)
+
 exports.fetchAppointments = async (req, res, next) => {
   // TODO Filters
   const userId = req.user.id
+  const currentDay = CustomDate.currentDay()
   // `cancellationPolicyVersion`, `reschedulePolicyVersion`, `upFrontPolicyVersion`, `noshowPolicyVersion`
-  const appointments = await booking.findAll({
+  let appointments = await booking.findAll({
     where: {
       customerId: userId,
       // status: { [Op.or]: ['pending', 'book'] }
@@ -4370,7 +4396,14 @@ exports.fetchAppointments = async (req, res, next) => {
         model: salonDetail,
         // `id` + `isOnline` power the Home "Rebook" button (open salon / offline check),
         // matching the appointment-detail endpoint used by "Book again".
-        attributes: ['id', 'salonName', 'coverImage', 'isOnline'],
+        // `subscriptionActive` mirrors Home's salon subscription rule (see helper above).
+        attributes: [
+          'id',
+          'salonName',
+          'coverImage',
+          'isOnline',
+          [salonSubscriptionActiveLiteral(currentDay.currentDateOnly), 'subscriptionActive'],
+        ],
         include: {
           model: addressDBS,
           // `postalCode` powers the Home "Rebook last" card's postcode line.
@@ -4378,6 +4411,16 @@ exports.fetchAppointments = async (req, res, next) => {
         },
       },
     ],
+  })
+
+  // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
+  appointments = JSON.parse(JSON.stringify(appointments))
+  appointments.forEach((a) => {
+    if (a.salonDetail) {
+      a.salonDetail.subscriptionActive =
+        a.salonDetail.subscriptionActive === 1 ||
+        a.salonDetail.subscriptionActive === true
+    }
   })
 
   return res.status(200).json(
@@ -4391,6 +4434,7 @@ exports.fetchAppointments = async (req, res, next) => {
 
 exports.fetchAppointmentsDetails = async (req, res, next) => {
   const id = req.params.id
+  const currentDay = CustomDate.currentDay()
   const data = await booking.findOne({
     where: { id },
     attributes: [
@@ -4443,6 +4487,8 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
           'connectAccountId',
           'isOnline',
           'description',
+          // Home's exact subscription rule so "Book again" matches Home/Rebook.
+          [salonSubscriptionActiveLiteral(currentDay.currentDateOnly), 'subscriptionActive'],
         ],
         include: [
           {
@@ -4526,6 +4572,13 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
   const output = data.toJSON()
   output.jobs = actualJobs
+
+  // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
+  if (output.salonDetail) {
+    output.salonDetail.subscriptionActive =
+      output.salonDetail.subscriptionActive === 1 ||
+      output.salonDetail.subscriptionActive === true
+  }
 
   if (output.couponOnBooking && Array.isArray(output.couponOnBooking) && output.couponOnBooking.length === 0) {
     output.couponOnBooking = null
