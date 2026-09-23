@@ -162,6 +162,12 @@ ensureAdvertSchema(db)
   .then(() => console.log('[advertSchema] ensured'))
   .catch((err) => console.error('[advertSchema] failed:', err.message))
 
+// Create the rebooking-reminder tables if missing (global sync is off).
+const { ensureRebookReminderSchema } = require('./helper/rebookReminderSchema')
+ensureRebookReminderSchema(db)
+  .then(() => console.log('[rebookReminderSchema] ensured'))
+  .catch((err) => console.error('[rebookReminderSchema] failed:', err.message))
+
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)
