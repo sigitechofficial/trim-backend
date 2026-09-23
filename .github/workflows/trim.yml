@@ -36,7 +36,9 @@ jobs:
           fi
 
       - name: Create .env file dynamically
-        run: echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
+        run: |
+          echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
+          echo "REBOOK_CRON_SECRET=${{ secrets.REBOOK_CRON_SECRET }}" >> .env
 
       - name: Create config folder and files
         run: |
@@ -102,7 +104,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Create .env file dynamically
-        run: echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
+        run: |
+          echo "${{ secrets.ENV_FILE_CONTENT_STAGE }}" > .env
+          echo "REBOOK_CRON_SECRET=${{ secrets.REBOOK_CRON_SECRET }}" >> .env
 
       - name: Create config folder and files
         run: |
@@ -151,9 +155,14 @@ jobs:
             npm install --prefer-offline --no-audit
 
             echo "Restarting PM2 process..."
+            # Stage historically ran the now-removed `thetrim.js`; align it with
+            # prod by running `trim.js` (the current entry). Clean up the old
+            # process so it does not hold the port.
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
-            pm2 start thetrim.js
+            pm2 stop trim.js || true
+            pm2 delete trim.js || true
+            pm2 start trim.js
             pm2 save
-            
+
             echo "Testing Deployment Complete!"

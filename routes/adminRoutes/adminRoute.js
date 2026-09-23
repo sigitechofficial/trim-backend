@@ -618,4 +618,10 @@ router.get('/get-app-version-config', protect, catchAsync(adminController.getApp
 // ^ Update a specific version config by appType and platform
 router.put('/update-app-version-config/:appType/:platform', protect, catchAsync(adminController.updateAppVersionConfig))
 
+//!-------------------------------Rebooking Reminder Config-------------------------------//
+// ^ Get the rebooking-reminder config (single row)
+router.get('/get-rebook-reminder-config', protect, catchAsync(adminController.getRebookReminderConfig))
+// ^ Update the rebooking-reminder config
+router.put('/update-rebook-reminder-config', protect, catchAsync(adminController.updateRebookReminderConfig))
+
 module.exports = router

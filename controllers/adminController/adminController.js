@@ -43,6 +43,7 @@ const {
   cities,
   zones,
   appVersionConfig,
+  rebookReminderConfig,
 } = require('../../models')
 
 const jwt = require('jsonwebtoken')
@@ -3833,6 +3834,107 @@ exports.updateAppVersionConfig = async (req, res, next) => {
     response({
       message: `App version config updated for ${appType} / ${platform}`,
       data: { appVersionConfig: row },
+    }),
+  )
+}
+
+// ^ Get the rebooking-reminder config (single row, created with defaults).
+exports.getRebookReminderConfig = async (req, res, next) => {
+  let config = await rebookReminderConfig.findOne({ order: [['id', 'ASC']] })
+  if (!config) {
+    config = await rebookReminderConfig.create({})
+  }
+  return res
+    .status(200)
+    .json(response({ data: { rebookReminderConfig: config } }))
+}
+
+// ^ Update the rebooking-reminder config.
+exports.updateRebookReminderConfig = async (req, res, next) => {
+  const {
+    isEnabled,
+    singleBookingDays,
+    minIntervalDays,
+    maxIntervalDays,
+    title,
+    body,
+    salonTitle,
+    salonBody,
+  } = req.body
+
+  let config = await rebookReminderConfig.findOne({ order: [['id', 'ASC']] })
+  if (!config) {
+    config = await rebookReminderConfig.create({})
+  }
+
+  const updateFields = {}
+
+  if (isEnabled !== undefined) {
+    updateFields.isEnabled = !!isEnabled
+  }
+
+  const intFields = { singleBookingDays, minIntervalDays, maxIntervalDays }
+  for (const [key, value] of Object.entries(intFields)) {
+    if (value !== undefined && value !== null && value !== '') {
+      const parsed = parseInt(value, 10)
+      if (Number.isNaN(parsed) || parsed < 1) {
+        return next(new appError(`${key} must be a positive whole number`, 400))
+      }
+      updateFields[key] = parsed
+    }
+  }
+
+  const finalMin = updateFields.minIntervalDays ?? config.minIntervalDays
+  const finalMax = updateFields.maxIntervalDays ?? config.maxIntervalDays
+  if (finalMin > finalMax) {
+    return next(
+      new appError('minIntervalDays cannot be greater than maxIntervalDays', 400),
+    )
+  }
+
+  if (title !== undefined) {
+    const trimmed = String(title).trim()
+    if (!trimmed) {
+      return next(new appError('title cannot be empty', 400))
+    }
+    updateFields.title = trimmed
+  }
+
+  if (body !== undefined) {
+    const trimmed = String(body).trim()
+    if (!trimmed) {
+      return next(new appError('body cannot be empty', 400))
+    }
+    updateFields.body = trimmed
+  }
+
+  if (salonTitle !== undefined) {
+    const trimmed = String(salonTitle).trim()
+    if (!trimmed) {
+      return next(new appError('salonTitle cannot be empty', 400))
+    }
+    updateFields.salonTitle = trimmed
+  }
+
+  if (salonBody !== undefined) {
+    const trimmed = String(salonBody).trim()
+    if (!trimmed) {
+      return next(new appError('salonBody cannot be empty', 400))
+    }
+    updateFields.salonBody = trimmed
+  }
+
+  if (Object.keys(updateFields).length === 0) {
+    return next(new appError('At least one field is required to update', 400))
+  }
+
+  await config.update(updateFields)
+  await config.reload()
+
+  return res.status(200).json(
+    response({
+      message: 'Rebooking reminder config updated',
+      data: { rebookReminderConfig: config },
     }),
   )
 }

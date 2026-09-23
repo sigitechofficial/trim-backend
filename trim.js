@@ -43,6 +43,7 @@ const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
 const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRoute')
 const deepLinkRoute = require('./routes/deepLinkRoutes/deepLinkRoute')
+const internalRoute = require('./routes/internalRoutes/internalRoute')
 const { publishApexDeepLinkFiles } = require('./helper/apexDeepLinks')
 
 // Load environment variables
@@ -79,6 +80,8 @@ app.use('/payout', express.json(), payoutRoute)
 app.use('/new-reports', express.json(), newReportsRoute)
 // Apple subscription routes (other routes use JSON parser)
 app.use('/apple-subscriptions', express.json(), appleSubscriptionRoute)
+// Machine-to-machine (AWS EventBridge) endpoints, secret-header authenticated
+app.use('/internal', express.json(), internalRoute)
 
 
 
@@ -158,6 +161,12 @@ const { ensureAdvertSchema } = require('./helper/advertSchema')
 ensureAdvertSchema(db)
   .then(() => console.log('[advertSchema] ensured'))
   .catch((err) => console.error('[advertSchema] failed:', err.message))
+
+// Create the rebooking-reminder tables if missing (global sync is off).
+const { ensureRebookReminderSchema } = require('./helper/rebookReminderSchema')
+ensureRebookReminderSchema(db)
+  .then(() => console.log('[rebookReminderSchema] ensured'))
+  .catch((err) => console.error('[rebookReminderSchema] failed:', err.message))
 
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
