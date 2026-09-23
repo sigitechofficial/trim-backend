@@ -155,9 +155,14 @@ jobs:
             npm install --prefer-offline --no-audit
 
             echo "Restarting PM2 process..."
+            # Stage historically ran the now-removed `thetrim.js`; align it with
+            # prod by running `trim.js` (the current entry). Clean up the old
+            # process so it does not hold the port.
             pm2 stop thetrim.js || true
             pm2 delete thetrim.js || true
-            pm2 start thetrim.js
+            pm2 stop trim.js || true
+            pm2 delete trim.js || true
+            pm2 start trim.js
             pm2 save
-            
+
             echo "Testing Deployment Complete!"
