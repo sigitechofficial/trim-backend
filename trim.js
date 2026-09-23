@@ -43,6 +43,7 @@ const payoutRoute = require('./routes/payoutRoutes/payoutRoute')
 const webhookRoute = require('./routes/webhookRoutes/webhooks')
 const appleSubscriptionRoute = require('./routes/appleRoutes/appleSubscriptionRoute')
 const deepLinkRoute = require('./routes/deepLinkRoutes/deepLinkRoute')
+const internalRoute = require('./routes/internalRoutes/internalRoute')
 const { publishApexDeepLinkFiles } = require('./helper/apexDeepLinks')
 
 // Load environment variables
@@ -79,6 +80,8 @@ app.use('/payout', express.json(), payoutRoute)
 app.use('/new-reports', express.json(), newReportsRoute)
 // Apple subscription routes (other routes use JSON parser)
 app.use('/apple-subscriptions', express.json(), appleSubscriptionRoute)
+// Machine-to-machine (AWS EventBridge) endpoints, secret-header authenticated
+app.use('/internal', express.json(), internalRoute)
 
 
 
