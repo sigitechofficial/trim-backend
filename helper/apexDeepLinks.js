@@ -137,6 +137,14 @@ const HTACCESS =
   '# Short cache so fingerprint/path changes propagate to the verifier fast.\n' +
   '<IfModule mod_headers.c>\n  Header set Cache-Control "public, max-age=60"\n</IfModule>\n'
 
+const ID_OPENER_HTACCESS =
+  'DirectoryIndex index.html\n' +
+  '<IfModule mod_rewrite.c>\n' +
+  '  RewriteEngine On\n' +
+  '  RewriteCond %{REQUEST_FILENAME} !-f\n' +
+  '  RewriteRule ^ index.html [L]\n' +
+  '</IfModule>\n'
+
 // Candidate apex document roots, most specific first. APEX_DOCROOT can pin it.
 const CANDIDATES = [
   process.env.APEX_DOCROOT,
@@ -308,6 +316,22 @@ function publishApexDeepLinkFiles() {
       fs.mkdirSync(dir, { recursive: true })
       fs.writeFileSync(path.join(dir, 'index.html'), renderAppOpenPage(APP_OPEN[app]))
       console.log(`[apexDeepLinks] published /${p} app-open page (${app}) to ${dir}`)
+    }
+
+    // Paths that carry the id in the URL path (/shop-detail/123, the in-app Client
+    // QR) need every sub-path to serve the same opener page, else Apache 404s for
+    // anyone without the app. The page JS forwards its own full path to the app.
+    const idOpenerPaths = [
+      ['shop-detail', 'customer'],
+      ['salon-detail', 'customer'],
+      ['team-member', 'customer'],
+    ]
+    for (const [p, app] of idOpenerPaths) {
+      const dir = path.join(root, p)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'index.html'), renderAppOpenPage(APP_OPEN[app]))
+      fs.writeFileSync(path.join(dir, '.htaccess'), ID_OPENER_HTACCESS)
+      console.log(`[apexDeepLinks] published /${p}/* app-open page (${app}) to ${dir}`)
     }
 
     // Customer app download page, served at https://trimworldwide.com/get-customer-app
