@@ -1840,7 +1840,8 @@ exports.rentalOverview = async (req, res, next) => {
   }))
 }
 
-//* Top 20 Clients — ranked by number of bookings in a calendar year ------------
+//* Top 20 Clients — ranked by number of bookings in a period ------------------
+// Period = ?startDate&endDate (YYYY-MM-DD, inclusive), else ?year, else this year.
 // Counts upcoming + completed bookings (cancelled, no-show and unfinished
 // checkouts are excluded). Owners and in-house staff see their shop's list;
 // rent-a-chair (external) employees do not.
@@ -1871,6 +1872,15 @@ exports.topClients = async (req, res, next) => {
       ? requestedYear
       : currentYear
 
+  const isIsoDate = (s) =>
+    typeof s === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+    !Number.isNaN(Date.parse(s))
+  const { startDate: qStart, endDate: qEnd } = req.query
+  const useRange = isIsoDate(qStart) && isIsoDate(qEnd) && qStart <= qEnd
+  const startDate = useRange ? qStart : `${year}-01-01`
+  const endDate = useRange ? qEnd : `${year}-12-31`
+
   const yearRows = await booking.findAll({
     where: {
       salonDetailId,
@@ -1892,7 +1902,7 @@ exports.topClients = async (req, res, next) => {
       salonDetailId,
       customerId: { [Op.ne]: null },
       status: { [Op.in]: TOP_CLIENTS_STATUSES },
-      on: { [Op.between]: [`${year}-01-01`, `${year}-12-31`] },
+      on: { [Op.between]: [startDate, endDate] },
     },
     attributes: [
       'customerId',
@@ -1928,5 +1938,7 @@ exports.topClients = async (req, res, next) => {
 
   return res
     .status(200)
-    .json(response({ data: { year, availableYears, clients } }))
+    .json(
+      response({ data: { year, startDate, endDate, availableYears, clients } }),
+    )
 }
