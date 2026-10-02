@@ -46,6 +46,7 @@ router.get(
 router.get('/income-report-week', catchAsync(Controller.weeklyIncomeReport))
 router.get('/income-report-per-hour', catchAsync(Controller.hourlyIncomeReport))
 router.get('/average-bookings', catchAsync(Controller.averageJobsReport))
+router.get('/top-clients', catchAsync(Controller.topClients))
 
 
 router.get('/subscriptions/history', validateToken, catchAsync(Controller.subscriptionHistory));

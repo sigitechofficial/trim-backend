@@ -1839,3 +1839,106 @@ exports.rentalOverview = async (req, res, next) => {
     },
   }))
 }
+
+//* Top 20 Clients — ranked by number of bookings in a period ------------------
+// Period = ?startDate&endDate (YYYY-MM-DD, inclusive), else ?year, else this year.
+// Counts upcoming + completed bookings (cancelled, no-show and unfinished
+// checkouts are excluded). Owners and in-house staff see their shop's list;
+// rent-a-chair (external) employees do not.
+const TOP_CLIENTS_STATUSES = ['book', 'complete']
+const TOP_CLIENTS_LIMIT = 20
+
+async function resolveShopIdForReports(userId) {
+  const salon = await salonDetail.findOne({
+    where: { userId },
+    attributes: ['id'],
+  })
+  if (salon) return salon.id
+  const staff = await employee.findOne({
+    where: { userId, deleted: false, isExternalEmployee: false },
+    attributes: ['salonDetailId'],
+  })
+  return staff ? staff.salonDetailId : null
+}
+
+exports.topClients = async (req, res, next) => {
+  const salonDetailId = await resolveShopIdForReports(req.user.id)
+  if (!salonDetailId) throw new AppError('resource not found', 404)
+
+  const currentYear = new Date().getFullYear()
+  const requestedYear = parseInt(req.query.year, 10)
+  const year =
+    requestedYear >= 2000 && requestedYear <= currentYear + 1
+      ? requestedYear
+      : currentYear
+
+  const isIsoDate = (s) =>
+    typeof s === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+    !Number.isNaN(Date.parse(s))
+  const { startDate: qStart, endDate: qEnd } = req.query
+  const useRange = isIsoDate(qStart) && isIsoDate(qEnd) && qStart <= qEnd
+  const startDate = useRange ? qStart : `${year}-01-01`
+  const endDate = useRange ? qEnd : `${year}-12-31`
+
+  const yearRows = await booking.findAll({
+    where: {
+      salonDetailId,
+      customerId: { [Op.ne]: null },
+      status: { [Op.in]: TOP_CLIENTS_STATUSES },
+    },
+    attributes: [[fn('YEAR', col('on')), 'year']],
+    group: [fn('YEAR', col('on'))],
+    raw: true,
+  })
+  const availableYears = [
+    ...new Set([currentYear, ...yearRows.map((r) => Number(r.year))]),
+  ]
+    .filter((y) => Number.isInteger(y) && y > 0)
+    .sort((a, b) => b - a)
+
+  const rows = await booking.findAll({
+    where: {
+      salonDetailId,
+      customerId: { [Op.ne]: null },
+      status: { [Op.in]: TOP_CLIENTS_STATUSES },
+      on: { [Op.between]: [startDate, endDate] },
+    },
+    attributes: [
+      'customerId',
+      [fn('COUNT', col('booking.id')), 'totalBookings'],
+    ],
+    include: [
+      {
+        model: user,
+        required: true,
+        attributes: ['id', 'firstName', 'lastName', 'image'],
+      },
+    ],
+    group: ['booking.customerId', 'user.id'],
+    order: [
+      [literal('totalBookings'), 'DESC'],
+      [user, 'firstName', 'ASC'],
+    ],
+    limit: TOP_CLIENTS_LIMIT,
+    subQuery: false,
+  })
+
+  const clients = rows.map((row, index) => {
+    const r = row.get({ plain: true })
+    return {
+      rank: index + 1,
+      customerId: r.customerId,
+      firstName: r.user.firstName || '',
+      lastName: r.user.lastName || '',
+      image: r.user.image || '',
+      totalBookings: Number(r.totalBookings) || 0,
+    }
+  })
+
+  return res
+    .status(200)
+    .json(
+      response({ data: { year, startDate, endDate, availableYears, clients } }),
+    )
+}
