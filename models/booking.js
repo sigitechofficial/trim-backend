@@ -8,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
         'cancel',
         'no-show',
         'save-unpaid',
+        'requested',
       ),
       allowNull: false,
       defaultValue: 'book',
@@ -209,6 +210,25 @@ module.exports = (sequelize, DataTypes) => {
       allowNull:true,
     },
     twoHoursReminder: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    // Manual approval: a 'requested' booking must be answered before this time.
+    requestExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    respondedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    // 'accepted' | 'declined' | 'expired' | 'withdrawn' (client cancelled while waiting).
+    // Declined/expired/withdrawn bookings use status 'cancel' so existing flows treat them as cancelled.
+    requestOutcome: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+    },
+    requestReminderSent: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },

@@ -168,6 +168,11 @@ ensureRebookReminderSchema(db)
   .then(() => console.log('[rebookReminderSchema] ensured'))
   .catch((err) => console.error('[rebookReminderSchema] failed:', err.message))
 
+const { ensureBookingApprovalSchema } = require('./helper/bookingApprovalSchema')
+ensureBookingApprovalSchema(db)
+  .then(() => console.log('[bookingApprovalSchema] ensured'))
+  .catch((err) => console.error('[bookingApprovalSchema] failed:', err.message))
+
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)

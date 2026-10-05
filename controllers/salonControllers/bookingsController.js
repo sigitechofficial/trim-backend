@@ -61,7 +61,11 @@ const {
 } = require('../../utils/tapToPayAmount')
 const {
   walkinAppointmentConfirm,
+  onlineAppointmentConfirm,
 } = require('../eventDrivenCommunication/appointmentConfirm')
+const {
+  requestDeclined,
+} = require('../eventDrivenCommunication/appointmentRequest')
 
 const { sendEvent } = require('../../socket_io')
 const AppError = require('../../utils/appError')
@@ -320,7 +324,7 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
-    attributes: ['id', 'parentSalonId', 'onlinePayments','registrationExpiryDate','registrationDate'],
+    attributes: ['id', 'parentSalonId', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate'],
   })
   console.log(req.body)
   let parentSalonName = ''
@@ -371,6 +375,15 @@ exports.calendarAppointments = async (req, res, next) => {
        FROM bookings WHERE bookings.id = jobs.bookingId)`
       ),
       'customerId',
+    ],
+    // 'requested' = waiting for the shop to accept (manual approval)
+    [
+      literal(`(SELECT bookings.status FROM bookings WHERE bookings.id = jobs.bookingId)`),
+      'bookingStatus',
+    ],
+    [
+      literal(`(SELECT bookings.requestExpiresAt FROM bookings WHERE bookings.id = jobs.bookingId)`),
+      'requestExpiresAt',
     ],
   ]
 
@@ -556,6 +569,11 @@ exports.calendarAppointments = async (req, res, next) => {
       employees: results || [],
       parentSalonName,
       onlinePayments: salon?.onlinePayments ?? true,
+      autoAcceptBookings: salon?.autoAcceptBookings ?? true,
+      approvalScope: salon?.approvalScope ?? 'all',
+      pendingRequests: salon?.id
+        ? await booking.count({ where: { salonDetailId: salon.id, status: 'requested' } })
+        : 0,
       subscriptionExpire,
       registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
       registrationDate: subscriptionSalon?.registrationDate,
@@ -588,7 +606,7 @@ exports.salonBookings = async (req, res, next) => {
   const result = await booking.findAll({
     where: {
       status: {
-        [Op.or]: ['book', 'pending'],
+        [Op.or]: ['book', 'pending', 'requested'],
       },
       [Op.and]: literal(`EXISTS (
       SELECT 1
@@ -1008,6 +1026,7 @@ exports.bookingDetails = async (req, res, next) => {
     id: bookingData.id,
     scheduleDate: bookingData.on,
     status: bookingData.status,
+    requestExpiresAt: bookingData.requestExpiresAt,
     discount: bookingData.discount,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     appointmentNote: bookingData?.note || '',
@@ -1060,6 +1079,157 @@ exports.reasons = async (req, res, next) => {
               4.Cancel Booking
       ________________________________________
 */
+
+/*
+              Manual booking approval (requests)
+      ________________________________________
+*/
+
+// The shop the caller works for: as owner, or as an in-house staff member.
+async function shopIdForUser(userId) {
+  const owned = await salonDetail.findOne({ where: { userId }, attributes: ['id'] })
+  if (owned) return owned.id
+  const staff = await employee.findOne({
+    where: { userId, deleted: false },
+    attributes: ['salonDetailId'],
+  })
+  return staff?.salonDetailId ?? null
+}
+
+async function findOwnRequest(req) {
+  const shopId = await shopIdForUser(req.user.id)
+  const bookingId = parseInt(req.body?.bookingId, 10)
+  const request =
+    shopId && bookingId
+      ? await booking.findOne({
+          where: { id: bookingId, salonDetailId: shopId },
+          include: [{ model: salonDetail, attributes: ['id', 'connectAccountId'] }],
+        })
+      : null
+  if (!request) throw new AppError('Booking not found', 200)
+  if (request.status !== 'requested') {
+    throw new AppError('This booking request has already been answered.', 200)
+  }
+  return request
+}
+
+exports.bookingRequests = async (req, res, next) => {
+  const shopId = await shopIdForUser(req.user.id)
+  if (!shopId) throw new AppError('Shop not found', 200)
+  const requests = await booking.findAll({
+    where: { salonDetailId: shopId, status: 'requested' },
+    attributes: [
+      'id',
+      'on',
+      'startTime',
+      'endTime',
+      'duration',
+      'total',
+      'initialPayment',
+      'paymentMethod',
+      'customerStatus',
+      'requestExpiresAt',
+    ],
+    include: [
+      { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
+      {
+        model: jobs,
+        attributes: ['id', 'startTime', 'endTime', 'duration', 'total', 'status'],
+        include: [
+          { model: service, attributes: ['id', 'serviceName'] },
+          {
+            model: employee,
+            attributes: ['id'],
+            include: { model: user, attributes: ['firstName', 'lastName'] },
+          },
+        ],
+      },
+    ],
+    order: [['requestExpiresAt', 'ASC']],
+  })
+  return res.json(response({ message: 'Booking requests', data: { requests } }))
+}
+
+exports.acceptBookingRequest = async (req, res, next) => {
+  const request = await findOwnRequest(req)
+  if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
+    throw new AppError('This request has expired and can no longer be accepted.', 200)
+  }
+
+  // Claim the request first (the expiry job uses the same guard), then take the
+  // held deposit; if the hold has lapsed, put it back so the shop can decline.
+  const unassigned = await jobs.count({ where: { bookingId: request.id, status: 'pending' } })
+  const [claimed] = await booking.update(
+    { status: unassigned ? 'pending' : 'book', requestOutcome: 'accepted', respondedAt: new Date() },
+    { where: { id: request.id, status: 'requested' } },
+  )
+  if (!claimed) throw new AppError('This booking request has already been answered.', 200)
+
+  const deposit = Number(request.initialPayment) || 0
+  if (request.initialPaymentIntend && deposit > 0) {
+    try {
+      await Stripe.captureHeldPayment(
+        request.initialPaymentIntend,
+        request.salonDetail?.connectAccountId,
+      )
+    } catch (err) {
+      await booking.update(
+        { status: 'requested', requestOutcome: null, respondedAt: null },
+        { where: { id: request.id } },
+      )
+      throw err
+    }
+    await booking.update({ actualCapturedAmount: deposit }, { where: { id: request.id } })
+  }
+
+  socketForCalendar({ appointmentId: request.id, type: 'new' })
+  onlineAppointmentConfirm(request.id)
+  return res.json(response({ message: 'Booking accepted', data: { appointment: request.id } }))
+}
+
+exports.declineBookingRequest = async (req, res, next) => {
+  const request = await findOwnRequest(req)
+  const reasonId = parseInt(req.body?.reasonId, 10) || null
+  const chosen = reasonId
+    ? await reason.findOne({
+        where: {
+          id: reasonId,
+          type: {
+            [Op.in]: ['appointment_salon_owner_cancellation', 'appointment_employee_cancellation'],
+          },
+        },
+        attributes: ['id', 'reason'],
+      })
+    : null
+  const reasonText = String(req.body?.reasonText ?? '').trim().slice(0, 255) || chosen?.reason || ''
+
+  if (request.initialPaymentIntend) {
+    await Stripe.releaseHeldPayment(
+      request.initialPaymentIntend,
+      request.salonDetail?.connectAccountId,
+    )
+  }
+  await request.update({
+    status: 'cancel',
+    requestOutcome: 'declined',
+    respondedAt: new Date(),
+    actualCapturedAmount: 0,
+    cancellationCharges: 0,
+    total: 0,
+    tip: 0,
+  })
+  await jobs.update({ status: 'cancel' }, { where: { bookingId: request.id } })
+  await cancelledBooking.create({
+    bookingId: request.id,
+    userId: req.user.id,
+    reasonId: chosen?.id ?? null,
+    reasonText,
+  })
+
+  socketForCalendar({ appointmentId: request.id, type: 'finish', status: 'cancel' })
+  requestDeclined(request.id, reasonText)
+  return res.json(response({ message: 'Booking request declined', data: {} }))
+}
 
 exports.cancelBooking = async (req, res, next) => {
   const userId = req.user.id;
@@ -1125,8 +1295,19 @@ exports.cancelBooking = async (req, res, next) => {
 
   const updatedBooking = { tip: 0 };
 
-  const paid =
-    parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip);
+  // A request was never charged: release the hold instead of refunding.
+  const isRequest = appointment.status === 'requested';
+  if (isRequest) {
+    if (appointment.initialPaymentIntend) {
+      await Stripe.releaseHeldPayment(appointment.initialPaymentIntend, connectAccountId);
+    }
+    updatedBooking.requestOutcome = 'declined';
+    updatedBooking.respondedAt = new Date();
+  }
+
+  const paid = isRequest
+    ? 0
+    : parseFloat(appointment.actualCapturedAmount) + parseFloat(appointment.tip);
 
   if (
     paid > 0 &&

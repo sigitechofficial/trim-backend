@@ -267,7 +267,7 @@ async function createPaymentIntendForUpFrontPayments(
   }
 }
 
-async function  createDirectCharge(amount, customerId, connectedAccountId) {
+async function  createDirectCharge(amount, customerId, connectedAccountId, { holdOnly = false } = {}) {
   console.log("connectedAccountId========Stripe===>", connectedAccountId)
   try {
     const paymentIntent = await stripe.paymentIntents.create(
@@ -277,6 +277,8 @@ async function  createDirectCharge(amount, customerId, connectedAccountId) {
         customer: customerId,
         setup_future_usage: 'off_session',
         payment_method_types: ['card'],
+        // Manual approval: authorise now, capture only when the shop accepts.
+        ...(holdOnly ? { capture_method: 'manual' } : {}),
       },
       {
         stripeAccount: connectedAccountId,
@@ -1217,8 +1219,8 @@ async function retrieveAndConfirmPaymentIntent(paymentIntentId, paymentMethodId,
     
     console.log("🔍 Payment Intent Status:", paymentIntent.status);
     
-    // If already succeeded, return it
-    if (paymentIntent.status === 'succeeded') {
+    // Already succeeded, or authorised and held for a manual-approval booking
+    if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture') {
       return paymentIntent;
     }
     
@@ -1241,7 +1243,7 @@ async function retrieveAndConfirmPaymentIntent(paymentIntentId, paymentMethodId,
             paymentIntentId,
             stripeOptions
           );
-          if (updatedIntent.status === 'succeeded') {
+          if (updatedIntent.status === 'succeeded' || updatedIntent.status === 'requires_capture') {
             return updatedIntent;
           }
         }
@@ -1256,6 +1258,34 @@ async function retrieveAndConfirmPaymentIntent(paymentIntentId, paymentMethodId,
   } catch (error) {
     console.error("❌ retrieveAndConfirmPaymentIntent error:", error.message);
     throw new AppError(`Failed to confirm payment: ${error.message}`, 200);
+  }
+}
+
+/** Take a deposit that was only authorised (manual-approval booking accepted). */
+async function captureHeldPayment(paymentIntentId, connectAccountId) {
+  const options = connectAccountId ? { stripeAccount: connectAccountId } : {};
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, options);
+  if (intent.status === 'succeeded') return intent;
+  if (intent.status !== 'requires_capture') {
+    throw new AppError(`The card hold is no longer available (${intent.status}).`, 200);
+  }
+  return stripe.paymentIntents.capture(paymentIntentId, {}, options);
+}
+
+/** Release an authorised deposit without charging (request declined, expired or withdrawn). */
+async function releaseHeldPayment(paymentIntentId, connectAccountId) {
+  const options = connectAccountId ? { stripeAccount: connectAccountId } : {};
+  try {
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId, options);
+    if (intent.status === 'canceled') return intent;
+    if (intent.status === 'succeeded') {
+      // Already captured (should not happen for a request) — refund rather than leave it charged.
+      return refundFullPayment(paymentIntentId, connectAccountId);
+    }
+    return stripe.paymentIntents.cancel(paymentIntentId, {}, options);
+  } catch (error) {
+    console.error('releaseHeldPayment error:', error.message);
+    return null;
   }
 }
 
@@ -2053,6 +2083,8 @@ module.exports = {
   expireManually,
   fetchSingleCard,
   createDirectCharge,
+  captureHeldPayment,
+  releaseHeldPayment,
   getCustomer,
   getPlatformAccountId,
   getSubscriptionStatus,

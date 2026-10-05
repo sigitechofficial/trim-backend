@@ -414,6 +414,7 @@ router.patch(
 )
 
 router.patch('/online-payments', catchAsync(salonController.onlinePayments))
+router.patch('/booking-approval', catchAsync(salonController.bookingApprovalSettings))
 
 router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 

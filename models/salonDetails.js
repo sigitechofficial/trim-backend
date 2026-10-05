@@ -77,6 +77,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+    // false = online bookings arrive as requests the shop must accept.
+    autoAcceptBookings: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    // Who needs approval when autoAcceptBookings is off: 'all' | 'new' (first-time clients).
+    approvalScope: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
+      defaultValue: 'all',
+    },
     isOnline: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,

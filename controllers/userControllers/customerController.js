@@ -44,6 +44,7 @@ const {
   wallet,
   otpVerification,
   reason,
+  cancelledBooking,
   subscriptions,
   allergies,
   helpSupport,
@@ -106,6 +107,14 @@ const { feedBack } = require('../eventDrivenCommunication/customerFeedback')
 const {
   cancelByCustomer,
 } = require('../eventDrivenCommunication/appointmentCancel')
+const {
+  bookingRequested,
+  requestWithdrawn,
+} = require('../eventDrivenCommunication/appointmentRequest')
+const {
+  requiresApproval,
+  requestExpiresAt,
+} = require('../../helper/bookingApproval')
 
 const {
   bookingDataForEmailAndNotifications,
@@ -1052,7 +1061,7 @@ exports.home = async (req, res, next) => {
     appointments = await booking.findAll({
       where: {
         customerId: req.user.id,
-        status: { [Op.or]: ['pending', 'book'] },
+        status: { [Op.or]: ['pending', 'book', 'requested'] },
       },
       attributes: [
         'id',
@@ -1402,7 +1411,7 @@ exports.searchSalons = async (req, res, next) => {
                     INNER JOIN bookings b ON j.bookingId = b.id
                     WHERE j.employeeId = e.id
                       AND j.on = ${dateEsc}
-                      AND b.status IN ('pending', 'book')
+                      AND b.status IN ('pending', 'book', 'requested')
                       AND j.startTime <= GREATEST(t.openingTime, ${startEsc})
                       AND j.endTime > GREATEST(t.openingTime, ${startEsc})
                   )
@@ -1413,7 +1422,7 @@ exports.searchSalons = async (req, res, next) => {
                     INNER JOIN bookings b3 ON j3.bookingId = b3.id
                     WHERE j3.employeeId = e.id
                       AND j3.on = ${dateEsc}
-                      AND b3.status IN ('pending', 'book')
+                      AND b3.status IN ('pending', 'book', 'requested')
                       AND j3.endTime < LEAST(t.closingTime, ${endEsc})
                       AND j3.endTime >= GREATEST(t.openingTime, ${startEsc})
                       AND NOT EXISTS (
@@ -1421,7 +1430,7 @@ exports.searchSalons = async (req, res, next) => {
                         INNER JOIN bookings b4 ON j4.bookingId = b4.id
                         WHERE j4.employeeId = e.id
                           AND j4.on = ${dateEsc}
-                          AND b4.status IN ('pending', 'book')
+                          AND b4.status IN ('pending', 'book', 'requested')
                           AND j4.startTime <= j3.endTime
                           AND j4.endTime > j3.endTime
                       )
@@ -1711,6 +1720,8 @@ exports.salonDetails = async (req, res, next) => {
       'coverImage',
       'description',
       'onlinePayments',
+      'autoAcceptBookings',
+      'approvalScope',
       'isOnline',
       "userId",
       'isExternalEmployee',
@@ -3701,6 +3712,29 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
 
 //* 6.Cancel Appointment -----------------
 
+// Optional (older apps send none); a stale or disabled reason must never block the cancellation.
+async function saveCustomerCancellationReason(bookingId, userId, body) {
+  const reasonId = parseInt(body?.reasonId, 10) || null
+  const reasonNote = String(body?.reasonText ?? '').trim().slice(0, 255)
+  if (!reasonId && !reasonNote) return
+  try {
+    const chosen = reasonId
+      ? await reason.findOne({
+          where: { id: reasonId, type: 'appointment_customer_cancellation' },
+          attributes: ['id', 'reason'],
+        })
+      : null
+    await cancelledBooking.create({
+      bookingId,
+      userId,
+      reasonId: chosen ? chosen.id : null,
+      reasonText: reasonNote || (chosen ? chosen.reason : ''),
+    })
+  } catch (err) {
+    console.error('[cancelAppointment] saving cancellation reason failed:', err.message)
+  }
+}
+
 exports.cancelAppointment = async (req, res, next) => {
   const { bookingId } = req.params
 
@@ -3800,6 +3834,34 @@ exports.cancelAppointment = async (req, res, next) => {
       `The appointment has already been marked as : ${appointment.status}.`,
       200,
     )
+  }
+
+  // A request the shop has not accepted yet: free to withdraw, release any held deposit.
+  if (appointment.status === 'requested') {
+    if (appointment.initialPaymentIntend) {
+      await Stripe.releaseHeldPayment(
+        appointment.initialPaymentIntend,
+        appointment.salonDetail?.connectAccountId,
+      )
+    }
+    await booking.update(
+      {
+        status: 'cancel',
+        requestOutcome: 'withdrawn',
+        cancellationCharges: 0,
+        actualCapturedAmount: 0,
+        total: 0,
+        tip: 0,
+      },
+      { where: { id: appointment.id } },
+    )
+    await jobs.update({ status: 'cancel' }, { where: { bookingId: appointment.id } })
+    await saveCustomerCancellationReason(appointment.id, req.user.id, req.body)
+    requestWithdrawn(appointment.id)
+    socketForCalendar({ appointmentId: bookingId, type: 'finish' })
+    return res
+      .status(200)
+      .json(response({ message: 'Booking request cancelled', data: {} }))
   }
   //& Refund or extra amount chagr will be here
   const updatedBooking = {
@@ -3904,6 +3966,9 @@ exports.cancelAppointment = async (req, res, next) => {
     { status: 'cancel' },
     { where: { bookingId: appointment.id } },
   )
+
+  await saveCustomerCancellationReason(appointment.id, req.user.id, req.body)
+
   calculatePayoutsOnBooking(appointment, finePercentage, 'cancel')
   cancelByCustomer(appointment.id) //Notifications etc
   socketForCalendar({ appointmentId: bookingId, type: 'finish' })
@@ -4076,6 +4141,13 @@ exports.bookAppointment = async (req, res, next) => {
     console.log('Ã°Å¸Å¡â‚¬ ~ findUnAssign:', findUnAssign)
     appointment.status = 'pending'
   }
+  // Manual approval: the booking waits for the shop. Its jobs keep their normal
+  // status, so the time slot stays held; accept restores 'book' / 'pending'.
+  const needsApproval = await requiresApproval(appointment.salonDetailId, customerId)
+  if (needsApproval) {
+    appointment.status = 'requested'
+    appointment.requestExpiresAt = requestExpiresAt(appointment.on, appointment.startTime)
+  }
   const book = await booking.create(appointment)
   if (!book)
     throw new AppError('Something went wrong appointment not booked', 200)
@@ -4125,8 +4197,9 @@ exports.bookAppointment = async (req, res, next) => {
         salon.connectAccountId
       );
 
-      // Check if payment succeeded
-      if (confirmedPayment.status !== 'succeeded') {
+      // Charged, or (manual approval) authorised and held until the shop accepts
+      const held = needsApproval && confirmedPayment.status === 'requires_capture'
+      if (confirmedPayment.status !== 'succeeded' && !held) {
         await booking.destroy({ where: { id: book.id } });
         throw new AppError(`Payment failed with status: ${confirmedPayment.status}`, 200);
       }
@@ -4142,7 +4215,8 @@ exports.bookAppointment = async (req, res, next) => {
 
       // Update booking with actual captured amount
       // actualCapturedAmount should be the upfront amount (excluding tip)
-      const actualUpfrontAmount = appointment.initialPayment;
+      // A held deposit is not captured yet; accepting the request records it.
+      const actualUpfrontAmount = held ? 0 : appointment.initialPayment;
 
       await book.update({
         actualCapturedAmount: actualUpfrontAmount,
@@ -4215,6 +4289,20 @@ exports.bookAppointment = async (req, res, next) => {
 
   socketForCalendar({ appointmentId: book?.id, type: 'new' })
 
+  if (needsApproval) {
+    bookingRequested(book?.id, book?.requestExpiresAt)
+    return res.status(200).json(
+      response({
+        message: 'Booking request sent',
+        data: {
+          appointment: book?.id,
+          requested: true,
+          requestExpiresAt: book?.requestExpiresAt,
+        },
+      }),
+    )
+  }
+
   onlineAppointmentConfirm(book?.id)
 
   const output = response({
@@ -4270,6 +4358,9 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
     account.connectAccountId
   )
 
+  // Manual-approval shop: authorise only; captured when the shop accepts.
+  const needsApproval = await requiresApproval(req.body.salonId, customerId)
+
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
     advanceAmount > 0
@@ -4277,10 +4368,12 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
           advanceAmount,
           confirmCustomerId,
           account.connectAccountId,
+          { holdOnly: needsApproval },
         )
       : null
 
   const data = {
+    requiresApproval: needsApproval,
     ephemeralKeySecret: ephemeralKey ? ephemeralKey.secret : '',
     client_secret: indent ? indent.client_secret : '',
     paymentIntendId: indent ? indent.id : '',
@@ -4384,6 +4477,8 @@ exports.fetchAppointments = async (req, res, next) => {
       'subTotal',
       'noshowCharges',
       'cancellationCharges',
+      'requestExpiresAt',
+      'requestOutcome',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4459,6 +4554,14 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       `noshowPolicyVersion`,
       'noshowCharges',
       'cancellationCharges',
+      'requestExpiresAt',
+      'requestOutcome',
+      [
+        literal(
+          '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',
+        ),
+        'cancellationReasonText',
+      ],
       'penaltyAmount',
       'refundAmount',
       'reScheduleCount',
@@ -5404,7 +5507,7 @@ exports.accountDelete = async (req, res, next) => {
           `(SELECT COUNT(*) 
            FROM bookings 
            WHERE bookings.customerId = user.id 
-           AND bookings.status IN ('pending', 'book', 'saveunpaid'))`,
+           AND bookings.status IN ('pending', 'book', 'saveunpaid', 'requested'))`,
         ),
         'bookingCount',
       ],

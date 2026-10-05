@@ -5007,6 +5007,33 @@ exports.onlinePayments = async (req, res, next) => {
   return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
+//* Booking approval (accept automatically vs approve each booking)
+
+exports.bookingApprovalSettings = async (req, res, next) => {
+  const salonData = await salonDetail.findOne({
+    where: { userId: req.user.id },
+    attributes: ['id', 'autoAcceptBookings', 'approvalScope'],
+  })
+  if (!salonData) return res.json(returnFunction('0', 'Shop not found', {}, ''))
+
+  const { autoAcceptBookings, approvalScope } = req.body
+  if (typeof autoAcceptBookings === 'boolean') salonData.autoAcceptBookings = autoAcceptBookings
+  if (approvalScope === 'all' || approvalScope === 'new') salonData.approvalScope = approvalScope
+  await salonData.save()
+
+  return res.json(
+    returnFunction(
+      '1',
+      'Success',
+      {
+        autoAcceptBookings: salonData.autoAcceptBookings,
+        approvalScope: salonData.approvalScope,
+      },
+      '',
+    ),
+  )
+}
+
 // TO change PaymentMethods
 exports.attachPaymentMethodsForSubscription = async (req, res, next) => {
   const salon = await user.findOne({
