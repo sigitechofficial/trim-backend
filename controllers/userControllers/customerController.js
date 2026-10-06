@@ -3848,6 +3848,7 @@ exports.cancelAppointment = async (req, res, next) => {
       {
         status: 'cancel',
         requestOutcome: 'withdrawn',
+        respondedAt: new Date(), // when the request ended, for the admin timeline
         cancellationCharges: 0,
         actualCapturedAmount: 0,
         total: 0,

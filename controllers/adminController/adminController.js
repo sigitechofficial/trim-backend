@@ -858,6 +858,16 @@ exports.fecthSalons = async (req, res, next) => {
       'stickerSent',
       'createdAt',
       'updatedAt',
+      'autoAcceptBookings',
+      'approvalScope',
+      [
+        literal(`(
+          SELECT COUNT(b.id)
+          FROM bookings b
+          WHERE b.salonDetailId = salonDetail.id AND b.status = 'requested'
+        )`),
+        'pendingRequests',
+      ],
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1445,6 +1455,16 @@ exports.fecthAppointments = async (req, res, next) => {
   else if (req.params?.type == 'unpaid') bookingFilters.status = 'save-unpaid'
   else if (req.params?.type == 'upcoming')
     bookingFilters.status = { [Op.or]: ['pending', 'book'] }
+  // Manual booking approval: waiting requests, and requests that ended
+  // without a booking (stored as cancel + requestOutcome).
+  else if (req.params?.type == 'requested') bookingFilters.status = 'requested'
+  else if (req.params?.type == 'declined') {
+    bookingFilters.status = 'cancel'
+    bookingFilters.requestOutcome = 'declined'
+  } else if (req.params?.type == 'expired') {
+    bookingFilters.status = 'cancel'
+    bookingFilters.requestOutcome = 'expired'
+  }
 
   //TODO optimize this query
   console.log(
@@ -1461,6 +1481,8 @@ exports.fecthAppointments = async (req, res, next) => {
       'note',
       `on`,
       'createdAt',
+      'requestOutcome',
+      'requestExpiresAt',
       [
         literal(
           `(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`,
@@ -1513,6 +1535,16 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       `stripeCardId`,
       `actualCapturedAmount`,
       `paymentMethod`,
+      'createdAt',
+      'requestExpiresAt',
+      'respondedAt',
+      'requestOutcome',
+      [
+        literal(
+          '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',
+        ),
+        'cancellationReasonText',
+      ],
     ],
     include: [
       {
@@ -2753,6 +2785,36 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
 //^ Status-Change And Delete --------------------------------------------------------------
 
 //*1 Salon status
+//* Change a shop's booking approval mode (automatic / manual, all / new clients).
+// Waiting requests are unaffected; they are still answered or expire as normal.
+exports.updateSalonBookingApproval = async (req, res, next) => {
+  const shop = await salonDetail.findByPk(req.params.id, {
+    attributes: ['id', 'autoAcceptBookings', 'approvalScope'],
+  })
+  if (!shop) throw new AppError('No record found with that ID', 200)
+
+  const { autoAcceptBookings, approvalScope } = req.body
+  if (autoAcceptBookings !== undefined && typeof autoAcceptBookings !== 'boolean') {
+    throw new AppError('autoAcceptBookings must be true or false', 200)
+  }
+  if (approvalScope !== undefined && !['all', 'new'].includes(approvalScope)) {
+    throw new AppError("approvalScope must be 'all' or 'new'", 200)
+  }
+  if (autoAcceptBookings !== undefined) shop.autoAcceptBookings = autoAcceptBookings
+  if (approvalScope !== undefined) shop.approvalScope = approvalScope
+  await shop.save()
+
+  return res.status(200).json(
+    response({
+      message: 'Booking approval updated',
+      data: {
+        autoAcceptBookings: shop.autoAcceptBookings,
+        approvalScope: shop.approvalScope,
+      },
+    }),
+  )
+}
+
 exports.changeSalonStatus = async (req, res, next) => {
   const id = req.params.id
 

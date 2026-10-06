@@ -217,6 +217,11 @@ router.put(
   protect,
   catchAsync(adminController.changeSalonStatus),
 )
+router.patch(
+  '/salon-booking-approval/:id',
+  protect,
+  catchAsync(adminController.updateSalonBookingApproval),
+)
 router.delete(
   '/salon-delete/:id',
   protect,
