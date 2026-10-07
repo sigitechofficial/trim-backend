@@ -2785,6 +2785,89 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
 //^ Status-Change And Delete --------------------------------------------------------------
 
 //*1 Salon status
+//* A shop's subscription: current state plus payment history, for the admin
+// shop details "Subscription plan" tab.
+exports.fetchSalonSubscription = async (req, res, next) => {
+  const shop = await salonDetail.findByPk(req.params.id, {
+    attributes: [
+      'id',
+      'salonName',
+      'metadata',
+      'registrationExpiryDate',
+      'subscriptionLatestPaymentStatus',
+      'hasObtainedFreeTrial',
+      'isExternalEmployee',
+    ],
+  })
+  if (!shop) throw new AppError('No record found with that ID', 200)
+
+  const history = await subscriptions.findAll({
+    where: { salonDetailId: shop.id },
+    attributes: [
+      'id',
+      'name',
+      'status',
+      'subscriptionSource',
+      'subscriptionId',
+      'customerId',
+      'priceId',
+      'invoiceId',
+      'invoice',
+      'amountPaid',
+      'renewablePrice',
+      'currency',
+      'VAT',
+      'periodStart',
+      'periodEnd',
+      'revenueCatUserId',
+      'revenueCatOriginalTransactionId',
+      'revenueCatStore',
+      'appleProductId',
+      'appleOriginalTransactionId',
+      'appleEnvironment',
+      'createdAt',
+    ],
+    order: [['createdAt', 'DESC']],
+    limit: 100,
+  })
+
+  let planName = null
+  try {
+    planName = JSON.parse(shop.metadata || '{}')?.subscriptionName || null
+  } catch (_) {}
+
+  const today = CustomDate.currentDay().currentDateOnly
+  const latest = history[0] || null
+  const status = latest?.status || shop.subscriptionLatestPaymentStatus || null
+  const blocked = ['expired', 'payment_failed', 'paused', 'refunded']
+  const active =
+    !!shop.registrationExpiryDate &&
+    shop.registrationExpiryDate >= today &&
+    !!shop.subscriptionLatestPaymentStatus &&
+    !blocked.includes(shop.subscriptionLatestPaymentStatus)
+
+  return res.status(200).json(
+    response({
+      message: 'Subscription',
+      data: {
+        shop: {
+          id: shop.id,
+          salonName: shop.salonName,
+          planName: planName || latest?.name || null,
+          registrationExpiryDate: shop.registrationExpiryDate,
+          latestPaymentStatus: shop.subscriptionLatestPaymentStatus,
+          hasObtainedFreeTrial: shop.hasObtainedFreeTrial,
+          isExternalEmployee: shop.isExternalEmployee,
+          active,
+          status,
+        },
+        latest,
+        history,
+      },
+    }),
+  )
+}
+
 //* Change a shop's booking approval mode (automatic / manual, all / new clients).
 // Waiting requests are unaffected; they are still answered or expire as normal.
 exports.updateSalonBookingApproval = async (req, res, next) => {

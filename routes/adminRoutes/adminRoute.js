@@ -217,6 +217,11 @@ router.put(
   protect,
   catchAsync(adminController.changeSalonStatus),
 )
+router.get(
+  '/salon-subscription/:id',
+  protect,
+  catchAsync(adminController.fetchSalonSubscription),
+)
 router.patch(
   '/salon-booking-approval/:id',
   protect,
