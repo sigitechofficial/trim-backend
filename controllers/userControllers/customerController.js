@@ -4166,19 +4166,29 @@ exports.bookAppointment = async (req, res, next) => {
         throw new AppError('Shop connected account not found', 200);
       }
 
-      // Get customer's stripe customer ID on connected account
+      // The customer's Stripe ID for THIS shop. Each shop has its own connected
+      // account, so a customer has one Stripe customer per shop
+      // (customerOnConnectAccount). users.stripeCustomerId only holds the most
+      // recently created one, which belongs to another shop's account when the
+      // client has booked elsewhere since, so it is only a fallback.
+      const shopCustomer = await customerOnConnectAccount.findOne({
+        where: { userId: customerId, connectAccountId: salon.connectAccountId },
+        attributes: ['customerId'],
+        order: [['updatedAt', 'DESC']],
+      });
       const client = await user.findByPk(customerId, {
         attributes: ['stripeCustomerId'],
       });
+      const stripeCustomerId = shopCustomer?.customerId || client?.stripeCustomerId;
 
-      if (!client?.stripeCustomerId) {
+      if (!stripeCustomerId) {
         await booking.destroy({ where: { id: book.id } });
         throw new AppError('Customer Stripe ID not found', 200);
       }
 
       // Verify customer exists on connected account
       const confirmCustomerId = await Stripe.getCustomer(
-        client.stripeCustomerId,
+        stripeCustomerId,
         salon.connectAccountId
       );
 
@@ -4229,7 +4239,17 @@ exports.bookAppointment = async (req, res, next) => {
     } catch (error) {
       // Rollback booking if payment fails
       await booking.destroy({ where: { id: book.id } });
-      console.error('❌ Payment charge failed, booking rolled back:', error.message);
+      // The app's payment sheet confirms the payment before this request, so it
+      // may already be charged or held. No booking means no charge: release it
+      // (cancels a hold, refunds a captured payment).
+      const failedShop = await salonDetail.findByPk(appointment.salonDetailId, {
+        attributes: ['connectAccountId'],
+      });
+      await Stripe.releaseHeldPayment(
+        req.body.initialPaymentIntend,
+        failedShop?.connectAccountId,
+      );
+      console.error('❌ Payment charge failed, booking rolled back and payment released:', error.message);
       throw new AppError(`Payment failed: ${error.message}`, 200);
     }
   } else if (req.body.paymentMethod === 'cash') {
