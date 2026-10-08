@@ -4584,6 +4584,7 @@ exports.fetchAppointments = async (req, res, next) => {
       'previousStartTime',
       'previousEndTime',
       'proposalComment',
+      'previousStaffName',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4665,6 +4666,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'previousStartTime',
       'previousEndTime',
       'proposalComment',
+      'previousStaffName',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',

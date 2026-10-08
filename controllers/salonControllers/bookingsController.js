@@ -1039,6 +1039,7 @@ exports.bookingDetails = async (req, res, next) => {
     previousOn: bookingData.previousOn,
     previousStartTime: bookingData.previousStartTime,
     proposalComment: bookingData.proposalComment,
+    previousStaffName: bookingData.previousStaffName,
     discount: bookingData.discount,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     appointmentNote: bookingData?.note || '',
@@ -1146,6 +1147,7 @@ exports.bookingRequests = async (req, res, next) => {
       'previousStartTime',
       'previousEndTime',
       'proposalComment',
+      'previousStaffName',
       'proposedAt',
     ],
     include: [
@@ -1276,6 +1278,27 @@ exports.proposeBookingTime = async (req, res, next) => {
     }
   })
   const endTime = cursor
+
+  // Who the client asked for vs who the shop suggests (names for the client).
+  const staffNames = async (ids) => {
+    const unique = [...new Set(ids.filter(Boolean))]
+    if (!unique.length) return ''
+    const rows = await employee.findAll({
+      where: { id: unique },
+      attributes: ['id'],
+      include: { model: user, attributes: ['firstName', 'lastName'] },
+    })
+    return rows
+      .map((r) => `${r.user?.firstName ?? ''} ${r.user?.lastName ?? ''}`.trim())
+      .filter(Boolean)
+      .join(', ')
+  }
+  const previousIds = bookingJobs.map((j) => j.employeeId)
+  const newIds = planned.map((p) => p.employeeId)
+  const staffChanged = previousIds.join(',') !== newIds.join(',')
+  const previousStaffName = staffChanged ? await staffNames(previousIds) : ''
+  const newStaffName = staffChanged ? await staffNames(newIds) : ''
+
   if (endTime < startTime) {
     throw new AppError('The booking must finish on the same day.', 200)
   }
@@ -1315,6 +1338,7 @@ exports.proposeBookingTime = async (req, res, next) => {
       endTime,
       requestOutcome: 'proposed',
       proposalComment: comment || null,
+      previousStaffName: previousStaffName || null,
       proposedAt: new Date(),
       requestExpiresAt: requestDeadline(on, startTime),
       requestReminderSent: true,
@@ -1340,7 +1364,7 @@ exports.proposeBookingTime = async (req, res, next) => {
   }
 
   socketForCalendar({ appointmentId: request.id, type: 'reschedule' })
-  timeProposed(request.id, comment)
+  timeProposed(request.id, comment, newStaffName)
   return res.json(
     response({
       message: 'New time sent to the client',

@@ -117,7 +117,7 @@ exports.requestExpired = (bookingId, wasProposal = false) =>
   })
 
 // Shop accepted on condition of a different time; the client must confirm.
-exports.timeProposed = (bookingId, comment) =>
+exports.timeProposed = (bookingId, comment, newStaffName = '') =>
   safely('timeProposed', async () => {
     const ctx = await load(bookingId)
     if (!ctx) return
@@ -125,8 +125,8 @@ exports.timeProposed = (bookingId, comment) =>
     toClient(ctx, 'bookingTimeProposed', {
       title: 'New time suggested',
       body: `${ctx.bookingData.salon.salonName} can take your booking at ${ctx.when}${
-        comment ? `: "${comment}"` : '.'
-      } Please confirm${deadline ? ` by ${deadline}` : ''}. You won't be charged unless you accept.`,
+        newStaffName ? ` with ${newStaffName}` : ''
+      }${comment ? `: "${comment}"` : '.'} Please confirm${deadline ? ` by ${deadline}` : ''}. You won't be charged unless you accept.`,
     })
   })
 

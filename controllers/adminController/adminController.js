@@ -1547,6 +1547,7 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       'previousStartTime',
       'previousEndTime',
       'proposalComment',
+      'previousStaffName',
       'proposedAt',
       [
         literal(

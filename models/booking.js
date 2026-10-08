@@ -239,6 +239,8 @@ module.exports = (sequelize, DataTypes) => {
     previousStartTime: { type: DataTypes.TIME, allowNull: true },
     previousEndTime: { type: DataTypes.TIME, allowNull: true },
     proposalComment: { type: DataTypes.STRING(500), allowNull: true },
+    // Staff the client originally asked for, when the shop suggested someone else.
+    previousStaffName: { type: DataTypes.STRING(255), allowNull: true },
     proposedAt: { type: DataTypes.DATE, allowNull: true },
   })
 

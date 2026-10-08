@@ -48,6 +48,7 @@ async function ensureBookingApprovalSchema(db) {
     previousStartTime: { type: DataTypes.TIME, allowNull: true },
     previousEndTime: { type: DataTypes.TIME, allowNull: true },
     proposalComment: { type: DataTypes.STRING(500), allowNull: true },
+    previousStaffName: { type: DataTypes.STRING(255), allowNull: true },
     proposedAt: { type: DataTypes.DATE, allowNull: true },
   })
   if (!bookingColumns || !bookingColumns.status) return
