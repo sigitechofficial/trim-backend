@@ -1073,6 +1073,9 @@ exports.home = async (req, res, next) => {
         'on',
         'total',
         'actualCapturedAmount',
+        // Manual approval: lets the home tile say "New time suggested"
+        'requestOutcome',
+        'requestExpiresAt',
         [literal(`(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)`), 'serviceCount'],
       ],
       include: [
