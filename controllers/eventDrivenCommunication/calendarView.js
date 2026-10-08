@@ -65,6 +65,19 @@ const jobAttributes = [
     ),
     'customerId',
   ],
+  // Manual booking approval: lets the shop app style request tiles live.
+  [
+    literal(`(SELECT bookings.status FROM bookings WHERE bookings.id = jobs.bookingId)`),
+    'bookingStatus',
+  ],
+  [
+    literal(`(SELECT bookings.requestExpiresAt FROM bookings WHERE bookings.id = jobs.bookingId)`),
+    'requestExpiresAt',
+  ],
+  [
+    literal(`(SELECT bookings.requestOutcome FROM bookings WHERE bookings.id = jobs.bookingId)`),
+    'requestOutcome',
+  ],
 ]
 
 exports.socketForCalendar = async ({ appointmentId, type, status }) => {
@@ -86,7 +99,7 @@ exports.socketForCalendar = async ({ appointmentId, type, status }) => {
     ]
 
     const appointment = await booking.findByPk(appointmentId, {
-      attributes: ['id', 'salonDetailId', 'on'],
+      attributes: ['id', 'salonDetailId', 'on', 'status', 'requestOutcome'],
       include: include,
     })
 
@@ -95,6 +108,10 @@ exports.socketForCalendar = async ({ appointmentId, type, status }) => {
       bookingId: appointment?.id,
       on: appointment.on,
       status: '',
+      // Request events (new, moved, answered) carry these so the shop app only
+      // refreshes its requests list for them, not for every booking.
+      bookingStatus: appointment?.status,
+      requestOutcome: appointment?.requestOutcome ?? null,
     }
     if (type == 'finish') {
       event = 'finish-appointment-calendar'
