@@ -110,6 +110,8 @@ const {
 const {
   bookingRequested,
   requestWithdrawn,
+  proposalAccepted,
+  proposalDeclined,
 } = require('../eventDrivenCommunication/appointmentRequest')
 const {
   requiresApproval,
@@ -3735,6 +3737,81 @@ async function saveCustomerCancellationReason(bookingId, userId, body) {
   }
 }
 
+//* Shop suggested a new time for a request: the client accepts or declines it.
+exports.respondToTimeProposal = async (req, res, next) => {
+  const customerId = req.user.id
+  const bookingId = parseInt(req.body?.bookingId ?? req.params?.bookingId, 10)
+  const accept = req.body?.accept === true || req.body?.accept === 'true'
+  const appointment = await booking.findOne({
+    where: { id: bookingId, customerId },
+    attributes: [
+      'id',
+      'status',
+      'requestOutcome',
+      'requestExpiresAt',
+      'initialPayment',
+      'initialPaymentIntend',
+      'salonDetailId',
+    ],
+    include: [{ model: salonDetail, attributes: ['connectAccountId'] }],
+  })
+  if (!appointment) throw new AppError('Booking not found', 200)
+  if (appointment.status !== 'requested' || appointment.requestOutcome !== 'proposed') {
+    throw new AppError('This suggestion is no longer open.', 200)
+  }
+  if (appointment.requestExpiresAt && new Date(appointment.requestExpiresAt) <= new Date()) {
+    throw new AppError('This suggested time has expired.', 200)
+  }
+  const connectAccountId = appointment.salonDetail?.connectAccountId
+
+  if (accept) {
+    const unassigned = await jobs.count({ where: { bookingId: appointment.id, status: 'pending' } })
+    const [claimed] = await booking.update(
+      { status: unassigned ? 'pending' : 'book', requestOutcome: 'accepted', respondedAt: new Date() },
+      { where: { id: appointment.id, status: 'requested', requestOutcome: 'proposed' } },
+    )
+    if (!claimed) throw new AppError('This suggestion is no longer open.', 200)
+    const deposit = Number(appointment.initialPayment) || 0
+    if (appointment.initialPaymentIntend && deposit > 0) {
+      try {
+        await Stripe.captureHeldPayment(appointment.initialPaymentIntend, connectAccountId)
+      } catch (err) {
+        await booking.update(
+          { status: 'requested', requestOutcome: 'proposed', respondedAt: null },
+          { where: { id: appointment.id } },
+        )
+        throw err
+      }
+      await booking.update({ actualCapturedAmount: deposit }, { where: { id: appointment.id } })
+    }
+    socketForCalendar({ appointmentId: appointment.id, type: 'new' })
+    proposalAccepted(appointment.id)
+    onlineAppointmentConfirm(appointment.id)
+    return res.json(response({ message: 'Booking confirmed', data: { appointment: appointment.id } }))
+  }
+
+  const [claimed] = await booking.update(
+    {
+      status: 'cancel',
+      requestOutcome: 'client_declined',
+      respondedAt: new Date(),
+      actualCapturedAmount: 0,
+      cancellationCharges: 0,
+      total: 0,
+      tip: 0,
+    },
+    { where: { id: appointment.id, status: 'requested', requestOutcome: 'proposed' } },
+  )
+  if (!claimed) throw new AppError('This suggestion is no longer open.', 200)
+  if (appointment.initialPaymentIntend) {
+    await Stripe.releaseHeldPayment(appointment.initialPaymentIntend, connectAccountId)
+  }
+  await jobs.update({ status: 'cancel' }, { where: { bookingId: appointment.id } })
+  socketForCalendar({ appointmentId: appointment.id, type: 'finish', status: 'cancel' })
+  proposalDeclined(appointment.id)
+  return res.json(response({ message: 'Suggested time declined', data: {} }))
+}
+
 exports.cancelAppointment = async (req, res, next) => {
   const { bookingId } = req.params
 
@@ -4500,6 +4577,10 @@ exports.fetchAppointments = async (req, res, next) => {
       'cancellationCharges',
       'requestExpiresAt',
       'requestOutcome',
+      'previousOn',
+      'previousStartTime',
+      'previousEndTime',
+      'proposalComment',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4577,6 +4658,10 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'cancellationCharges',
       'requestExpiresAt',
       'requestOutcome',
+      'previousOn',
+      'previousStartTime',
+      'previousEndTime',
+      'proposalComment',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',

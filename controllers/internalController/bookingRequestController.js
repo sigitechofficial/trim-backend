@@ -26,7 +26,7 @@ exports.runBookingRequestJob = async (req, res) => {
 
   const overdue = await booking.findAll({
     where: { status: 'requested', requestExpiresAt: { [Op.lte]: now } },
-    attributes: ['id', 'initialPaymentIntend'],
+    attributes: ['id', 'initialPaymentIntend', 'requestOutcome'],
     include: [{ model: salonDetail, attributes: ['connectAccountId'] }],
     limit: BATCH,
   })
@@ -38,6 +38,8 @@ exports.runBookingRequestJob = async (req, res) => {
       status: 'requested',
       requestReminderSent: false,
       requestExpiresAt: { [Op.gt]: now, [Op.lte]: reminderCutoff },
+      // Shop reminders only: skip requests waiting for the client to confirm a new time.
+      [Op.or]: [{ requestOutcome: null }, { requestOutcome: { [Op.ne]: 'proposed' } }],
       createdAt: { [Op.lte]: recentlyCreated },
     },
     attributes: ['id', 'requestExpiresAt'],
@@ -74,7 +76,7 @@ exports.runBookingRequestJob = async (req, res) => {
       }
       await jobs.update({ status: 'cancel' }, { where: { bookingId: b.id } })
       socketForCalendar({ appointmentId: b.id, type: 'finish', status: 'cancel' })
-      requestExpired(b.id)
+      requestExpired(b.id, b.requestOutcome === 'proposed')
       expired++
     } catch (err) {
       console.error(`[BookingRequests] expiring #${b.id} failed:`, err.message)

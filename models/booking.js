@@ -232,6 +232,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    // Accept with a new time: the shop moved the request and waits for the
+    // client to confirm (requestOutcome 'proposed'). previous* = the time the
+    // client originally asked for.
+    previousOn: { type: DataTypes.DATEONLY, allowNull: true },
+    previousStartTime: { type: DataTypes.TIME, allowNull: true },
+    previousEndTime: { type: DataTypes.TIME, allowNull: true },
+    proposalComment: { type: DataTypes.STRING(500), allowNull: true },
+    proposedAt: { type: DataTypes.DATE, allowNull: true },
   })
 
   booking.associate = (models) => {

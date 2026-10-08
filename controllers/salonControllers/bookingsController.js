@@ -65,7 +65,10 @@ const {
 } = require('../eventDrivenCommunication/appointmentConfirm')
 const {
   requestDeclined,
+  timeProposed,
 } = require('../eventDrivenCommunication/appointmentRequest')
+const { DateTime } = require('luxon')
+const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 
 const { sendEvent } = require('../../socket_io')
 const AppError = require('../../utils/appError')
@@ -384,6 +387,11 @@ exports.calendarAppointments = async (req, res, next) => {
     [
       literal(`(SELECT bookings.requestExpiresAt FROM bookings WHERE bookings.id = jobs.bookingId)`),
       'requestExpiresAt',
+    ],
+    // 'proposed' = the shop suggested a new time and waits for the client
+    [
+      literal(`(SELECT bookings.requestOutcome FROM bookings WHERE bookings.id = jobs.bookingId)`),
+      'requestOutcome',
     ],
   ]
 
@@ -1027,6 +1035,10 @@ exports.bookingDetails = async (req, res, next) => {
     scheduleDate: bookingData.on,
     status: bookingData.status,
     requestExpiresAt: bookingData.requestExpiresAt,
+    requestOutcome: bookingData.requestOutcome,
+    previousOn: bookingData.previousOn,
+    previousStartTime: bookingData.previousStartTime,
+    proposalComment: bookingData.proposalComment,
     discount: bookingData.discount,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     appointmentNote: bookingData?.note || '',
@@ -1129,6 +1141,12 @@ exports.bookingRequests = async (req, res, next) => {
       'paymentMethod',
       'customerStatus',
       'requestExpiresAt',
+      'requestOutcome',
+      'previousOn',
+      'previousStartTime',
+      'previousEndTime',
+      'proposalComment',
+      'proposedAt',
     ],
     include: [
       { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
@@ -1152,6 +1170,9 @@ exports.bookingRequests = async (req, res, next) => {
 
 exports.acceptBookingRequest = async (req, res, next) => {
   const request = await findOwnRequest(req)
+  if (request.requestOutcome === 'proposed') {
+    throw new AppError('You suggested a new time. Waiting for the client to confirm it.', 200)
+  }
   if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
     throw new AppError('This request has expired and can no longer be accepted.', 200)
   }
@@ -1185,6 +1206,147 @@ exports.acceptBookingRequest = async (req, res, next) => {
   socketForCalendar({ appointmentId: request.id, type: 'new' })
   onlineAppointmentConfirm(request.id)
   return res.json(response({ message: 'Booking accepted', data: { appointment: request.id } }))
+}
+
+// "HH:mm", "HH:mm:ss" or "h:mm AM" -> "HH:mm:ss"
+function toTime24(value) {
+  const text = String(value || '').trim().toUpperCase()
+  for (const format of ['HH:mm:ss', 'HH:mm', 'h:mm a', 'hh:mm a', 'h:mma', 'hh:mma']) {
+    const parsed = DateTime.fromFormat(text, format, { locale: 'en' })
+    if (parsed.isValid) return parsed.toFormat('HH:mm:ss')
+  }
+  return null
+}
+
+const addMinutes = (time, minutes) =>
+  DateTime.fromFormat(time, 'HH:mm:ss').plus({ minutes }).toFormat('HH:mm:ss')
+
+// Accept with a new time: move the request (and its held slot) to the shop's
+// suggested date/time/staff and wait for the client to confirm or decline.
+// The client's deadline uses the same rule as the shop's.
+exports.proposeBookingTime = async (req, res, next) => {
+  const request = await findOwnRequest(req)
+  if (request.requestOutcome === 'proposed') {
+    throw new AppError('A new time has already been suggested for this request.', 200)
+  }
+  if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
+    throw new AppError('This request has expired.', 200)
+  }
+
+  const on = String(req.body?.on || '').slice(0, 10)
+  const startTime = toTime24(req.body?.startTime)
+  if (!DateTime.fromISO(on).isValid || !startTime) {
+    throw new AppError('Choose a valid date and time.', 200)
+  }
+  const shopZone = 'Europe/London'
+  const startAt = DateTime.fromISO(`${on}T${startTime}`, { zone: shopZone })
+  if (startAt <= DateTime.now().setZone(shopZone).plus({ minutes: 30 })) {
+    throw new AppError('The new time must be at least 30 minutes from now.', 200)
+  }
+  const comment = String(req.body?.comment ?? '').trim().slice(0, 500)
+
+  const employeeId = parseInt(req.body?.employeeId, 10) || null
+  if (employeeId) {
+    const staff = await employee.findOne({
+      where: { id: employeeId, salonDetailId: request.salonDetailId, deleted: false },
+      attributes: ['id'],
+    })
+    if (!staff) throw new AppError('Choose a staff member from your shop.', 200)
+  }
+
+  // Chain the services back to back from the new start time.
+  const bookingJobs = await jobs.findAll({
+    where: { bookingId: request.id },
+    attributes: ['id', 'startTime', 'duration', 'employeeId', 'status'],
+    order: [['startTime', 'ASC'], ['id', 'ASC']],
+  })
+  if (!bookingJobs.length) throw new AppError('This request has no services.', 200)
+  let cursor = startTime
+  const planned = bookingJobs.map((job) => {
+    const jobStart = cursor
+    const jobEnd = addMinutes(jobStart, Number(job.duration) || 0)
+    cursor = jobEnd
+    const staffId = employeeId || job.employeeId || null
+    return {
+      job,
+      startTime: jobStart,
+      endTime: jobEnd,
+      employeeId: staffId,
+      status: staffId ? 'assign' : job.status,
+    }
+  })
+  const endTime = cursor
+  if (endTime < startTime) {
+    throw new AppError('The booking must finish on the same day.', 200)
+  }
+
+  // The new slot must be free for each staff member (other bookings only).
+  for (const p of planned) {
+    if (!p.employeeId) continue
+    const clash = await jobs.findOne({
+      where: {
+        employeeId: p.employeeId,
+        on,
+        status: 'assign',
+        bookingId: { [Op.ne]: request.id },
+        startTime: { [Op.lt]: p.endTime },
+        endTime: { [Op.gt]: p.startTime },
+      },
+      attributes: ['id'],
+    })
+    if (clash) {
+      return res.json(
+        response({
+          status: '2',
+          message: 'That time is no longer free for the chosen staff member. Please pick another time.',
+        }),
+      )
+    }
+  }
+
+  // Claim: only one proposal, and not after an accept/decline/expiry.
+  const [claimed] = await booking.update(
+    {
+      previousOn: request.on,
+      previousStartTime: request.startTime,
+      previousEndTime: request.endTime,
+      on,
+      startTime,
+      endTime,
+      requestOutcome: 'proposed',
+      proposalComment: comment || null,
+      proposedAt: new Date(),
+      requestExpiresAt: requestDeadline(on, startTime),
+      requestReminderSent: true,
+    },
+    {
+      where: {
+        id: request.id,
+        status: 'requested',
+        [Op.or]: [{ requestOutcome: null }, { requestOutcome: { [Op.ne]: 'proposed' } }],
+      },
+    },
+  )
+  if (!claimed) throw new AppError('This booking request has already been answered.', 200)
+
+  for (const p of planned) {
+    await p.job.update({
+      on,
+      startTime: p.startTime,
+      endTime: p.endTime,
+      employeeId: p.employeeId,
+      status: p.status,
+    })
+  }
+
+  socketForCalendar({ appointmentId: request.id, type: 'reschedule' })
+  timeProposed(request.id, comment)
+  return res.json(
+    response({
+      message: 'New time sent to the client',
+      data: { appointment: request.id, on, startTime, endTime },
+    }),
+  )
 }
 
 exports.declineBookingRequest = async (req, res, next) => {

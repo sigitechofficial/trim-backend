@@ -1458,6 +1458,10 @@ exports.fecthAppointments = async (req, res, next) => {
   // Manual booking approval: waiting requests, and requests that ended
   // without a booking (stored as cancel + requestOutcome).
   else if (req.params?.type == 'requested') bookingFilters.status = 'requested'
+  else if (req.params?.type == 'proposed') {
+    bookingFilters.status = 'requested'
+    bookingFilters.requestOutcome = 'proposed'
+  }
   else if (req.params?.type == 'declined') {
     bookingFilters.status = 'cancel'
     bookingFilters.requestOutcome = 'declined'
@@ -1539,6 +1543,11 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       'requestExpiresAt',
       'respondedAt',
       'requestOutcome',
+      'previousOn',
+      'previousStartTime',
+      'previousEndTime',
+      'proposalComment',
+      'proposedAt',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',

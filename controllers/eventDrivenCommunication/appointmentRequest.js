@@ -90,10 +90,22 @@ exports.requestDeclined = (bookingId, reasonText) =>
     })
   })
 
-exports.requestExpired = (bookingId) =>
+// wasProposal: the shop had suggested a new time and the client didn't answer.
+exports.requestExpired = (bookingId, wasProposal = false) =>
   safely('requestExpired', async () => {
     const ctx = await load(bookingId)
     if (!ctx) return
+    if (wasProposal) {
+      toClient(ctx, 'bookingRequestExpired', {
+        title: 'Suggested time expired',
+        body: `You didn't confirm ${ctx.bookingData.salon.salonName}'s suggested time of ${ctx.when}, so the booking was cancelled. You have not been charged.`,
+      })
+      toShop(ctx, 'bookingRequestExpired', {
+        title: 'Suggested time expired',
+        body: `${ctx.bookingData.client.fullName} didn't confirm the new time (${ctx.when}). The request was cancelled.`,
+      })
+      return
+    }
     toClient(ctx, 'bookingRequestExpired', {
       title: 'Booking request expired',
       body: `${ctx.bookingData.salon.salonName} didn't respond in time to your booking on ${ctx.when}. You have not been charged.`,
@@ -101,6 +113,40 @@ exports.requestExpired = (bookingId) =>
     toShop(ctx, 'bookingRequestExpired', {
       title: 'Booking request expired',
       body: `The request from ${ctx.bookingData.client.fullName} for ${ctx.when} expired without a response.`,
+    })
+  })
+
+// Shop accepted on condition of a different time; the client must confirm.
+exports.timeProposed = (bookingId, comment) =>
+  safely('timeProposed', async () => {
+    const ctx = await load(bookingId)
+    if (!ctx) return
+    const deadline = deadlineText(ctx.appointment.requestExpiresAt)
+    toClient(ctx, 'bookingTimeProposed', {
+      title: 'New time suggested',
+      body: `${ctx.bookingData.salon.salonName} can take your booking at ${ctx.when}${
+        comment ? `: "${comment}"` : '.'
+      } Please confirm${deadline ? ` by ${deadline}` : ''}. You won't be charged unless you accept.`,
+    })
+  })
+
+exports.proposalAccepted = (bookingId) =>
+  safely('proposalAccepted', async () => {
+    const ctx = await load(bookingId)
+    if (!ctx) return
+    toShop(ctx, 'bookingProposalAccepted', {
+      title: 'New time accepted',
+      body: `${ctx.bookingData.client.fullName} accepted the new time: ${ctx.when}. The booking is confirmed.`,
+    })
+  })
+
+exports.proposalDeclined = (bookingId) =>
+  safely('proposalDeclined', async () => {
+    const ctx = await load(bookingId)
+    if (!ctx) return
+    toShop(ctx, 'bookingProposalDeclined', {
+      title: 'New time declined',
+      body: `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}). The request was cancelled.`,
     })
   })
 

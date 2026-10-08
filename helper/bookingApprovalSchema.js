@@ -44,6 +44,11 @@ async function ensureBookingApprovalSchema(db) {
     respondedAt: { type: DataTypes.DATE, allowNull: true },
     requestOutcome: { type: DataTypes.STRING(16), allowNull: true },
     requestReminderSent: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    previousOn: { type: DataTypes.DATEONLY, allowNull: true },
+    previousStartTime: { type: DataTypes.TIME, allowNull: true },
+    previousEndTime: { type: DataTypes.TIME, allowNull: true },
+    proposalComment: { type: DataTypes.STRING(500), allowNull: true },
+    proposedAt: { type: DataTypes.DATE, allowNull: true },
   })
   if (!bookingColumns || !bookingColumns.status) return
 

@@ -172,6 +172,11 @@ router.post(
   protect,
   catchAsync(appController.rescheduleMultipleEmployeeAppointment),
 )
+router.post(
+  '/respond-time-proposal',
+  protect,
+  catchAsync(appController.respondToTimeProposal),
+)
 router.patch(
   '/cancel-appointment/:bookingId',
   protect,
