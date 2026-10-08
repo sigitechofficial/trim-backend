@@ -1296,7 +1296,8 @@ exports.proposeBookingTime = async (req, res, next) => {
   const previousIds = bookingJobs.map((j) => j.employeeId)
   const newIds = planned.map((p) => p.employeeId)
   const staffChanged = previousIds.join(',') !== newIds.join(',')
-  const previousStaffName = staffChanged ? await staffNames(previousIds) : ''
+  // Always remember who the client asked for, so both apps can show it.
+  const previousStaffName = await staffNames(previousIds)
   const newStaffName = staffChanged ? await staffNames(newIds) : ''
 
   if (endTime < startTime) {
