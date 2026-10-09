@@ -1242,8 +1242,8 @@ exports.proposeBookingTime = async (req, res, next) => {
   }
   const shopZone = 'Europe/London'
   const startAt = DateTime.fromISO(`${on}T${startTime}`, { zone: shopZone })
-  if (startAt <= DateTime.now().setZone(shopZone).plus({ minutes: 30 })) {
-    throw new AppError('The new time must be at least 30 minutes from now.', 200)
+  if (startAt <= DateTime.now().setZone(shopZone)) {
+    throw new AppError('Please choose a time in the future.', 200)
   }
   const comment = String(req.body?.comment ?? '').trim().slice(0, 500)
 
@@ -1408,7 +1408,32 @@ exports.proposeBookingTime = async (req, res, next) => {
 // new time on a request: shop hours ∩ staff hours that day, minus the staff's
 // own and shop-wide breaks and every booked / held / done job (except this
 // request's own). Days are marked closed (shop), off (staff) or full.
-async function proposalDays({ salonDetailId, bookingId, employeeId, duration, start, days, step = 15 }) {
+// The same person can have linked employee records (parent / children, e.g.
+// in-house and chair renter); their breaks and jobs all block that person.
+async function linkedEmployeeIds(employeeId) {
+  const me = await employee.findByPk(employeeId, { attributes: ['id', 'parentEmployeeId'] })
+  const ids = new Set([employeeId])
+  if (me?.parentEmployeeId) ids.add(me.parentEmployeeId)
+  const children = await employee.findAll({ where: { parentEmployeeId: employeeId }, attributes: ['id'] })
+  children.forEach((c) => ids.add(c.id))
+  return [...ids]
+}
+
+// Mirrors the customer app's time selection: slots are as long as the
+// booking's services, laid end to end from opening; on today's date they start
+// from the shop's current time (sent by the shop's phone) instead.
+async function proposalDays({
+  salonDetailId,
+  bookingId,
+  employeeId,
+  duration,
+  start,
+  days,
+  step = duration,
+  today = null,
+  nowTime = null,
+}) {
+  const staffIds = await linkedEmployeeIds(employeeId)
   const [shopTimes, staffTimes, breaks] = await Promise.all([
     time.findAll({
       where: { salonDetailId },
@@ -1421,7 +1446,7 @@ async function proposalDays({ salonDetailId, bookingId, employeeId, duration, st
     breakTime.findAll({
       where: {
         status: true,
-        [Op.or]: [{ employeeId }, { employeeId: null, salonDetailId }],
+        [Op.or]: [{ employeeId: { [Op.in]: staffIds } }, { employeeId: null, salonDetailId }],
       },
       attributes: ['day', 'breakStart', 'breakEnd'],
     }),
@@ -1438,7 +1463,7 @@ async function proposalDays({ salonDetailId, bookingId, employeeId, duration, st
 
   const busyJobs = await jobs.findAll({
     where: {
-      employeeId,
+      employeeId: { [Op.in]: staffIds },
       status: { [Op.in]: ['assign', 'complete', 'no-show'] },
       bookingId: { [Op.ne]: bookingId },
       on: { [Op.between]: [start.toISODate(), start.plus({ days: days - 1 }).toISODate()] },
@@ -1461,7 +1486,9 @@ async function proposalDays({ salonDetailId, bookingId, employeeId, duration, st
       result.push({ date, status: 'off', slots: [] })
       continue
     }
-    const open = Math.max(toMin(shop.openingTime), toMin(own.openingTime))
+    let open = Math.max(toMin(shop.openingTime), toMin(own.openingTime))
+    // Today: start from the shop's current time, like the customer app.
+    if (today && nowTime && date === today) open = Math.max(open, toMin(nowTime))
     const close = Math.min(closeMin(shop.closingTime), closeMin(own.closingTime))
     const busy = [
       ...busyJobs
@@ -1472,7 +1499,7 @@ async function proposalDays({ salonDetailId, bookingId, employeeId, duration, st
     const slots = []
     for (let m = open; m + duration <= close; m += step) {
       const end = m + duration
-      if (busy.every(([bs, be]) => end <= bs || m >= be)) slots.push(fmt(m))
+      if (busy.every(([bs, be]) => end <= bs || m >= be)) slots.push({ start: fmt(m), end: fmt(end) })
     }
     result.push({ date, status: slots.length ? 'open' : 'full', slots, open: fmt(open), close: fmt(close), busy })
   }
@@ -1498,6 +1525,7 @@ exports.proposalSlots = async (req, res, next) => {
   const duration = bookingJobs.reduce((sum, j) => sum + (Number(j.duration) || 0), 0) || 30
   const days = Math.min(Math.max(parseInt(req.body?.days, 10) || 21, 1), 42)
   const from = DateTime.fromISO(String(req.body?.from || '').slice(0, 10))
+  const nowTime = /^\d{1,2}:\d{2}$/.test(String(req.body?.nowTime || '')) ? req.body.nowTime : null
   const result = await proposalDays({
     salonDetailId: request.salonDetailId,
     bookingId: request.id,
@@ -1505,6 +1533,8 @@ exports.proposalSlots = async (req, res, next) => {
     duration,
     start: from.isValid ? from : DateTime.now(),
     days,
+    today: from.isValid ? from.toISODate() : null,
+    nowTime,
   })
   return res.json(
     response({
