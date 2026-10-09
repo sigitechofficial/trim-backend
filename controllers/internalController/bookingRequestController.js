@@ -1,11 +1,7 @@
 const { Op } = require('sequelize')
-const { booking, jobs, salonDetail } = require('../../models')
-const Stripe = require('../stripe')
-const { socketForCalendar } = require('../eventDrivenCommunication/calendarView')
-const {
-  requestExpired,
-  requestReminder,
-} = require('../eventDrivenCommunication/appointmentRequest')
+const { booking } = require('../../models')
+const { requestReminder } = require('../eventDrivenCommunication/appointmentRequest')
+const { expireOverdueRequests } = require('../../helper/expireBookingRequests')
 
 const REMINDER_MINUTES = Number(process.env.BOOKING_REQUEST_REMINDER_MINUTES) || 120
 const BATCH = 200
@@ -26,8 +22,7 @@ exports.runBookingRequestJob = async (req, res) => {
 
   const overdue = await booking.findAll({
     where: { status: 'requested', requestExpiresAt: { [Op.lte]: now } },
-    attributes: ['id', 'initialPaymentIntend', 'requestOutcome'],
-    include: [{ model: salonDetail, attributes: ['connectAccountId'] }],
+    attributes: ['id'],
     limit: BATCH,
   })
 
@@ -54,34 +49,7 @@ exports.runBookingRequestJob = async (req, res) => {
     })
   }
 
-  let expired = 0
-  for (const b of overdue) {
-    try {
-      // Claim it first so a concurrent run or a late accept can't double-handle it.
-      const [claimed] = await booking.update(
-        {
-          status: 'cancel',
-          requestOutcome: 'expired',
-          respondedAt: now,
-          actualCapturedAmount: 0,
-          cancellationCharges: 0,
-          total: 0,
-          tip: 0,
-        },
-        { where: { id: b.id, status: 'requested' } },
-      )
-      if (!claimed) continue
-      if (b.initialPaymentIntend) {
-        await Stripe.releaseHeldPayment(b.initialPaymentIntend, b.salonDetail?.connectAccountId)
-      }
-      await jobs.update({ status: 'cancel' }, { where: { bookingId: b.id } })
-      socketForCalendar({ appointmentId: b.id, type: 'finish', status: 'cancel' })
-      requestExpired(b.id, b.requestOutcome === 'proposed')
-      expired++
-    } catch (err) {
-      console.error(`[BookingRequests] expiring #${b.id} failed:`, err.message)
-    }
-  }
+  const { expired } = await expireOverdueRequests({}, BATCH)
 
   let reminded = 0
   for (const b of dueSoon) {

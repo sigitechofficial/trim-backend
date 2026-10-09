@@ -69,6 +69,7 @@ const {
 } = require('../eventDrivenCommunication/appointmentRequest')
 const { DateTime } = require('luxon')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
+const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 
 const { sendEvent } = require('../../socket_io')
 const AppError = require('../../utils/appError')
@@ -329,6 +330,8 @@ exports.calendarAppointments = async (req, res, next) => {
     where: { userId: req?.user?.id },
     attributes: ['id', 'parentSalonId', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate'],
   })
+  // Expire overdue requests first so the calendar and the requests count are current.
+  if (salon?.id) await expireOverdueRequestsSafely({ salonDetailId: salon.id })
   console.log(req.body)
   let parentSalonName = ''
   let subscriptionSalon = salon
@@ -1123,12 +1126,18 @@ async function findOwnRequest(req) {
   if (request.status !== 'requested') {
     throw new AppError('This booking request has already been answered.', 200)
   }
+  if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
+    await expireOverdueRequestsSafely({ id: request.id })
+    throw new AppError('This request has expired. The client was not charged.', 200)
+  }
   return request
 }
 
 exports.bookingRequests = async (req, res, next) => {
   const shopId = await shopIdForUser(req.user.id)
   if (!shopId) throw new AppError('Shop not found', 200)
+  // Expire anything past its deadline now, so the list only shows open requests.
+  await expireOverdueRequestsSafely({ salonDetailId: shopId })
   const requests = await booking.findAll({
     where: { salonDetailId: shopId, status: 'requested' },
     attributes: [

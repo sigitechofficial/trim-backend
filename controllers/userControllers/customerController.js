@@ -117,6 +117,7 @@ const {
   requiresApproval,
   requestExpiresAt,
 } = require('../../helper/bookingApproval')
+const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 
 const {
   bookingDataForEmailAndNotifications,
@@ -1060,6 +1061,8 @@ exports.home = async (req, res, next) => {
   // Upcoming/pending appointments for this customer (for the home header)
   let appointments = [];
   if (req.user && req.user.id) {
+    // Overdue requests become "expired" before they're shown.
+    await expireOverdueRequestsSafely({ customerId: req.user.id })
     appointments = await booking.findAll({
       where: {
         customerId: req.user.id,
@@ -4561,6 +4564,7 @@ const salonSubscriptionActiveLiteral = (dateOnly) =>
 exports.fetchAppointments = async (req, res, next) => {
   // TODO Filters
   const userId = req.user.id
+  await expireOverdueRequestsSafely({ customerId: userId })
   const currentDay = CustomDate.currentDay()
   // `cancellationPolicyVersion`, `reschedulePolicyVersion`, `upFrontPolicyVersion`, `noshowPolicyVersion`
   let appointments = await booking.findAll({
@@ -4635,6 +4639,7 @@ exports.fetchAppointments = async (req, res, next) => {
 
 exports.fetchAppointmentsDetails = async (req, res, next) => {
   const id = req.params.id
+  await expireOverdueRequestsSafely({ id })
   const currentDay = CustomDate.currentDay()
   const data = await booking.findOne({
     where: { id },
