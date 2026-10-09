@@ -28,6 +28,7 @@ router.get('/booking-requests', catchAsync(bookingsController.bookingRequests))
 router.post('/accept-booking-request', catchAsync(bookingsController.acceptBookingRequest))
 router.post('/decline-booking-request', catchAsync(bookingsController.declineBookingRequest))
 router.post('/propose-booking-time', catchAsync(bookingsController.proposeBookingTime))
+router.post('/proposal-slots', catchAsync(bookingsController.proposalSlots))
 // employees with services
 router.post(
   '/employees-with-services',

@@ -1248,12 +1248,8 @@ exports.proposeBookingTime = async (req, res, next) => {
   const comment = String(req.body?.comment ?? '').trim().slice(0, 500)
 
   const employeeId = parseInt(req.body?.employeeId, 10) || null
-  if (employeeId) {
-    const staff = await employee.findOne({
-      where: { id: employeeId, salonDetailId: request.salonDetailId, deleted: false },
-      attributes: ['id'],
-    })
-    if (!staff) throw new AppError('Choose a staff member from your shop.', 200)
+  if (employeeId && !(await activeStaffOf(request.salonDetailId, employeeId))) {
+    throw new AppError('This staff member is not available.', 200)
   }
 
   // Chain the services back to back from the new start time.
@@ -1302,6 +1298,40 @@ exports.proposeBookingTime = async (req, res, next) => {
 
   if (endTime < startTime) {
     throw new AppError('The booking must finish on the same day.', 200)
+  }
+
+  // Same rules as the slot list: shop open, staff working, inside both
+  // sets of hours, clear of breaks and other jobs.
+  if (employeeId) {
+    const toMin = (t) => {
+      const [h, m] = String(t).split(':').map((n) => parseInt(n, 10) || 0)
+      return h * 60 + m
+    }
+    const [day] = await proposalDays({
+      salonDetailId: request.salonDetailId,
+      bookingId: request.id,
+      employeeId,
+      duration: toMin(endTime) - toMin(startTime),
+      start: DateTime.fromISO(on),
+      days: 1,
+    })
+    if (day.status === 'closed') throw new AppError('The shop is closed on that day.', 200)
+    if (day.status === 'off') throw new AppError("That staff member doesn't work on that day.", 200)
+    const s0 = toMin(startTime)
+    const e0 = toMin(endTime)
+    const [openH, openM] = day.open.split(':').map(Number)
+    const [closeH, closeM] = day.close.split(':').map(Number)
+    if (s0 < openH * 60 + openM || e0 > closeH * 60 + closeM) {
+      throw new AppError('That time is outside working hours.', 200)
+    }
+    if (!day.busy.every(([bs, be]) => e0 <= bs || s0 >= be)) {
+      return res.json(
+        response({
+          status: '2',
+          message: 'That time is no longer free for the chosen staff member. Please pick another time.',
+        }),
+      )
+    }
   }
 
   // The new slot must be free for each staff member (other bookings only).
@@ -1370,6 +1400,116 @@ exports.proposeBookingTime = async (req, res, next) => {
     response({
       message: 'New time sent to the client',
       data: { appointment: request.id, on, startTime, endTime },
+    }),
+  )
+}
+
+// Free start times for one staff member over several days, for suggesting a
+// new time on a request: shop hours ∩ staff hours that day, minus the staff's
+// own and shop-wide breaks and every booked / held / done job (except this
+// request's own). Days are marked closed (shop), off (staff) or full.
+async function proposalDays({ salonDetailId, bookingId, employeeId, duration, start, days, step = 15 }) {
+  const [shopTimes, staffTimes, breaks] = await Promise.all([
+    time.findAll({
+      where: { salonDetailId },
+      attributes: ['day', 'status', 'openingTime', 'closingTime'],
+    }),
+    time.findAll({
+      where: { employeeId },
+      attributes: ['day', 'status', 'openingTime', 'closingTime'],
+    }),
+    breakTime.findAll({
+      where: {
+        status: true,
+        [Op.or]: [{ employeeId }, { employeeId: null, salonDetailId }],
+      },
+      attributes: ['day', 'breakStart', 'breakEnd'],
+    }),
+  ])
+  const byDay = (rows) => Object.fromEntries(rows.map((r) => [r.day, r]))
+  const shopByDay = byDay(shopTimes)
+  const staffByDay = byDay(staffTimes)
+  const toMin = (t) => {
+    const [h, m] = String(t || '0:0').split(':').map((n) => parseInt(n, 10) || 0)
+    return h * 60 + m
+  }
+  const closeMin = (t) => (String(t || '') === '00:00:00' ? 24 * 60 : toMin(t))
+  const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+  const busyJobs = await jobs.findAll({
+    where: {
+      employeeId,
+      status: { [Op.in]: ['assign', 'complete', 'no-show'] },
+      bookingId: { [Op.ne]: bookingId },
+      on: { [Op.between]: [start.toISODate(), start.plus({ days: days - 1 }).toISODate()] },
+    },
+    attributes: ['on', 'startTime', 'endTime'],
+  })
+
+  const result = []
+  for (let i = 0; i < days; i++) {
+    const d = start.plus({ days: i })
+    const date = d.toISODate()
+    const weekday = d.setLocale('en').toFormat('cccc')
+    const shop = shopByDay[weekday]
+    const own = staffByDay[weekday]
+    if (!shop || !shop.status) {
+      result.push({ date, status: 'closed', slots: [] })
+      continue
+    }
+    if (!own || !own.status) {
+      result.push({ date, status: 'off', slots: [] })
+      continue
+    }
+    const open = Math.max(toMin(shop.openingTime), toMin(own.openingTime))
+    const close = Math.min(closeMin(shop.closingTime), closeMin(own.closingTime))
+    const busy = [
+      ...busyJobs
+        .filter((j) => String(j.on).slice(0, 10) === date)
+        .map((j) => [toMin(j.startTime), toMin(j.endTime)]),
+      ...breaks.filter((b) => b.day === weekday).map((b) => [toMin(b.breakStart), toMin(b.breakEnd)]),
+    ]
+    const slots = []
+    for (let m = open; m + duration <= close; m += step) {
+      const end = m + duration
+      if (busy.every(([bs, be]) => end <= bs || m >= be)) slots.push(fmt(m))
+    }
+    result.push({ date, status: slots.length ? 'open' : 'full', slots, open: fmt(open), close: fmt(close), busy })
+  }
+  return result
+}
+
+// Active (not blocked), not deleted staff of the request's shop, or null.
+async function activeStaffOf(salonDetailId, employeeId) {
+  if (!employeeId) return null
+  return employee.findOne({
+    where: { id: employeeId, salonDetailId, deleted: false, status: true },
+    attributes: ['id'],
+  })
+}
+
+exports.proposalSlots = async (req, res, next) => {
+  const request = await findOwnRequest(req)
+  const employeeId = parseInt(req.body?.employeeId, 10)
+  if (!(await activeStaffOf(request.salonDetailId, employeeId))) {
+    throw new AppError('This staff member is not available.', 200)
+  }
+  const bookingJobs = await jobs.findAll({ where: { bookingId: request.id }, attributes: ['duration'] })
+  const duration = bookingJobs.reduce((sum, j) => sum + (Number(j.duration) || 0), 0) || 30
+  const days = Math.min(Math.max(parseInt(req.body?.days, 10) || 21, 1), 42)
+  const from = DateTime.fromISO(String(req.body?.from || '').slice(0, 10))
+  const result = await proposalDays({
+    salonDetailId: request.salonDetailId,
+    bookingId: request.id,
+    employeeId,
+    duration,
+    start: from.isValid ? from : DateTime.now(),
+    days,
+  })
+  return res.json(
+    response({
+      message: 'Proposal slots',
+      data: { duration, days: result.map(({ date, status, slots }) => ({ date, status, slots })) },
     }),
   )
 }
