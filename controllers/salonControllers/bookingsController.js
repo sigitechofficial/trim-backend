@@ -590,7 +590,7 @@ exports.calendarAppointments = async (req, res, next) => {
       onlinePayments: salon?.onlinePayments ?? true,
       autoAcceptBookings: salon?.autoAcceptBookings ?? true,
       approvalScope: salon?.approvalScope ?? 'all',
-      pendingRequests: await pendingRequestsFor(req, salon?.id),
+      ...(await requestCountsFor(req, salon?.id)),
       subscriptionExpire,
       registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
       registrationDate: subscriptionSalon?.registrationDate,
@@ -1148,23 +1148,25 @@ async function findOwnRequest(req) {
   return request
 }
 
-// Requests still waiting on the SHOP that this person may answer (the orange
-// "N booking requests waiting" count). Ones waiting on the client don't count.
-async function pendingRequestsFor(req, salonDetailId) {
-  if (!salonDetailId) return 0
+// Open requests this person may answer, for the bar above the calendar:
+// pendingRequests = waiting on the SHOP (orange "N booking requests waiting"),
+// awaitingClientRequests = the shop suggested a time and the client must answer.
+async function requestCountsFor(req, salonDetailId) {
+  const none = { pendingRequests: 0, awaitingClientRequests: 0 }
+  if (!salonDetailId) return none
   try {
     const actor = await resolveRequestActor(req)
-    if (actor.level === 'none') return 0
-    const where = {
-      salonDetailId,
-      status: 'requested',
-      [Op.or]: [{ requestOutcome: null }, { requestOutcome: { [Op.ne]: 'proposed' } }],
-    }
+    if (actor.level === 'none') return none
+    const where = { salonDetailId, status: 'requested' }
     if (actor.level === 'low') where.id = { [Op.in]: await ownRequestBookingIds(actor.employeeId) }
-    return await booking.count({ where })
+    const [open, awaitingClientRequests] = await Promise.all([
+      booking.count({ where }),
+      booking.count({ where: { ...where, requestOutcome: 'proposed' } }),
+    ])
+    return { pendingRequests: open - awaitingClientRequests, awaitingClientRequests }
   } catch (err) {
-    console.error('pendingRequestsFor failed:', err.message)
-    return 0
+    console.error('requestCountsFor failed:', err.message)
+    return none
   }
 }
 
