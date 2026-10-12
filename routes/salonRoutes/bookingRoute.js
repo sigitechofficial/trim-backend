@@ -3,6 +3,8 @@ const router = express.Router()
 const bookingsController = require('../../controllers/salonControllers/bookingsController')
 const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
+// Refuses these changes while a booking is still an unanswered request.
+const notWhileRequested = require('../../middlewares/bookingRequestGuard')
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
@@ -38,7 +40,7 @@ router.post(
   '/employees-availability',
   catchAsync(bookingsController.employeeAvailability),
 )
-router.post('/addExtraService', catchAsync(bookingsController.addExtraService))
+router.post('/addExtraService', notWhileRequested, catchAsync(bookingsController.addExtraService))
 //Get All Customers of Salon
 router.get('/getSalonCustomer', catchAsync(bookingsController.getSalonCustomer))
 //add Walking Customer
@@ -57,30 +59,32 @@ router.post(
   catchAsync(bookingsController.bulkImportClients),
 )
 //
-router.post('/jobStatus', catchAsync(bookingsController.jobStatus))
+router.post('/jobStatus', notWhileRequested, catchAsync(bookingsController.jobStatus))
 //Get All Bookings of a Customer
 router.post('/getclientHistory', catchAsync(bookingsController.clientHistory))
 //CheckOut Bookings of a Customer
-router.post('/checkoutBooking', catchAsync(bookingsController.checkOutBooking))
+router.post('/checkoutBooking', notWhileRequested, catchAsync(bookingsController.checkOutBooking))
 router.post(
   '/finalize-tap-to-pay',
   catchAsync(bookingsController.finalizeTapToPay),
 )
 //Cash CheckOut  Bookings of a Customer
-router.post('/checkoutCash', catchAsync(bookingsController.checkoutCash))
+router.post('/checkoutCash', notWhileRequested, catchAsync(bookingsController.checkoutCash))
 //Minimal Payment CheckOut (No Stripe) - for small amounts or zero payment
-router.post('/checkoutMinimalPayment', catchAsync(bookingsController.checkOutMinimalPayment))
+router.post('/checkoutMinimalPayment', notWhileRequested, catchAsync(bookingsController.checkOutMinimalPayment))
 //Cash CheckOut  Bookings of a Customer
-router.post('/saveUnpaid', catchAsync(bookingsController.saveUnpaid))
+router.post('/saveUnpaid', notWhileRequested, catchAsync(bookingsController.saveUnpaid))
 //Remove Client
 router.post('/removeClient', catchAsync(bookingsController.removeClient))
 ///
 router.post(
   '/solo-employee-appointment-reschedule',
+  notWhileRequested,
   catchAsync(bookingsController.rescheduleSoloEmployeeAppointment),
 )
 router.post(
   '/multiple-employee-appointment-reschedule',
+  notWhileRequested,
   catchAsync(bookingsController.rescheduleMultipleEmployeeAppointment),
 )
 router.post(
@@ -89,15 +93,17 @@ router.post(
 )
 router.get('/salonServices', catchAsync(bookingsController.salonServices))
 router.post('/serviceData', catchAsync(bookingsController.serviceData))
-router.post('/editService', catchAsync(bookingsController.editService))
+router.post('/editService', notWhileRequested, catchAsync(bookingsController.editService))
 
 //!New Routes
 router.patch(
   '/mark-appointment-no-show/:bookingId',
+  notWhileRequested,
   catchAsync(bookingsController.markAppointmentAsNoShow),
 )
 router.patch(
   '/mark-appointment-cancel/:bookingId',
+  notWhileRequested,
   catchAsync(bookingsController.markAppointmentAscancel),
 )
 //! Calendar route

@@ -1758,6 +1758,12 @@ exports.cancelBooking = async (req, res, next) => {
   // A request was never charged: release the hold instead of refunding.
   const isRequest = appointment.status === 'requested';
   if (isRequest) {
+    // Cancelling a request is declining it: same permission as Decline.
+    const actor = await resolveRequestActor(req)
+    if (actor.shopId !== appointment.salonDetailId || !(await canActOnBooking(actor, appointment.id))) {
+      throw new AppError("You don't have access to respond to this booking request.", 200)
+    }
+    updatedBooking.respondedByName = actor.name || null
     if (appointment.initialPaymentIntend) {
       await Stripe.releaseHeldPayment(appointment.initialPaymentIntend, connectAccountId);
     }
@@ -1819,20 +1825,20 @@ exports.cancelBooking = async (req, res, next) => {
       ? 'appointment_employee_cancellation'
       : 'appointment_salon_owner_cancellation';
 
-  const Reason = await reason.findOne({
-    where: { id: reasonId, status: true, type: actorReasonType },
-    attributes: ['id', 'reason', 'type'],
-  });
-
-  if (!Reason) {
-    throw new AppError('Invalid reason for this user type', 200);
-  }
+  // The booking is already cancelled at this point, so a missing or unknown
+  // reason must not turn the call into an error: record what we have.
+  const Reason = reasonId
+    ? await reason.findOne({
+        where: { id: reasonId, status: true, type: actorReasonType },
+        attributes: ['id', 'reason', 'type'],
+      })
+    : null;
 
   await cancelledBooking.create({
-    reasonText: reasonText ?? Reason.reason,
+    reasonText: reasonText ?? Reason?.reason ?? '',
     bookingId,
     userId,
-    reasonId,
+    reasonId: Reason?.id ?? null,
   });
 
   cancelBySalon(bookingId);
