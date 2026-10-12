@@ -70,6 +70,14 @@ const {
 const { DateTime } = require('luxon')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
+const {
+  resolveRequestActor,
+  ownRequestBookingIds,
+  canActOnBooking,
+} = require('../../helper/bookingRequestAccess')
+
+// A shop may suggest a new time at most this many times per request.
+const MAX_TIME_PROPOSALS = 2
 
 const { sendEvent } = require('../../socket_io')
 const AppError = require('../../utils/appError')
@@ -582,9 +590,7 @@ exports.calendarAppointments = async (req, res, next) => {
       onlinePayments: salon?.onlinePayments ?? true,
       autoAcceptBookings: salon?.autoAcceptBookings ?? true,
       approvalScope: salon?.approvalScope ?? 'all',
-      pendingRequests: salon?.id
-        ? await booking.count({ where: { salonDetailId: salon.id, status: 'requested' } })
-        : 0,
+      pendingRequests: await pendingRequestsFor(req, salon?.id),
       subscriptionExpire,
       registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
       registrationDate: subscriptionSalon?.registrationDate,
@@ -1043,6 +1049,8 @@ exports.bookingDetails = async (req, res, next) => {
     previousStartTime: bookingData.previousStartTime,
     proposalComment: bookingData.proposalComment,
     previousStaffName: bookingData.previousStaffName,
+    proposalCount: bookingData.proposalCount,
+    clientDeclineNote: bookingData.clientDeclineNote,
     discount: bookingData.discount,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     appointmentNote: bookingData?.note || '',
@@ -1112,8 +1120,12 @@ async function shopIdForUser(userId) {
   return staff?.salonDetailId ?? null
 }
 
+// The request named in the body, if the caller's shop owns it and the caller
+// is allowed to answer it. Sets req.requestActor (who is acting).
 async function findOwnRequest(req) {
-  const shopId = await shopIdForUser(req.user.id)
+  const actor = await resolveRequestActor(req)
+  req.requestActor = actor
+  const shopId = actor.shopId
   const bookingId = parseInt(req.body?.bookingId, 10)
   const request =
     shopId && bookingId
@@ -1123,6 +1135,9 @@ async function findOwnRequest(req) {
         })
       : null
   if (!request) throw new AppError('Booking not found', 200)
+  if (!(await canActOnBooking(actor, request.id))) {
+    throw new AppError("You don't have access to respond to this booking request.", 200)
+  }
   if (request.status !== 'requested') {
     throw new AppError('This booking request has already been answered.', 200)
   }
@@ -1133,13 +1148,40 @@ async function findOwnRequest(req) {
   return request
 }
 
+// Requests still waiting on the SHOP that this person may answer (the orange
+// "N booking requests waiting" count). Ones waiting on the client don't count.
+async function pendingRequestsFor(req, salonDetailId) {
+  if (!salonDetailId) return 0
+  try {
+    const actor = await resolveRequestActor(req)
+    if (actor.level === 'none') return 0
+    const where = {
+      salonDetailId,
+      status: 'requested',
+      [Op.or]: [{ requestOutcome: null }, { requestOutcome: { [Op.ne]: 'proposed' } }],
+    }
+    if (actor.level === 'low') where.id = { [Op.in]: await ownRequestBookingIds(actor.employeeId) }
+    return await booking.count({ where })
+  } catch (err) {
+    console.error('pendingRequestsFor failed:', err.message)
+    return 0
+  }
+}
+
 exports.bookingRequests = async (req, res, next) => {
-  const shopId = await shopIdForUser(req.user.id)
+  const actor = await resolveRequestActor(req)
+  const shopId = actor.shopId
   if (!shopId) throw new AppError('Shop not found', 200)
+  if (actor.level === 'none') {
+    return res.json(response({ message: 'Booking requests', data: { requests: [], access: 'none' } }))
+  }
   // Expire anything past its deadline now, so the list only shows open requests.
   await expireOverdueRequestsSafely({ salonDetailId: shopId })
+  const scope = { salonDetailId: shopId, status: 'requested' }
+  // "Own only": requests for bookings with this staff member.
+  if (actor.level === 'low') scope.id = { [Op.in]: await ownRequestBookingIds(actor.employeeId) }
   const requests = await booking.findAll({
-    where: { salonDetailId: shopId, status: 'requested' },
+    where: scope,
     attributes: [
       'id',
       'on',
@@ -1158,6 +1200,8 @@ exports.bookingRequests = async (req, res, next) => {
       'proposalComment',
       'previousStaffName',
       'proposedAt',
+      'proposalCount',
+      'clientDeclineNote',
     ],
     include: [
       { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
@@ -1176,13 +1220,24 @@ exports.bookingRequests = async (req, res, next) => {
     ],
     order: [['requestExpiresAt', 'ASC']],
   })
-  return res.json(response({ message: 'Booking requests', data: { requests } }))
+  return res.json(
+    response({
+      message: 'Booking requests',
+      data: { requests, access: actor.level, maxTimeProposals: MAX_TIME_PROPOSALS },
+    }),
+  )
 }
 
 exports.acceptBookingRequest = async (req, res, next) => {
   const request = await findOwnRequest(req)
   if (request.requestOutcome === 'proposed') {
     throw new AppError('You suggested a new time. Waiting for the client to confirm it.', 200)
+  }
+  if (request.requestOutcome === 'returned') {
+    throw new AppError(
+      'The client declined the suggested time. Suggest another time or decline the request.',
+      200,
+    )
   }
   if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
     throw new AppError('This request has expired and can no longer be accepted.', 200)
@@ -1192,7 +1247,12 @@ exports.acceptBookingRequest = async (req, res, next) => {
   // held deposit; if the hold has lapsed, put it back so the shop can decline.
   const unassigned = await jobs.count({ where: { bookingId: request.id, status: 'pending' } })
   const [claimed] = await booking.update(
-    { status: unassigned ? 'pending' : 'book', requestOutcome: 'accepted', respondedAt: new Date() },
+    {
+      status: unassigned ? 'pending' : 'book',
+      requestOutcome: 'accepted',
+      respondedAt: new Date(),
+      respondedByName: req.requestActor?.name || null,
+    },
     { where: { id: request.id, status: 'requested' } },
   )
   if (!claimed) throw new AppError('This booking request has already been answered.', 200)
@@ -1206,7 +1266,7 @@ exports.acceptBookingRequest = async (req, res, next) => {
       )
     } catch (err) {
       await booking.update(
-        { status: 'requested', requestOutcome: null, respondedAt: null },
+        { status: 'requested', requestOutcome: null, respondedAt: null, respondedByName: null },
         { where: { id: request.id } },
       )
       throw err
@@ -1238,10 +1298,18 @@ const addMinutes = (time, minutes) =>
 exports.proposeBookingTime = async (req, res, next) => {
   const request = await findOwnRequest(req)
   if (request.requestOutcome === 'proposed') {
-    throw new AppError('A new time has already been suggested for this request.', 200)
+    throw new AppError('You already suggested a new time. Waiting for the client to answer.', 200)
   }
-  if (request.requestExpiresAt && new Date(request.requestExpiresAt) <= new Date()) {
-    throw new AppError('This request has expired.', 200)
+  // Requests suggested before proposalCount existed count as one suggestion.
+  const proposalsSoFar = Math.max(
+    Number(request.proposalCount) || 0,
+    request.requestOutcome === 'returned' ? 1 : 0,
+  )
+  if (proposalsSoFar >= MAX_TIME_PROPOSALS) {
+    throw new AppError(
+      `You have already suggested a new time ${MAX_TIME_PROPOSALS} times for this request.`,
+      200,
+    )
   }
 
   const on = String(req.body?.on || '').slice(0, 10)
@@ -1302,8 +1370,21 @@ exports.proposeBookingTime = async (req, res, next) => {
   const newIds = planned.map((p) => p.employeeId)
   const staffChanged = previousIds.join(',') !== newIds.join(',')
   // Always remember who the client asked for, so both apps can show it.
-  const previousStaffName = await staffNames(previousIds)
+  // Keep what the client ORIGINALLY asked for across both suggestions.
+  const firstProposal = !request.previousOn
+  const previousStaffName = firstProposal ? await staffNames(previousIds) : request.previousStaffName
   const newStaffName = staffChanged ? await staffNames(newIds) : ''
+
+  // Suggesting the time the booking already has changes nothing: on a fresh
+  // request that is an accept; after a decline the client already said no.
+  if (!staffChanged && on === String(request.on).slice(0, 10) && startTime.slice(0, 5) === String(request.startTime).slice(0, 5)) {
+    throw new AppError(
+      request.requestOutcome === 'returned'
+        ? 'The client already declined this time. Please choose a different one.'
+        : 'This is the time the client asked for. To keep it, accept the request.',
+      200,
+    )
+  }
 
   if (endTime < startTime) {
     throw new AppError('The booking must finish on the same day.', 200)
@@ -1370,9 +1451,9 @@ exports.proposeBookingTime = async (req, res, next) => {
   // Claim: only one proposal, and not after an accept/decline/expiry.
   const [claimed] = await booking.update(
     {
-      previousOn: request.on,
-      previousStartTime: request.startTime,
-      previousEndTime: request.endTime,
+      previousOn: firstProposal ? request.on : request.previousOn,
+      previousStartTime: firstProposal ? request.startTime : request.previousStartTime,
+      previousEndTime: firstProposal ? request.endTime : request.previousEndTime,
       on,
       startTime,
       endTime,
@@ -1380,6 +1461,8 @@ exports.proposeBookingTime = async (req, res, next) => {
       proposalComment: comment || null,
       previousStaffName: previousStaffName || null,
       proposedAt: new Date(),
+      proposalCount: proposalsSoFar + 1,
+      respondedByName: req.requestActor?.name || null,
       requestExpiresAt: requestDeadline(on, startTime),
       requestReminderSent: true,
     },
@@ -1387,7 +1470,8 @@ exports.proposeBookingTime = async (req, res, next) => {
       where: {
         id: request.id,
         status: 'requested',
-        [Op.or]: [{ requestOutcome: null }, { requestOutcome: { [Op.ne]: 'proposed' } }],
+        // Waiting on the shop: a fresh request, or one the client sent back.
+        [Op.or]: [{ requestOutcome: null }, { requestOutcome: 'returned' }],
       },
     },
   )
@@ -1404,11 +1488,18 @@ exports.proposeBookingTime = async (req, res, next) => {
   }
 
   socketForCalendar({ appointmentId: request.id, type: 'reschedule' })
-  timeProposed(request.id, comment, newStaffName)
+  timeProposed(request.id, comment, newStaffName, proposalsSoFar + 1 >= MAX_TIME_PROPOSALS)
   return res.json(
     response({
       message: 'New time sent to the client',
-      data: { appointment: request.id, on, startTime, endTime },
+      data: {
+        appointment: request.id,
+        on,
+        startTime,
+        endTime,
+        proposalCount: proposalsSoFar + 1,
+        proposalsLeft: MAX_TIME_PROPOSALS - (proposalsSoFar + 1),
+      },
     }),
   )
 }
@@ -1579,6 +1670,7 @@ exports.declineBookingRequest = async (req, res, next) => {
     status: 'cancel',
     requestOutcome: 'declined',
     respondedAt: new Date(),
+    respondedByName: req.requestActor?.name || null,
     actualCapturedAmount: 0,
     cancellationCharges: 0,
     total: 0,

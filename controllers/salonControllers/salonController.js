@@ -1,4 +1,5 @@
 const { Op, literal, col, fn, where } = require('sequelize')
+const { resolveRequestActor } = require('../../helper/bookingRequestAccess')
 const { CURRENCY_UNIT } = process.env
 const fs = require('fs').promises
 const {
@@ -5010,6 +5011,12 @@ exports.onlinePayments = async (req, res, next) => {
 //* Booking approval (accept automatically vs approve each booking)
 
 exports.bookingApprovalSettings = async (req, res, next) => {
+  // Shop owners only (chair renters own their shop); staff sessions share the
+  // owner's token, so check who is actually acting.
+  const actor = await resolveRequestActor(req)
+  if (!actor.isOwner) {
+    return res.json(returnFunction('0', 'Only the shop owner can change booking settings.', {}, ''))
+  }
   const salonData = await salonDetail.findOne({
     where: { userId: req.user.id },
     attributes: ['id', 'autoAcceptBookings', 'approvalScope'],

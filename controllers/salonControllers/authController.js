@@ -52,6 +52,8 @@ const generateOTP = () =>
   })
 
 //! Function to create JWT Tocken
+const { requestsLevelFrom } = require('../../helper/bookingRequestAccess')
+
 const signTocken = (id, dvToken) => {
   return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
 }
@@ -110,6 +112,11 @@ const defaultAccess = [
   {
     access: 'Respond to\nenquiries',
     key: 'respondToEnquiries',
+    level: 'none',
+  },
+  {
+    access: 'Booking\nrequests',
+    key: 'bookingRequests',
     level: 'none',
   },
 ]
@@ -617,6 +624,18 @@ exports.login = async (req, res, next) => {
   if (!found) {
     await deviceToken.create({ tokenId: dvToken, status: true, userId: User.id });
   }
+  // An owner signing in on a phone a staff member used before: drop the old
+  // staff link for this device, so the owner isn't treated as that staff member.
+  if (User.userTypeId === 2 && dvToken) {
+    const staleStaff = await deviceToken.findAll({
+      where: { tokenId: dvToken, userId: { [Op.ne]: User.id } },
+      attributes: ['id'],
+      include: { model: user, where: { userTypeId: 3 }, attributes: ['id'], required: true },
+    });
+    if (staleStaff.length) {
+      await deviceToken.destroy({ where: { id: staleStaff.map((row) => row.id) } });
+    }
+  }
 
   let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : '';
   redis_Client.hSet(`trim${User.id}`, dvToken, token);
@@ -822,6 +841,7 @@ exports.login = async (req, res, next) => {
 
     token = signTocken(salon.userId, dvToken);
     redis_Client.hSet(`trim${salon.userId}`, dvToken, token);
+    result.bookingRequests = requestsLevelFrom(result);
     response.data.accessLevels = result;
 
     if (!employeeDetails) {
@@ -1321,6 +1341,7 @@ exports.employeeSession = async (req, res, next) => {
     },
     error: '',
   }
+  result.bookingRequests = requestsLevelFrom(result)
   response.data.accessLevels = result
 
   if (!employeeDetails) {
@@ -1360,9 +1381,15 @@ exports.employeeSession = async (req, res, next) => {
 */
 
 exports.logout = async (req, res) => {
-  await deviceToken.destroy({
-    where: { tokenId: req.user?.dvToken, userId: req.user?.id },
-  })
+  // Staff sessions link the device to both the owner and the staff user;
+  // remove every link for this device so nothing lingers after logout.
+  if (req.user?.dvToken) {
+    await deviceToken.destroy({ where: { tokenId: req.user.dvToken } })
+  } else {
+    await deviceToken.destroy({
+      where: { tokenId: req.user?.dvToken, userId: req.user?.id },
+    })
+  }
 
   return res.json({
     status: '1',

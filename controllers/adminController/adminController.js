@@ -1549,6 +1549,10 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       'proposalComment',
       'previousStaffName',
       'proposedAt',
+      'proposalCount',
+      'clientDeclineNote',
+      'clientDeclinedAt',
+      'respondedByName',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',

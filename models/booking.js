@@ -242,6 +242,15 @@ module.exports = (sequelize, DataTypes) => {
     // Staff the client originally asked for, when the shop suggested someone else.
     previousStaffName: { type: DataTypes.STRING(255), allowNull: true },
     proposedAt: { type: DataTypes.DATE, allowNull: true },
+    // How many times the shop has suggested a new time (at most 2).
+    proposalCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // What the client wrote when declining a suggested time.
+    clientDeclineNote: { type: DataTypes.STRING(500), allowNull: true },
+    // When the client declined a suggested time (tells an expiry while back
+    // with the shop apart from one while waiting on the client).
+    clientDeclinedAt: { type: DataTypes.DATE, allowNull: true },
+    // Who answered the request for the shop (owner or staff name).
+    respondedByName: { type: DataTypes.STRING(255), allowNull: true },
   })
 
   booking.associate = (models) => {

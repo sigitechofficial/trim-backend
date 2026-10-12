@@ -972,6 +972,11 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
         key: 'respondToEnquiries',
         level: 'none',
       },
+      {
+        access: 'Booking\nrequests',
+        key: 'bookingRequests',
+        level: 'none',
+      },
     ]
   }
 

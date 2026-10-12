@@ -50,6 +50,10 @@ async function ensureBookingApprovalSchema(db) {
     proposalComment: { type: DataTypes.STRING(500), allowNull: true },
     previousStaffName: { type: DataTypes.STRING(255), allowNull: true },
     proposedAt: { type: DataTypes.DATE, allowNull: true },
+    proposalCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    clientDeclineNote: { type: DataTypes.STRING(500), allowNull: true },
+    clientDeclinedAt: { type: DataTypes.DATE, allowNull: true },
+    respondedByName: { type: DataTypes.STRING(255), allowNull: true },
   })
   if (!bookingColumns || !bookingColumns.status) return
 

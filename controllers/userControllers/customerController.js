@@ -119,6 +119,9 @@ const {
 } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 
+// Must match bookingsController: a shop may suggest a new time at most twice.
+const MAX_TIME_PROPOSALS = 2
+
 const {
   bookingDataForEmailAndNotifications,
 } = require('../../utils/emailsNotificationsData')
@@ -3758,6 +3761,9 @@ exports.respondToTimeProposal = async (req, res, next) => {
       'initialPayment',
       'initialPaymentIntend',
       'salonDetailId',
+      'proposalCount',
+      'on',
+      'startTime',
     ],
     include: [{ model: salonDetail, attributes: ['connectAccountId'] }],
   })
@@ -3796,10 +3802,40 @@ exports.respondToTimeProposal = async (req, res, next) => {
     return res.json(response({ message: 'Booking confirmed', data: { appointment: appointment.id } }))
   }
 
+  const note = String(req.body?.note ?? '').trim().slice(0, 500) || null
+  // A shop may suggest twice. After the first suggestion is declined the
+  // request goes back to the shop (same hold, new shop deadline); after the
+  // second it is closed and the hold released.
+  const suggestions = Math.max(Number(appointment.proposalCount) || 0, 1)
+  if (suggestions < MAX_TIME_PROPOSALS) {
+    const [returned] = await booking.update(
+      {
+        requestOutcome: 'returned',
+        clientDeclineNote: note,
+        clientDeclinedAt: new Date(),
+        respondedAt: null,
+        requestExpiresAt: requestExpiresAt(appointment.on, appointment.startTime),
+        requestReminderSent: false,
+      },
+      { where: { id: appointment.id, status: 'requested', requestOutcome: 'proposed' } },
+    )
+    if (!returned) throw new AppError('This suggestion is no longer open.', 200)
+    socketForCalendar({ appointmentId: appointment.id, type: 'reschedule' })
+    proposalDeclined(appointment.id, { note, closed: false })
+    return res.json(
+      response({
+        message: 'Suggested time declined',
+        data: { closed: false, shopCanSuggestAgain: true },
+      }),
+    )
+  }
+
   const [claimed] = await booking.update(
     {
       status: 'cancel',
       requestOutcome: 'client_declined',
+      clientDeclineNote: note,
+      clientDeclinedAt: new Date(),
       respondedAt: new Date(),
       actualCapturedAmount: 0,
       cancellationCharges: 0,
@@ -3814,8 +3850,8 @@ exports.respondToTimeProposal = async (req, res, next) => {
   }
   await jobs.update({ status: 'cancel' }, { where: { bookingId: appointment.id } })
   socketForCalendar({ appointmentId: appointment.id, type: 'finish', status: 'cancel' })
-  proposalDeclined(appointment.id)
-  return res.json(response({ message: 'Suggested time declined', data: {} }))
+  proposalDeclined(appointment.id, { note, closed: true })
+  return res.json(response({ message: 'Suggested time declined', data: { closed: true } }))
 }
 
 exports.cancelAppointment = async (req, res, next) => {
@@ -4589,6 +4625,9 @@ exports.fetchAppointments = async (req, res, next) => {
       'previousEndTime',
       'proposalComment',
       'previousStaffName',
+      'proposalCount',
+      'clientDeclineNote',
+      'clientDeclinedAt',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4672,6 +4711,9 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'previousEndTime',
       'proposalComment',
       'previousStaffName',
+      'proposalCount',
+      'clientDeclineNote',
+      'clientDeclinedAt',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',

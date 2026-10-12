@@ -5,6 +5,8 @@ const ThrowNotification = require('../../utils/throwNotification')
 const {
   bookingDataForEmailAndNotifications,
 } = require('../../utils/emailsNotificationsData')
+const { requestPushTokens } = require('../../helper/bookingRequestAccess')
+const { booking } = require('../../models')
 
 const tokensOf = (person) =>
   (person?.deviceTokens || []).map((t) => t?.tokenId).filter(Boolean)
@@ -18,11 +20,25 @@ async function load(bookingId) {
   const bookingData = await bookingDataForEmailAndNotifications(bookingId)
   if (!bookingData) return null
   const { appointment } = bookingData
+  // Only the owner's devices and staff allowed to answer this request
+  // ("all", or "own" when it is their booking) get shop-side request pushes.
+  let shopTokens = tokensOf(appointment?.salonDetail?.user)
+  try {
+    const row = await booking.findByPk(bookingId, { attributes: ['salonDetailId'] })
+    const allowed = await requestPushTokens({
+      salonDetailId: row?.salonDetailId,
+      ownerUserId: bookingData?.salon?.userId,
+      bookingId,
+    })
+    shopTokens = shopTokens.filter((t) => allowed.includes(t))
+  } catch (error) {
+    console.error('[appointmentRequest] recipient filter failed:', error.message)
+  }
   return {
     bookingData,
     appointment,
     when: emailDateFormate(appointment.on, appointment.startTime),
-    shopTokens: tokensOf(appointment?.salonDetail?.user),
+    shopTokens,
     clientTokens: tokensOf(appointment?.user),
   }
 }
@@ -117,7 +133,7 @@ exports.requestExpired = (bookingId, wasProposal = false) =>
   })
 
 // Shop accepted on condition of a different time; the client must confirm.
-exports.timeProposed = (bookingId, comment, newStaffName = '') =>
+exports.timeProposed = (bookingId, comment, newStaffName = '', isLastSuggestion = false) =>
   safely('timeProposed', async () => {
     const ctx = await load(bookingId)
     if (!ctx) return
@@ -126,7 +142,9 @@ exports.timeProposed = (bookingId, comment, newStaffName = '') =>
       title: 'New time suggested',
       body: `${ctx.bookingData.salon.salonName} can take your booking at ${ctx.when}${
         newStaffName ? ` with ${newStaffName}` : ''
-      }${comment ? `: "${comment}"` : '.'} Please confirm${deadline ? ` by ${deadline}` : ''}. You won't be charged unless you accept.`,
+      }${comment ? `: "${comment}"` : '.'} Please confirm${deadline ? ` by ${deadline}` : ''}. You won't be charged unless you accept.${
+        isLastSuggestion ? ' This is their final suggestion.' : ''
+      }`,
     })
   })
 
@@ -140,13 +158,17 @@ exports.proposalAccepted = (bookingId) =>
     })
   })
 
-exports.proposalDeclined = (bookingId) =>
+// closed=false: first suggestion declined, the request is back with the shop.
+exports.proposalDeclined = (bookingId, { note = null, closed = true } = {}) =>
   safely('proposalDeclined', async () => {
     const ctx = await load(bookingId)
     if (!ctx) return
-    toShop(ctx, 'bookingProposalDeclined', {
+    const said = note ? ` They said: "${note}".` : ''
+    toShop(ctx, closed ? 'bookingProposalDeclined' : 'bookingProposalReturned', {
       title: 'New time declined',
-      body: `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}). The request was cancelled.`,
+      body: closed
+        ? `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}).${said} The request was cancelled.`
+        : `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}).${said} You can suggest one more time or decline the request.`,
     })
   })
 
