@@ -40,6 +40,8 @@ async function load(bookingId) {
     when: emailDateFormate(appointment.on, appointment.startTime),
     shopTokens,
     clientTokens: tokensOf(appointment?.user),
+    // fullName is "first last"; trim it so a client with no last name reads cleanly.
+    clientName: String(bookingData.client?.fullName ?? '').trim(),
   }
 }
 
@@ -51,7 +53,7 @@ function toShop(ctx, type, notification) {
     {
       appointment: ctx.appointment.id,
       type,
-      name: ctx.bookingData.client.fullName,
+      name: ctx.clientName,
       image: ctx.bookingData.client.image,
     },
     ctx.bookingData?.salon?.userId,
@@ -88,7 +90,7 @@ exports.bookingRequested = (bookingId, expiresAt) =>
     const deadline = deadlineText(expiresAt || ctx.appointment.requestExpiresAt)
     toShop(ctx, 'bookingRequest', {
       title: 'New booking request',
-      body: `${ctx.bookingData.client.fullName} wants to book ${ctx.when}. Accept or decline${deadline ? ` by ${deadline}` : ''}.`,
+      body: `${ctx.clientName} wants to book ${ctx.when}. Accept or decline${deadline ? ` by ${deadline}` : ''}.`,
     })
     toClient(ctx, 'bookingRequestSent', {
       title: 'Booking request sent',
@@ -118,7 +120,7 @@ exports.requestExpired = (bookingId, wasProposal = false) =>
       })
       toShop(ctx, 'bookingRequestExpired', {
         title: 'Suggested time expired',
-        body: `${ctx.bookingData.client.fullName} didn't confirm the new time (${ctx.when}). The request was cancelled.`,
+        body: `${ctx.clientName} didn't confirm the new time (${ctx.when}). The request was cancelled.`,
       })
       return
     }
@@ -128,7 +130,7 @@ exports.requestExpired = (bookingId, wasProposal = false) =>
     })
     toShop(ctx, 'bookingRequestExpired', {
       title: 'Booking request expired',
-      body: `The request from ${ctx.bookingData.client.fullName} for ${ctx.when} expired without a response.`,
+      body: `The request from ${ctx.clientName} for ${ctx.when} expired without a response.`,
     })
   })
 
@@ -154,7 +156,7 @@ exports.proposalAccepted = (bookingId) =>
     if (!ctx) return
     toShop(ctx, 'bookingProposalAccepted', {
       title: 'New time accepted',
-      body: `${ctx.bookingData.client.fullName} accepted the new time: ${ctx.when}. The booking is confirmed.`,
+      body: `${ctx.clientName} accepted the new time: ${ctx.when}. The booking is confirmed.`,
     })
   })
 
@@ -167,8 +169,8 @@ exports.proposalDeclined = (bookingId, { note = null, closed = true } = {}) =>
     toShop(ctx, closed ? 'bookingProposalDeclined' : 'bookingProposalReturned', {
       title: 'New time declined',
       body: closed
-        ? `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}).${said} The request was cancelled.`
-        : `${ctx.bookingData.client.fullName} declined the suggested time (${ctx.when}).${said} You can suggest one more time or decline the request.`,
+        ? `${ctx.clientName} declined the suggested time (${ctx.when}).${said} The request was cancelled.`
+        : `${ctx.clientName} declined the suggested time (${ctx.when}).${said} You can suggest one more time or decline the request.`,
     })
   })
 
@@ -178,7 +180,7 @@ exports.requestWithdrawn = (bookingId) =>
     if (!ctx) return
     toShop(ctx, 'bookingRequestWithdrawn', {
       title: 'Booking request cancelled',
-      body: `${ctx.bookingData.client.fullName} cancelled their booking request for ${ctx.when}.`,
+      body: `${ctx.clientName} cancelled their booking request for ${ctx.when}.`,
     })
   })
 
@@ -188,6 +190,6 @@ exports.requestReminder = (bookingId, expiresAt) =>
     if (!ctx) return
     toShop(ctx, 'bookingRequestReminder', {
       title: 'Booking request waiting',
-      body: `Respond to ${ctx.bookingData.client.fullName}'s request for ${ctx.when} by ${deadlineText(expiresAt)}, or it will expire.`,
+      body: `Respond to ${ctx.clientName}'s request for ${ctx.when} by ${deadlineText(expiresAt)}, or it will expire.`,
     })
   })
