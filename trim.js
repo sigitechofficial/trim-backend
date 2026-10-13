@@ -238,4 +238,7 @@ server.listen(serverPort, (err) => {
 // ─── App Version Cron (hourly store version check) ───────────────────────────
 require('./jobs/appVersionCron')
 
+// ─── Booking Requests Cron (expiry + shop reminder, every 5 minutes) ─────────
+require('./jobs/bookingRequestCron')
+
 // hello
