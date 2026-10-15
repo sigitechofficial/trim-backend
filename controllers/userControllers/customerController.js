@@ -7668,6 +7668,9 @@ exports.sendReminder = async (req, res) => {
     // ---- fetch bookings that need either reminder ----
     const bookings = await booking.findAll({
       where: {
+        // only confirmed appointments ('pending' = booked, some staff unassigned);
+        // not cancelled ones or 'requested' ones the shop has not accepted yet
+        status: { [Op.in]: ['pending', 'book'] },
         [Op.or]: [
           {
             reminderSent: false,
