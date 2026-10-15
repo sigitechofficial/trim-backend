@@ -43,4 +43,4 @@ function requestExpiresAt(on, startTime, now = DateTime.now()) {
   return deadline.toJSDate()
 }
 
-module.exports = { requiresApproval, requestExpiresAt, appointmentStart }
+module.exports = { SHOP_ZONE, requiresApproval, requestExpiresAt, appointmentStart }

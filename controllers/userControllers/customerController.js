@@ -114,8 +114,10 @@ const {
   proposalDeclined,
 } = require('../eventDrivenCommunication/appointmentRequest')
 const {
+  SHOP_ZONE,
   requiresApproval,
   requestExpiresAt,
+  appointmentStart,
 } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 
@@ -7644,7 +7646,7 @@ exports.sendReminder = async (req, res) => {
   try {
     console.log("+++++++++++++++++++++++++++++++++++++++++++++CALLING LAMBDA 24/2H");
 
-    // ---- windows in Asia/Karachi ----
+    // ---- windows in the shop's time zone (bookings store shop-local date + time) ----
     const now = new Date();
     const wiggle = 30 * 60 * 1000; // 30 minutes in milliseconds
 
@@ -7653,7 +7655,7 @@ exports.sendReminder = async (req, res) => {
       const start = new Date(target.getTime() - wiggle); // 30 minutes before the target
       const end = new Date(target.getTime() + wiggle); // 30 minutes after the target
       const formatLocalDateTime = (date) =>
-        date.toLocaleString('sv', { timeZone: 'Asia/Karachi' }).replace('T', ' ');
+        date.toLocaleString('sv', { timeZone: SHOP_ZONE }).replace('T', ' ');
       return { startStr: formatLocalDateTime(start), endStr: formatLocalDateTime(end), start, end };
     };
 
@@ -7739,12 +7741,12 @@ exports.sendReminder = async (req, res) => {
 
       const salonUser = salon.user;
 
-      // Build appointment Date (treat 'on' + 'startTime' as Asia/Karachi local)
-      const apptDateTime = new Date(`${b.on}T${b.startTime}`); // raw
-      
-      // Format date as DD/MM/YYYY with time in Asia/Karachi timezone
+      // Build appointment Date ('on' + 'startTime' are shop-local, whatever the server's zone)
+      const apptDateTime = appointmentStart(b.on, b.startTime).toJSDate();
+
+      // Format date as DD/MM/YYYY with time in the shop's time zone
       const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Karachi',
+        timeZone: SHOP_ZONE,
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -7792,10 +7794,9 @@ exports.sendReminder = async (req, res) => {
       }
 
       // Decide which reminder this booking is for
-      const apptForCompare = new Date(`${b.on}T${b.startTime}`); // JS date for comparison to windows created from 'now'
       let which = null;
-      if (!b.reminderSent && inWindow(apptForCompare, w24)) which = '24h';
-      else if (!b.twoHoursReminder && inWindow(apptForCompare, w2)) which = '2h';
+      if (!b.reminderSent && inWindow(apptDateTime, w24)) which = '24h';
+      else if (!b.twoHoursReminder && inWindow(apptDateTime, w2)) which = '2h';
 
       if (!which) {
         console.warn(`Booking ${b.id} did not fall into a known window.`);
