@@ -331,6 +331,7 @@ async function settingsForShop(salonDetailId) {
     booking.sum('loyaltyDiscount', { where: { salonDetailId, status: 'complete' } }),
   ])
   return {
+    configured: !!program,
     isActive: !!program?.isActive,
     visitsRequired: program?.visitsRequired ?? 5,
     discountPercentage: Number(program?.discountPercentage ?? 10),
@@ -338,6 +339,7 @@ async function settingsForShop(salonDetailId) {
     minBookingValue: program?.minBookingValue == null ? null : Number(program.minBookingValue),
     rewardExpiryDays: program?.rewardExpiryDays ?? null,
     excludedServiceIds: excludedIdsOf(program),
+    excludedServices: await excludedServices(program),
     startedAt: program?.startedAt || null,
     limits: rules.LIMITS,
     stats: { clients, rewardsReady, rewardsUsed, discountGiven: round2(discountGiven || 0) },

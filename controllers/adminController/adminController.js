@@ -1526,6 +1526,8 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       `status`,
       `subTotal`,
       `discount`,
+      'loyaltyDiscount',
+      'loyaltyPercentage',
       `total`,
       `initialPayment`,
       `vatAmount`,
