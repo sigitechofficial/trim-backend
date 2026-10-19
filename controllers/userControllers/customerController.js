@@ -1062,6 +1062,14 @@ exports.home = async (req, res, next) => {
 
     // Keep distance sort (already applied). If you want to sort by discount instead, comment next line.
     // results.sort((a, b) => b.averageDiscount - a.averageDiscount);
+
+    // Loyalty offer badge for each shop card
+    try {
+      const offers = await loyalty.offersForShops(results.map((s) => s.id), req.user?.id || null)
+      results = results.map((s) => ({ ...s, loyaltyOffer: offers.get(s.id) || null }))
+    } catch (err) {
+      console.error('[loyalty] home offers failed:', err.message)
+    }
   }
 
   // Upcoming/pending appointments for this customer (for the home header)
@@ -1688,6 +1696,14 @@ exports.searchSalons = async (req, res, next) => {
       plain.staffAdvertisementWagesCycle = rawWagesCycle || null
       return plain
     })
+
+    // Loyalty offer badge for each shop card
+    try {
+      const offers = await loyalty.offersForShops(salons.map((s) => s.id), req.user?.id || null)
+      salons.forEach((s) => { s.loyaltyOffer = offers.get(s.id) || null })
+    } catch (err) {
+      console.error('[loyalty] search offers failed:', err.message)
+    }
 
     const payload = {
       status: '1',

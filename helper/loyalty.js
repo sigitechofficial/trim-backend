@@ -304,6 +304,50 @@ async function summaryForClient(salonDetailId, customerId, program = undefined) 
   }
 }
 
+/**
+ * Short offer summary for shop lists (home, search, favourites), in three
+ * queries for the whole list. Returns Map(shopId -> { percentage,
+ * visitsRequired, myVisits, status }) for shops with an active offer or a
+ * reward this client can still use.
+ */
+async function offersForShops(shopIds, customerId) {
+  const ids = [...new Set((shopIds || []).map(Number).filter(Boolean))]
+  const out = new Map()
+  if (!ids.length) return out
+  const [programs, cards] = await Promise.all([
+    loyaltyProgram.findAll({
+      where: { salonDetailId: ids },
+      attributes: ['salonDetailId', 'isActive', 'visitsRequired', 'discountPercentage'],
+    }),
+    customerId
+      ? loyaltyCard.findAll({ where: { salonDetailId: ids, customerId } })
+      : [],
+  ])
+  const cardByShop = new Map(cards.map((c) => [c.salonDetailId, c]))
+  const earnedIds = cards.filter((c) => c.rewardEarnedAt).map((c) => c.id)
+  const held = earnedIds.length
+    ? await booking.findAll({
+        where: { loyaltyCardId: earnedIds, loyaltyDiscount: { [Op.gt]: 0 }, status: { [Op.in]: HOLDING_STATUSES } },
+        attributes: ['loyaltyCardId'],
+      })
+    : []
+  const heldIds = new Set(held.map((b) => b.loyaltyCardId))
+  for (const p of programs) {
+    const card = cardByShop.get(p.salonDetailId)
+    const status = rules.rewardStatus(card, { held: card ? heldIds.has(card.id) : false })
+    const hasReward = status === 'ready' || status === 'reserved'
+    if (!p.isActive && !hasReward) continue
+    out.set(p.salonDetailId, {
+      active: !!p.isActive,
+      percentage: Number(hasReward ? card.rewardPercentage : p.discountPercentage),
+      visitsRequired: p.visitsRequired,
+      myVisits: card?.visitCount || 0,
+      status,
+    })
+  }
+  return out
+}
+
 // All of a client's cards, rewards to use first.
 async function cardsForCustomer(customerId) {
   const cards = await loyaltyCard.findAll({
@@ -389,6 +433,7 @@ module.exports = {
   onBookingCompleted,
   onBookingNoShow,
   summaryForClient,
+  offersForShops,
   cardsForCustomer,
   settingsForShop,
   saveSettings,
