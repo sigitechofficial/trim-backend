@@ -3352,6 +3352,8 @@ exports.saleDetails = async (req, res, next) => {
   let bookingDetail = {
     id: bookingData.id,
     status: bookingData.status,
+    loyaltyDiscount: bookingData.loyaltyDiscount,
+    loyaltyPercentage: bookingData.loyaltyPercentage,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     noshowCharges: bookingData.noshowCharges,
     cancellationCharges: bookingData.cancellationCharges,

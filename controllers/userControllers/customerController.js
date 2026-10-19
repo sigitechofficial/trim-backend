@@ -68,6 +68,7 @@ const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
 const Custom = require('../../utils/customFunctions')
 const Stripe = require('../stripe')
+const loyalty = require('../../helper/loyalty')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -1939,6 +1940,14 @@ exports.salonDetails = async (req, res, next) => {
     },
   })
 
+  // Visit-card offer and this client's progress (null when there is none).
+  let loyaltyCard = null
+  try {
+    loyaltyCard = await loyalty.summaryForClient(Number(req.params.id), req.user?.id || null)
+  } catch (err) {
+    console.error('[loyalty] shop page summary failed:', err.message)
+  }
+
   return res.status(200).json(
     response({
       message:"Data loaded",
@@ -1950,6 +1959,7 @@ exports.salonDetails = async (req, res, next) => {
         policies,
         currencyUnit: CURRENCY_UNIT,
         feedbackCount,
+        loyalty: loyaltyCard,
       },
     }),
   )
@@ -4158,6 +4168,42 @@ exports.bookAppointment = async (req, res, next) => {
     throw new AppError('Please select payment a method first', 200)
   }
 
+  // Loyalty reward: worked out here, never taken from the app. An older app
+  // (no useLoyalty) books at full price and the reward waits for next time.
+  delete appointment.loyaltyDiscount
+  delete appointment.loyaltyPercentage
+  delete appointment.loyaltyCardId
+  let loyaltyLines = []
+  if (req.body.useLoyalty === true || req.body.useLoyalty === 'true') {
+    const quoted = await loyalty.quote({
+      salonDetailId: appointment.salonDetailId,
+      customerId,
+      serviceIds: (services || []).map((s) => s.serviceId),
+    })
+    let problem = null
+    if (!quoted.eligible) {
+      problem = 'Your loyalty reward can no longer be used on this booking. Please check your booking again.'
+    } else if (req.body.couponId && !quoted.combineWithCoupon) {
+      problem = 'This shop does not allow a coupon code together with the loyalty reward.'
+    } else if (Math.abs((Number(req.body.loyaltyDiscount) || 0) - quoted.loyaltyDiscount) > 0.01) {
+      problem = 'Your loyalty discount has changed. Please check your booking again.'
+    }
+    if (problem) {
+      // The app's payment sheet may already hold the deposit; no booking, no charge.
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, {
+          attributes: ['connectAccountId'],
+        })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError(problem, 200)
+    }
+    appointment.loyaltyDiscount = quoted.loyaltyDiscount
+    appointment.loyaltyPercentage = quoted.percentage
+    appointment.loyaltyCardId = quoted.cardId
+    loyaltyLines = quoted.lines
+  }
+
   appointment.startTime = DateManupulation.convertTo24HourFormat(
     appointment.startTime,
   )
@@ -4385,7 +4431,8 @@ exports.bookAppointment = async (req, res, next) => {
     });
   }
 
-  const finalInput = JobsInput.map((service) => ({
+  // Each job carries its share of the loyalty discount (0 without one).
+  const finalInput = loyalty.applyToJobs(JobsInput, loyaltyLines).map((service) => ({
     ...service,
     bookingId: book.id,
   }))
@@ -4716,6 +4763,8 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'proposalCount',
       'clientDeclineNote',
       'clientDeclinedAt',
+      'loyaltyDiscount',
+      'loyaltyPercentage',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',
@@ -5263,10 +5312,11 @@ exports.applyCoupon = async (req, res, next) => {
     });
     console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
 
-  // 8️⃣ Return success
+  // 8️⃣ Return success (and whether the shop lets it join the loyalty reward)
+  const loyaltyOffer = await loyalty.getProgram(salonId);
   const output = response({
     message: 'Success',
-    data: { promoCode: data },
+    data: { promoCode: data, combinableWithLoyalty: !!loyaltyOffer?.combineWithCoupon },
   });
   return res.status(200).json(output);
 };

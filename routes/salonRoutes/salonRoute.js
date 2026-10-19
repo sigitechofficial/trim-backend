@@ -19,6 +19,7 @@ const {
   fetchReasons,
 } = require('../../controllers/adminController/adminController')
 const factory = require('../../controllers/handlerFactory')
+const loyaltyController = require('../../controllers/loyaltyController')
 const validateToken = require('../../middlewares/accessCheck')
 const multer = require('multer')
 const catchAsync = require('../../middlewares/catchAync')
@@ -415,6 +416,10 @@ router.patch(
 
 router.patch('/online-payments', catchAsync(salonController.onlinePayments))
 router.patch('/booking-approval', catchAsync(salonController.bookingApprovalSettings))
+// Loyalty discount (visit card)
+router.get('/loyalty', catchAsync(loyaltyController.getShopLoyalty))
+router.put('/loyalty', catchAsync(loyaltyController.saveShopLoyalty))
+router.get('/loyalty/client/:customerId', catchAsync(loyaltyController.getClientCard))
 
 router.get('/fetch-faqs/:accessFrom/:type?', catchAsync(fetchFAQs))
 

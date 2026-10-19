@@ -251,6 +251,10 @@ module.exports = (sequelize, DataTypes) => {
     clientDeclinedAt: { type: DataTypes.DATE, allowNull: true },
     // Who answered the request for the shop (owner or staff name).
     respondedByName: { type: DataTypes.STRING(255), allowNull: true },
+    // Loyalty reward used on this booking (set by the server, never the app).
+    loyaltyDiscount: { type: DataTypes.DECIMAL(20, 2), allowNull: false, defaultValue: 0 },
+    loyaltyPercentage: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+    loyaltyCardId: { type: DataTypes.INTEGER, allowNull: true },
   })
 
   booking.associate = (models) => {

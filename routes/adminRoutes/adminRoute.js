@@ -8,6 +8,7 @@ const adminReports = require('../../controllers/adminController/adminReportsCont
 const reportController = require('../../controllers/salonControllers/newReportsController')
 const customerController = require('../../controllers/userControllers/customerController')
 const protect = require('../../middlewares/accessCheck')
+const loyaltyController = require('../../controllers/loyaltyController')
 const catchAsync = require('../../middlewares/catchAync')
 const {
   user,
@@ -226,6 +227,16 @@ router.patch(
   '/salon-booking-approval/:id',
   protect,
   catchAsync(adminController.updateSalonBookingApproval),
+)
+router.get(
+  '/salon-loyalty/:id',
+  protect,
+  catchAsync(loyaltyController.adminGetShopLoyalty),
+)
+router.patch(
+  '/salon-loyalty/:id',
+  protect,
+  catchAsync(loyaltyController.adminSetShopLoyalty),
 )
 router.delete(
   '/salon-delete/:id',

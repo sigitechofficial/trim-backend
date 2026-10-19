@@ -173,6 +173,11 @@ ensureBookingApprovalSchema(db)
   .then(() => console.log('[bookingApprovalSchema] ensured'))
   .catch((err) => console.error('[bookingApprovalSchema] failed:', err.message))
 
+const { ensureLoyaltySchema } = require('./helper/loyaltySchema')
+ensureLoyaltySchema(db)
+  .then(() => console.log('[loyaltySchema] ensured'))
+  .catch((err) => console.error('[loyaltySchema] failed:', err.message))
+
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)

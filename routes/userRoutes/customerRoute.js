@@ -8,6 +8,7 @@ const {
   fetchServiceTypes,
 } = require('../../controllers/adminController/adminController')
 const protect = require('../../middlewares/accessCheck')
+const loyaltyController = require('../../controllers/loyaltyController')
 const publicProtected = require('../../middlewares/publicProtected')
 const catchAsync = require('../../middlewares/catchAync')
 const {
@@ -212,6 +213,10 @@ router.put('/detach-card/:pm', protect, catchAsync(appController.detachCard))
 // Coupons
 router.post('/apply-coupon', protect, catchAsync(appController.applyCoupon))
 router.post('/test-coupon-tracking', catchAsync(appController.testCouponTracking))
+
+// Loyalty discount (visit card)
+router.post('/loyalty/quote', protect, catchAsync(loyaltyController.quote))
+router.get('/loyalty/cards', protect, catchAsync(loyaltyController.myCards))
 
 // Drawer
 router.patch(

@@ -70,6 +70,7 @@ const {
 const { DateTime } = require('luxon')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
+const loyalty = require('../../helper/loyalty')
 const {
   resolveRequestActor,
   ownRequestBookingIds,
@@ -1022,6 +1023,7 @@ exports.bookingDetails = async (req, res, next) => {
       serviceName: ele.service?.serviceName,
       color: ele.service?.category?.color,
       price: ele.total,
+      loyaltyDiscount: ele.loyaltyDiscount,
       startTime: dateManipulation.convertTo12HourFormat(ele.startTime),
       duration: ele.duration,
       endTime: dateManipulation.convertTo12HourFormat(ele.endTime),
@@ -1031,6 +1033,16 @@ exports.bookingDetails = async (req, res, next) => {
     };
     services.push(obj);
   });
+
+  // The client's visit card at this shop ("3 / 5 visits", reward ready...).
+  let loyaltyCard = null
+  if (bookingData.customerId > 0) {
+    try {
+      loyaltyCard = await loyalty.summaryForClient(bookingData.salonDetailId, bookingData.customerId)
+    } catch (err) {
+      console.error('[loyalty] booking detail card failed:', err.message)
+    }
+  }
 
   const clientName = `${bookingData.user?.firstName || bookingData.clientFirstName} ${bookingData.user?.lastName || bookingData.clientLastName}`;
   const clientContact = `${bookingData.user?.countryCode || bookingData.countryCode} ${bookingData.user?.phoneNum || bookingData.phoneNum}`;
@@ -1076,6 +1088,9 @@ exports.bookingDetails = async (req, res, next) => {
     customerStatus,
     connectAccountId: salon?.connectAccountId || '', // ✅ added here
     couponOnBooking: couponData, // Add coupon information
+    loyaltyDiscount: bookingData.loyaltyDiscount,
+    loyaltyPercentage: bookingData.loyaltyPercentage,
+    loyaltyCard,
   };
 
   return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));
@@ -2826,7 +2841,7 @@ exports.jobStatus = async (req, res, next) => {
   const { status, jobIds, notify } = req.body
   const jobData = await jobs.findOne({
     where: { id: jobIds },
-    attributes: ['id', 'total', 'employeeId', 'serviceId', 'bookingId'],
+    attributes: ['id', 'total', 'loyaltyDiscount', 'employeeId', 'serviceId', 'bookingId'],
     include: [
       {
         model: employee,
@@ -2838,7 +2853,7 @@ exports.jobStatus = async (req, res, next) => {
       },
       {
         model: booking,
-        attributes: ['id', 'total', 'salonDetailId', 'duration'],
+        attributes: ['id', 'total', 'loyaltyDiscount', 'salonDetailId', 'duration'],
       },
     ],
   })
@@ -2864,8 +2879,17 @@ exports.jobStatus = async (req, res, next) => {
     const updatedBookingDuration =
       parseInt(jobData.booking.duration) - parseInt(jobData.duration)
 
+    const updatedLoyalty = Math.max(
+      parseFloat(jobData.booking.loyaltyDiscount || 0) -
+        parseFloat(jobData.loyaltyDiscount || 0),
+      0,
+    )
     await booking.update(
-      { total: updatedBookingTotal, duration: updatedBookingDuration },
+      {
+        total: updatedBookingTotal,
+        duration: updatedBookingDuration,
+        loyaltyDiscount: updatedLoyalty,
+      },
       { where: { id: jobData.bookingId } },
     )
   } else if (status == 'complete') {
@@ -3029,6 +3053,7 @@ exports.completeBookingAfterOnlinePayment = async ({
   );
 
   Communication.online(bookingId, tipAmount, amount);
+  loyalty.onBookingCompleted(bookingId);
 
   await employeeCommission.update(
     { appointmentClosed: true },
@@ -3561,6 +3586,7 @@ exports.checkoutCash = async (req, res, next) => {
   )
   //EMAIL --//TODO
   Communication.cash(bookingId, tip || 0, amount)
+  loyalty.onBookingCompleted(bookingId)
   // EmailAppointmentConfirmToSalon(['sigidevelopers@gmail.com'],inputData);
 
   employeeCommission.update(
@@ -3671,6 +3697,7 @@ exports.checkOutMinimalPayment = async (req, res, next) => {
 
     // Send communication (email and notifications)
     Communication.online(bookingId, tipAmount, amount);
+    loyalty.onBookingCompleted(bookingId);
 
     // Update employee commission records
     await employeeCommission.update(
@@ -4353,7 +4380,8 @@ exports.serviceData = async (req, res, next) => {
     const total =
       parseFloat(jobData.total) +
       parseFloat(jobData.serviceDiscount) +
-      parseFloat(jobData.extraDiscount)
+      parseFloat(jobData.extraDiscount) +
+      parseFloat(jobData.loyaltyDiscount || 0)
     serviceData = {
       id: jobData.serviceId,
       serviceName: jobData.service.serviceName,
@@ -4428,10 +4456,21 @@ exports.editService = async (req, res, next) => {
   })
   //!TODO skipped booking End Time .. because its Not required on frontend on any app (IMP .. check if it required in reports)
 
+  // A booking that used the loyalty reward keeps it on the edited line
+  // (none if the new service is excluded from the offer).
+  const lineLoyalty = await loyalty.lineDiscount(jobData.booking, serviceId, price)
+  const lineTotal = Math.max(parseFloat(price) - lineLoyalty, 0)
+  const bookingLoyalty = Math.max(
+    parseFloat(jobData.booking.loyaltyDiscount || 0) -
+      parseFloat(jobData.loyaltyDiscount || 0) +
+      lineLoyalty,
+    0,
+  )
+
   let updatedBookingTotal =
     parseFloat(jobData.booking.total) - parseFloat(jobData.total)
 
-  updatedBookingTotal = updatedBookingTotal + parseFloat(price)
+  updatedBookingTotal = updatedBookingTotal + lineTotal
 
   let updatedBookingDuration =
     parseInt(jobData.booking.duration) - parseInt(jobData.duration)
@@ -4445,7 +4484,8 @@ exports.editService = async (req, res, next) => {
       serviceId,
       startTime,
       endTime,
-      total: price,
+      total: lineTotal,
+      loyaltyDiscount: lineLoyalty,
       serviceDiscount,
       extraDiscount,
       duration,
@@ -4502,6 +4542,7 @@ exports.editService = async (req, res, next) => {
   await booking.update(
     {
       total: updatedBookingTotal,
+      loyaltyDiscount: bookingLoyalty,
       duration: updatedBookingDuration,
       status: bookingStatus,
       startTime: startFrom,
@@ -4697,6 +4738,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
 
   if (updatedBooking.status == "no-show") {
     await jobs.update({ status: "no-show" }, { where: { bookingId } });
+    loyalty.onBookingNoShow(bookingId);
     noShowMessages(appointment?.id, finePercentage, true);
   } else {
     noShowMessages(appointment?.id, finePercentage);
