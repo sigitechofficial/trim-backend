@@ -95,7 +95,7 @@ const defaultAccess = [
     level: 'none',
   },
   {
-    access: 'Coupons',
+    access: 'Coupons &\nloyalty',
     key: 'manageDeals',
     level: 'none',
   },

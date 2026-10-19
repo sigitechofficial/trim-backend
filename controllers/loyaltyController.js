@@ -4,26 +4,52 @@ const loyalty = require('../helper/loyalty')
 const { resolveRequestActor } = require('../helper/bookingRequestAccess')
 const { response } = require('../utils/response')
 const AppError = require('../utils/appError')
-const { salonDetail } = require('../models')
+const { salonDetail, employeeAccess, employeeAccessDefault } = require('../models')
 
 const fail = (message) => response({ status: '0', message, data: {} })
+
+// Who is acting and what they may do with the loyalty offer. Owners and chair
+// renters: everything. Staff: the "Coupons & loyalty" permission (key
+// manageDeals) — none = no access, low = view only, high = view and change.
+async function loyaltyAccess(req) {
+  const actor = await resolveRequestActor(req)
+  if (!actor.shopId) return { shopId: null, level: 'none' }
+  if (actor.isOwner) return { shopId: actor.shopId, level: 'high' }
+  if (!actor.employeeId) return { shopId: actor.shopId, level: 'none' }
+  let row = await employeeAccess.findOne({
+    where: { employeeId: actor.employeeId, key: 'manageDeals' },
+    attributes: ['level'],
+  })
+  if (!row) {
+    const ownRows = await employeeAccess.count({ where: { employeeId: actor.employeeId } })
+    if (!ownRows) {
+      row = await employeeAccessDefault.findOne({
+        where: { salonDetailId: actor.shopId, key: 'manageDeals' },
+        attributes: ['level'],
+      })
+    }
+  }
+  const level = ['none', 'low', 'high'].includes(row?.level) ? row.level : 'none'
+  return { shopId: actor.shopId, level }
+}
 
 /* ---------- Business app (/salon/v1) ---------- */
 
 // GET /salon/v1/loyalty — settings, excluded services and simple numbers.
 exports.getShopLoyalty = async (req, res) => {
-  const actor = await resolveRequestActor(req)
-  if (!actor.shopId) return res.json(fail('Shop not found'))
-  const settings = await loyalty.settingsForShop(actor.shopId)
-  return res.json(response({ data: { ...settings, canEdit: actor.isOwner } }))
+  const access = await loyaltyAccess(req)
+  if (!access.shopId) return res.json(fail('Shop not found'))
+  if (access.level === 'none') return res.json(fail("You don't have access to the loyalty offer."))
+  const settings = await loyalty.settingsForShop(access.shopId)
+  return res.json(response({ data: { ...settings, canEdit: access.level === 'high' } }))
 }
 
-// PUT /salon/v1/loyalty — owners and chair renters only.
+// PUT /salon/v1/loyalty — owners, chair renters, and staff with "high".
 exports.saveShopLoyalty = async (req, res) => {
-  const actor = await resolveRequestActor(req)
-  if (!actor.shopId) return res.json(fail('Shop not found'))
-  if (!actor.isOwner) return res.json(fail('Only the shop owner can change the loyalty offer.'))
-  const { settings, error } = await loyalty.saveSettings(actor.shopId, req.body || {})
+  const access = await loyaltyAccess(req)
+  if (!access.shopId) return res.json(fail('Shop not found'))
+  if (access.level !== 'high') return res.json(fail("You don't have permission to change the loyalty offer."))
+  const { settings, error } = await loyalty.saveSettings(access.shopId, req.body || {})
   if (error) return res.json(fail(error))
   return res.json(response({ message: 'Loyalty offer saved', data: { ...settings, canEdit: true } }))
 }

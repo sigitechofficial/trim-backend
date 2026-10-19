@@ -953,7 +953,7 @@ exports.fetchDefaultAccesslevels = async (req, res, next) => {
         level: 'none',
       },
       {
-        access: 'Coupons',
+        access: 'Coupons &\nloyalty',
         key: 'manageDeals',
         level: 'none',
       },
