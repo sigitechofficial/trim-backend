@@ -29,4 +29,11 @@ if [ -n "$FIREBASE_JSON_B64" ]; then
   echo "[entrypoint] firebase.json written"
 fi
 
+# The app-version check reads the Google service account from a file path.
+if [ -n "$GOOGLE_SERVICE_ACCOUNT_JSON_B64" ]; then
+  printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > google-service-account.json
+  export GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/app/google-service-account.json
+  echo "[entrypoint] google-service-account.json written"
+fi
+
 exec "$@"

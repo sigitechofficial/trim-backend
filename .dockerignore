@@ -21,3 +21,4 @@ seeders
 test
 *.md
 docker-compose.local.yml
+google-service-account.json
