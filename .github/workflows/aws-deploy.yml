@@ -1,0 +1,86 @@
+# Deploys the backend to AWS (ECS Fargate). Separate from trim.yml (cPanel),
+# which this file does not change.
+#
+# Runs only when someone pushes to the aws-deploy branch, e.g.
+#   git push origin aws-migration:aws-deploy
+# (or "Run workflow" on main, once this file is merged there).
+# GitHub logs in to AWS with OIDC: no AWS key is stored in GitHub.
+#
+# It builds the image, pushes it to ECR tagged with the commit, and points the
+# running service at it. Settings and secrets stay as the current task
+# definition has them (safe mode until move day).
+name: AWS deploy (ECS Fargate)
+
+on:
+  push:
+    branches: [aws-deploy]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: aws-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-2
+  ECR_REPOSITORY: trim-backend
+  ECS_CLUSTER: trim-aws
+  ECS_SERVICE: trim-aws-backend
+  CONTAINER_NAME: app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::680259118187:role/trim-aws-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image
+        id: image
+        run: |
+          TAG="${GITHUB_SHA::12}"
+          IMAGE="${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG"
+          # Tags are immutable in ECR: reuse the image if this commit was built before.
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+               --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "Image $TAG already in ECR"
+          else
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Read the running task definition
+        run: |
+          CURRENT=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$CURRENT" \
+            --query taskDefinition > taskdef.json
+
+      - name: Point it at the new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: taskdef.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.image.outputs.image }}
+
+      - name: Deploy and wait until healthy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true
