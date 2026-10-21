@@ -5,6 +5,12 @@ FROM node:18.20.4-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Debian security updates for the base image's own Linux packages (perl,
+# gnutls, glibc...). Node stays at 18.20.4; only OS packages are patched.
+RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install libraries first so this layer is reused when only the code changes.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
