@@ -1,0 +1,23 @@
+# Kept out of the Trim container image.
+.git
+.github
+node_modules
+npm-debug.log
+
+# Secrets and server-only files: the container gets these from AWS at start.
+.env
+.env.*
+config/config.js
+firebase.json
+.htaccess
+
+# Uploads live on the EFS share, not in the image.
+Public
+
+# Not needed to run the API.
+trim-admin-vite
+sql
+seeders
+test
+*.md
+docker-compose.local.yml
