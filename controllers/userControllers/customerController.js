@@ -121,6 +121,7 @@ const {
   appointmentStart,
 } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
+const { chargeableDeposit } = require('../../utils/depositMinimum')
 
 // Must match bookingsController: a shop may suggest a new time at most twice.
 const MAX_TIME_PROPOSALS = 2
@@ -4534,14 +4535,17 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   if (!req.body.stripeCustomerId)
     throw new AppError('Shop does not accept online payments.', 200)
 
-  const upFrontAmount =
+  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
+  // Below Stripe's 30p minimum the deposit is paid at the shop instead.
+  const upFrontAmount = chargeableDeposit(
     req.body.advanceAmount && req.body.advanceAmount > 0
       ? parseFloat(req.body.advanceAmount)
-      : 0
+      : 0,
+    tip,
+  )
   const platformFee = req.body?.platformFee
     ? parseFloat(req.body?.platformFee)
     : 0
-  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
   const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
   const account = await salonDetail.findOne({
@@ -7521,14 +7525,17 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
   if (!req.body.stripeCustomerId)
     throw new AppError('Shop does not accept online payments.', 200)
 
-  const upFrontAmount =
+  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
+  // Below Stripe's 30p minimum the deposit is paid at the shop instead.
+  const upFrontAmount = chargeableDeposit(
     req.body.advanceAmount && req.body.advanceAmount > 0
       ? parseFloat(req.body.advanceAmount)
-      : 0
+      : 0,
+    tip,
+  )
   const platformFee = req.body?.platformFee
     ? parseFloat(req.body?.platformFee)
     : 0
-  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
   const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
   const account = await salonDetail.findOne({
