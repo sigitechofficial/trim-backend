@@ -12,7 +12,11 @@
  * puts them back). sql/renter_own_subscription.sql does the same by hand.
  */
 
-const NAME = 'renter_own_subscription_v1'
+// v2: v1 skipped renters with a future date but a leftover blocked status
+// (e.g. 'expired' from before renters had their own plan), so they stayed
+// hidden. v2 catches every renter not active under the new rule. On a database
+// where v1 already ran it only touches those left behind.
+const NAME = 'renter_own_subscription_v2'
 
 async function runRenterPlanMigration(db) {
   const q = (sql, replacements) => db.sequelize.query(sql, { replacements })
@@ -29,14 +33,17 @@ async function runRenterPlanMigration(db) {
     FROM \`salonDetails\`
     WHERE isExternalEmployee = 1 AND deleted = 0`)
 
-  // A renter who already has their own plan running keeps it as it is.
+  // Every renter not active under the new rule gets the free days; a renter
+  // whose own plan is already running keeps it as it is.
   const [result] = await q(`UPDATE \`salonDetails\`
     SET registrationExpiryDate = DATE_ADD(CURDATE(), INTERVAL 30 DAY),
         subscriptionLatestPaymentStatus = 'renter_switch',
         renterPlanReminderDays = NULL
     WHERE isExternalEmployee = 1
       AND deleted = 0
-      AND (registrationExpiryDate IS NULL OR registrationExpiryDate < CURDATE())`)
+      AND NOT (COALESCE(registrationExpiryDate >= CURDATE(), 0) = 1
+               AND subscriptionLatestPaymentStatus IS NOT NULL
+               AND subscriptionLatestPaymentStatus NOT IN ('expired', 'payment_failed', 'paused', 'refunded'))`)
 
   // Renters still blocked under the old rule (a host's downgrade or transfer
   // used to block them). Not unblocked here: some may be blocked on purpose.

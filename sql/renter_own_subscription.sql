@@ -3,7 +3,7 @@
 -- every existing renter gets 30 free days on their own row, marked with the
 -- status 'renter_switch', so they have time to buy their own plan in the app.
 -- NOT NEEDED NORMALLY: the server does this itself, once, on start-up
--- (helper/renterPlanMigration.js, recorded in `appMigrations`) before it
+-- (helper/renterPlanMigration.js, recorded in `appMigrations` as renter_own_subscription_v2) before it
 -- takes any request. This file is the same steps by hand, for reference.
 --
 -- If run by hand: run it BEFORE deploying the new backend. The new backend
@@ -38,7 +38,9 @@ SET registrationExpiryDate = DATE_ADD(CURDATE(), INTERVAL 30 DAY),
     renterPlanReminderDays = NULL
 WHERE isExternalEmployee = 1
   AND deleted = 0
-  AND (registrationExpiryDate IS NULL OR registrationExpiryDate < CURDATE());
+  AND NOT (COALESCE(registrationExpiryDate >= CURDATE(), 0) = 1
+           AND subscriptionLatestPaymentStatus IS NOT NULL
+           AND subscriptionLatestPaymentStatus NOT IN ('expired', 'payment_failed', 'paused', 'refunded'));
 
 -- 4. CHECK: renters still blocked by the OLD rule (a host's plan downgrade or
 --    transfer used to block them). Review this list; to unblock one, run the
