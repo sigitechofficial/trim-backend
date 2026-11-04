@@ -71,6 +71,7 @@ const Stripe = require('../stripe')
 const loyalty = require('../../helper/loyalty')
 const { activeSalonWhere, activeSalonCaseSql, bookableNowWhere, quoteDate } = require('../../helper/salonSubscriptionRule')
 const renterMove = require('../../helper/renterMove')
+const chairMarket = require('../../helper/chairMarket')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -1947,6 +1948,8 @@ exports.salonDetails = async (req, res, next) => {
         recentMove: await renterMove.recentMove(Number(req.params.id)),
         // False for a chair renter between shops after the grace period.
         takingBookings: await renterMove.takingBookings(Number(req.params.id)),
+        // The shop's "Hiring chair renters" listing, or null when not hiring.
+        chairListing: await chairMarket.publicChairListing(Number(req.params.id)),
       },
     }),
   )

@@ -601,6 +601,40 @@ async function ownShopOf(userId) {
   return shop
 }
 
+// The shop's chair advert as clients see it on the shop's page: the listing,
+// or the old advert fields while the shop has no listing yet. Null when the
+// shop is not hiring chair renters.
+async function publicChairListing(salonDetailId) {
+  const shop = await salonDetail.findOne({
+    where: { id: salonDetailId, deleted: false },
+    attributes: ['id', 'isExternalEmployee', ...ADVERT_ATTRS],
+  })
+  if (!shop || shop.isExternalEmployee) return null
+  const listing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
+  const { isHiring, ...rest } = listingJson(listing, shop)
+  return isHiring ? rest : null
+}
+
+// Older app versions still save the old rent-a-chair advert screen. The
+// listing is the shop's one chair advert, so it takes the same values.
+async function syncListingFromAdvert(userId, { status, chairs, rentType, rentAmount }) {
+  const shop = await salonDetail.findOne({
+    where: { userId, deleted: false },
+    attributes: ['id', 'isExternalEmployee'],
+  })
+  if (!shop || shop.isExternalEmployee) return
+  const rentCycle = { daily: 'Daily', weekly: 'Weekly' }[String(rentType || '').toLowerCase()] || null
+  const values = {
+    isHiring: !!status && Number(chairs) > 0,
+    chairs: Math.min(50, Math.max(1, Math.round(Number(chairs) || 1))),
+    rentAmount: rentCycle ? rentAmount : null,
+    rentCycle,
+  }
+  const existing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
+  if (existing) await existing.update(values)
+  else await shopChairListing.create({ shopSalonId: shop.id, ...values })
+}
+
 async function getMyListing(userId) {
   const shop = await ownShopOf(userId)
   const listing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
@@ -1191,6 +1225,8 @@ module.exports = {
   adminCloseOffer,
   SKILLS,
   skillsOf,
+  publicChairListing,
+  syncListingFromAdvert,
   getMyListing,
   saveMyListing,
   listHiringShops,

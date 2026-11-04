@@ -1,5 +1,6 @@
 const { Op, literal, col, fn, where } = require('sequelize')
 const { resolveRequestActor } = require('../../helper/bookingRequestAccess')
+const chairMarket = require('../../helper/chairMarket')
 const { CURRENCY_UNIT } = process.env
 const fs = require('fs').promises
 const {
@@ -3834,6 +3835,13 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
     },
     { where: { userId: req.user.id } },
   )
+  // The "Hiring chair renters" listing is the shop's one chair advert.
+  await chairMarket.syncListingFromAdvert(req.user.id, {
+    status: normalizedStatus === 1,
+    chairs: chairCount,
+    rentType: normalizedRentType,
+    rentAmount: normalizedRentAmount,
+  })
 
   return res.status(200).json(
     returnFunction('1', 'Success', {
