@@ -53,10 +53,42 @@ const SKILLS = [
   'Lash and brow',
   'Makeup artist',
   'Massage therapist',
+  'Afro and textured hair',
+  'Braids and locs',
+  'Hair extensions',
+  'Bridal and occasion hair',
+  'Beard and hot towel shave',
+  'Kids haircuts',
+  'Waxing',
+  'Threading',
+  'Skin care and facials',
+  'Aesthetics',
+  'Spray tan',
+  'Tattoo artist',
+  'Piercing',
 ]
+// Shops and renters may also type their own skill (e.g. "Hair loss specialist").
+const MAX_SKILL_LENGTH = 30
+const MAX_SKILLS_TEXT = 255 // the skills column is VARCHAR(255)
 
 const splitList = (v) => (v ? String(v).split(',').map((x) => x.trim()).filter(Boolean) : [])
-const skillsOf = (v) => (Array.isArray(v) ? v : splitList(v)).filter((x) => SKILLS.includes(x))
+// Known skills keep their usual spelling; a typed skill is tidied (no commas,
+// single spaces, at most 30 characters). Same skill twice is kept once.
+function skillsOf(v) {
+  const out = []
+  let length = 0
+  for (const raw of Array.isArray(v) ? v : splitList(v)) {
+    const clean = String(raw ?? '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_SKILL_LENGTH).trim()
+    if (!clean) continue
+    const skill = SKILLS.find((s) => s.toLowerCase() === clean.toLowerCase()) || clean
+    if (out.some((s) => s.toLowerCase() === skill.toLowerCase())) continue
+    length += (out.length ? 1 : 0) + skill.length
+    if (length > MAX_SKILLS_TEXT) break
+    out.push(skill)
+  }
+  return out
+}
+const sameSkill = (a, b) => a.toLowerCase() === b.toLowerCase()
 
 const today = () => DateTime.now().setZone('Europe/London').toISODate()
 
@@ -682,7 +714,7 @@ async function listHiringShops(userId, { maxKm } = {}) {
       reviewCount: Number(r?.count) || 0,
       listing,
       // No skills asked for counts as a match.
-      skillsMatch: !listing.skills.length || listing.skills.some((x) => mySkills.includes(x)),
+      skillsMatch: !listing.skills.length || listing.skills.some((x) => mySkills.some((m) => sameSkill(m, x))),
       openOfferId: offerBy.get(s.id) || null,
     }
   })
@@ -1158,6 +1190,7 @@ module.exports = {
   adminOverview,
   adminCloseOffer,
   SKILLS,
+  skillsOf,
   getMyListing,
   saveMyListing,
   listHiringShops,
