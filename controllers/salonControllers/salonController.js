@@ -3924,8 +3924,15 @@ exports.fetchNotifications = async (req, res, next) => {
   const groupedNotifications = notifications.reduce(
     (accumulator, notification) => {
       const { type, to } = notification
+      // Chair renter offers, moves and the renter's own plan have their own tab.
+      let dataType = notification.data?.type
+      if (!dataType && typeof notification.data === 'string') {
+        try { dataType = JSON.parse(notification.data)?.type } catch (_) {}
+      }
 
-      if (type === 'appointment' && to === 'regular') {
+      if (['chairOffer', 'renterMove', 'renterPlan'].includes(dataType)) {
+        accumulator.chairNotifications.push(notification)
+      } else if (type === 'appointment' && to === 'regular') {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
@@ -3953,6 +3960,7 @@ exports.fetchNotifications = async (req, res, next) => {
       advertisementNotifications: [],
       enquiryNotifications: [],
       otherNotifications: [],
+      chairNotifications: [],
     }, // Initial accumulator
   )
 

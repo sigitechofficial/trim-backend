@@ -29,6 +29,7 @@ const {
   employeeWagesMethod,
   deviceToken,
   shopChairListing,
+  pushNotification,
 } = require('../models')
 const Throw = require('../utils/throwNotification')
 const AppError = require('../utils/appError')
@@ -92,15 +93,33 @@ const sameSkill = (a, b) => a.toLowerCase() === b.toLowerCase()
 
 const today = () => DateTime.now().setZone('Europe/London').toISODate()
 
+// "16 Nov 2026" for a date shown in a notification.
+function prettyDate(v) {
+  const d = DateTime.fromISO(String(v || '').slice(0, 10))
+  return d.isValid ? d.toFormat('d LLL yyyy') : String(v || '')
+}
+
+// The name a side shows in notifications: the shop's or the renter's.
+async function sideName(offer, side) {
+  const id = side === 'shop' ? offer.shopSalonId : offer.renterSalonId
+  const s = await salonDetail.findByPk(id, { attributes: ['salonName'] })
+  return s?.salonName || (side === 'shop' ? 'The shop' : 'The renter')
+}
+
 // ---------------------------------------------------------------- helpers
 
+// Each person gets the push on their phones and a line in their in-app
+// notifications list, even when they have no phone signed in right now.
 async function push(userIds, notification, data) {
   try {
     const ids = [...new Set(userIds.filter(Boolean))]
-    if (!ids.length) return
-    const rows = await deviceToken.findAll({ where: { userId: ids }, attributes: ['tokenId'] })
-    const tokens = rows.map((r) => r.tokenId).filter(Boolean)
-    if (tokens.length) Throw(tokens, notification, { type: 'chairOffer', ...data }, ids[0])
+    const payload = { type: 'chairOffer', ...data }
+    for (const id of ids) {
+      const rows = await deviceToken.findAll({ where: { userId: id }, attributes: ['tokenId'] })
+      const tokens = rows.map((r) => r.tokenId).filter(Boolean)
+      if (tokens.length) Throw(tokens, notification, payload, id)
+      else await pushNotification.create({ at: new Date(), title: notification.title, body: notification.body, data: payload, userId: id })
+    }
   } catch (err) {
     console.error('[chairMarket] push failed:', err.message)
   }
@@ -145,7 +164,9 @@ function text(v, max) {
   return s ? s.slice(0, max) : null
 }
 
-function dateOnly(v, label, { allowNull = false } = {}) {
+// pastToToday: a date that has passed becomes today (an "available from"
+// date saved earlier simply means "available now" once it has passed).
+function dateOnly(v, label, { allowNull = false, pastToToday = false } = {}) {
   if (!v) {
     if (allowNull) return null
     throw new AppError(`Please choose the ${label}.`, 200)
@@ -153,7 +174,10 @@ function dateOnly(v, label, { allowNull = false } = {}) {
   const d = DateTime.fromISO(String(v).slice(0, 10))
   if (!d.isValid) throw new AppError(`Please choose a valid ${label}.`, 200)
   const iso = d.toISODate()
-  if (iso < today()) throw new AppError(`The ${label} cannot be in the past.`, 200)
+  if (iso < today()) {
+    if (pastToToday) return today()
+    throw new AppError(`The ${label} cannot be in the past.`, 200)
+  }
   return iso
 }
 
@@ -231,7 +255,7 @@ async function saveMyPrefs(userId, body = {}) {
     renterSalonId: salon.id,
     renterUserId: userId,
     openToWork: body.openToWork === true || body.openToWork === 'true',
-    availableFrom: body.availableFrom ? dateOnly(body.availableFrom, 'available from date', { allowNull: true }) : null,
+    availableFrom: body.availableFrom ? dateOnly(body.availableFrom, 'available from date', { allowNull: true, pastToToday: true }) : null,
     days: days.length ? days.join(',') : null,
     radiusKm: radius,
     rentMin,
@@ -653,7 +677,7 @@ async function saveMyListing(userId, body = {}) {
     chairs,
     rentAmount,
     rentCycle: rentAmount == null ? null : cycleOf(body.rentCycle) || 'Weekly',
-    availableFrom: body.availableFrom ? dateOnly(body.availableFrom, 'available from date', { allowNull: true }) : null,
+    availableFrom: body.availableFrom ? dateOnly(body.availableFrom, 'available from date', { allowNull: true, pastToToday: true }) : null,
     skills: skillsOf(body.skills).join(',') || null,
     terms: text(body.terms, MAX_TERMS),
     note: text(body.note, MAX_MESSAGE),
@@ -942,7 +966,7 @@ async function counter(userId, offerId, body = {}) {
   })
   push([await otherSideUserId(offer, side)], {
     title: 'New counter offer',
-    body: `You have a counter offer${t.rentAmount != null ? `: £${t.rentAmount} ${String(t.rentCycle || '').toLowerCase()}` : ''}.`,
+    body: `${await sideName(offer, side)} sent a counter offer${t.rentAmount != null ? `: £${t.rentAmount} ${String(t.rentCycle || '').toLowerCase()}` : ''}${t.startDate ? `, starting ${prettyDate(t.startDate)}` : ''}.`,
   }, { offerId: offer.id })
   return offer
 }
@@ -998,8 +1022,8 @@ async function accept(userId, offerId) {
   push([await otherSideUserId(offer, side)], {
     title: 'Chair offer accepted',
     body: side === 'renter'
-      ? `Your chair offer was accepted. The renter joins on ${move.moveDate}.`
-      : `${shop.salonName} accepted your terms. You join on ${move.moveDate}.`,
+      ? `${await sideName(offer, 'renter')} accepted your chair offer and joins on ${prettyDate(move.moveDate)}.`
+      : `${shop.salonName} accepted your terms. You join on ${prettyDate(move.moveDate)}.`,
   }, { offerId: offer.id, moveId: move.id })
   return { offer, move }
 }
@@ -1011,7 +1035,7 @@ async function decline(userId, offerId) {
   const startedBy = offer.createdBy === offer.renterUserId ? 'renter' : 'shop'
   const status = side === startedBy ? 'withdrawn' : 'declined'
   await offer.update({ status, closedAt: new Date() })
-  const who = side === 'renter' ? 'The renter' : 'The shop'
+  const who = await sideName(offer, side)
   push([await otherSideUserId(offer, side)], {
     title: status === 'declined' ? 'Chair offer declined' : 'Chair offer withdrawn',
     body: status === 'declined' ? `${who} declined the chair offer.` : `${who} withdrew the chair offer.`,

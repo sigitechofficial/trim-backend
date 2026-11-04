@@ -31,6 +31,7 @@ const {
   deviceToken,
   addressDBS,
   chairOffer,
+  pushNotification,
 } = require('../models')
 const Throw = require('../utils/throwNotification')
 const AppError = require('../utils/appError')
@@ -50,6 +51,12 @@ const OPEN_STATUSES = ['invited', 'accepted']
 const UPCOMING_BOOKING_STATUSES = ['book', 'pending', 'requested']
 
 const today = () => DateTime.now().setZone('Europe/London').toISODate()
+
+// "16 Nov 2026" for a date shown in a notification.
+function prettyDate(v) {
+  const d = DateTime.fromISO(String(v || '').slice(0, 10))
+  return d.isValid ? d.toFormat('d LLL yyyy') : String(v || '')
+}
 const plusDays = (isoDate, days) => DateTime.fromISO(isoDate).plus({ days }).toISODate()
 
 async function tokensFor(userIds) {
@@ -59,11 +66,16 @@ async function tokensFor(userIds) {
   return rows.map((r) => r.tokenId).filter(Boolean)
 }
 
+// Each person gets the push on their phones and a line in their in-app
+// notifications list, even when they have no phone signed in right now.
 async function push(userIds, notification, data) {
   try {
-    const tokens = await tokensFor(userIds)
-    if (!tokens.length) return
-    Throw(tokens, notification, { type: 'renterMove', ...data }, userIds[0] || null)
+    const payload = { type: 'renterMove', ...data }
+    for (const id of [...new Set(userIds.filter(Boolean))]) {
+      const tokens = await tokensFor([id])
+      if (tokens.length) Throw(tokens, notification, payload, id)
+      else await pushNotification.create({ at: new Date(), title: notification.title, body: notification.body, data: payload, userId: id })
+    }
   } catch (err) {
     console.error('[renterMove] push failed:', err.message)
   }
@@ -207,12 +219,12 @@ async function respond({ renterUserId, moveId, accept }) {
   const name = `${renter?.firstName || ''} ${renter?.lastName || ''}`.trim()
   push([toSalon?.userId], {
     title: accept ? 'Chair offer accepted' : 'Chair offer declined',
-    body: accept ? `${name} will join your shop on ${move.moveDate}.` : `${name} declined your chair offer.`,
+    body: accept ? `${name} will join your shop on ${prettyDate(move.moveDate)}.` : `${name} declined your chair offer.`,
   }, { moveId: move.id })
   if (accept && fromSalon) {
     push([fromSalon.userId], {
       title: 'Chair renter leaving',
-      body: `${name} is moving to another shop on ${move.moveDate}. Please confirm their rent is settled.`,
+      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
     }, { moveId: move.id })
   }
   return move
@@ -247,7 +259,7 @@ async function createAcceptedMove({ renterUserId, toSalonId, moveDate, rentAmoun
     const name = `${renter?.firstName || ''} ${renter?.lastName || ''}`.trim()
     push([fromSalon?.userId], {
       title: 'Chair renter leaving',
-      body: `${name} is moving to another shop on ${move.moveDate}. Please confirm their rent is settled.`,
+      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
     }, { moveId: move.id })
   }
   return move
@@ -275,7 +287,7 @@ async function leave({ renterUserId, moveDate }) {
   const fromSalon = await salonDetail.findByPk(renterSalon.parentSalonId, { attributes: ['userId'] })
   push([fromSalon?.userId], {
     title: 'Chair renter leaving',
-    body: `${renterSalon.salonName} is leaving your shop on ${move.moveDate}. Please confirm their rent is settled.`,
+    body: `${renterSalon.salonName} is leaving your shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
   }, { moveId: move.id })
   return move
 }
@@ -343,7 +355,7 @@ async function cancel({ userId, moveId }) {
   await cancelLinkedOffer(move.id)
   push(allowed.filter((id) => id !== userId), {
     title: 'Chair move cancelled',
-    body: `The chair move planned for ${move.moveDate} was cancelled.`,
+    body: `The chair move planned for ${prettyDate(move.moveDate)} was cancelled.`,
   }, { moveId: move.id })
   return move
 }
@@ -630,7 +642,7 @@ async function notifyMoved({ move, renterSalon, toSalon }) {
   } else {
     push([move.renterUserId], {
       title: 'You have left the shop',
-      body: `Customers can book you until ${renterSalon.renterGraceUntil}. Join a new shop before then to keep taking bookings.`,
+      body: `Customers can book you until ${prettyDate(renterSalon.renterGraceUntil)}. Join a new shop before then to keep taking bookings.`,
     }, { moveId: move.id })
   }
   push([fromSalon?.userId], { title: 'Chair renter left', body: `${renterSalon.salonName} has left your shop.` }, { moveId: move.id })
@@ -739,7 +751,7 @@ async function runGraceNotices() {
         if (!claimed) continue
         push([s.userId], {
           title: 'Join a shop to keep taking bookings',
-          body: `Customers can book you until ${until}. Accept a chair offer before then to keep taking bookings.`,
+          body: `Customers can book you until ${prettyDate(until)}. Accept a chair offer before then to keep taking bookings.`,
         }, { moveId: move.id })
         sent.reminders++
       }
@@ -814,7 +826,7 @@ async function adminCancel(moveId) {
   })
   push([move.renterUserId, ...shops.map((x) => x.userId)], {
     title: 'Chair move cancelled',
-    body: `The chair move planned for ${move.moveDate} was cancelled by Trim support.`,
+    body: `The chair move planned for ${prettyDate(move.moveDate)} was cancelled by Trim support.`,
   }, { moveId: move.id })
   return move
 }
@@ -949,7 +961,7 @@ async function runRenterPlanReminders() {
           }
         : {
             title: 'Choose your Trim plan',
-            body: `You can use Trim free until ${day}. Choose your chair renter plan before then to stay visible to clients.`,
+            body: `You can use Trim free until ${prettyDate(day)}. Choose your chair renter plan before then to stay visible to clients.`,
           }, { type: 'renterPlan' })
       sent++
     } catch (err) {
