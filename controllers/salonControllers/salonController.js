@@ -374,6 +374,7 @@ exports.choosePlan = async (req, res, next) => {
             'trimbiz_owner_four_staff': 'Owner + 4 staff member',
             'trimbiz_owner_five_staff': 'Owner + 5 staff member',
             'trimbiz_owner_unlimited_staff': 'Owner + unlimited staff member',
+            'trimbiz_monthly_renter': 'Chair Renter',
           };
           return productMapping[productId] || 'Apple Subscription';
         };
@@ -388,8 +389,9 @@ exports.choosePlan = async (req, res, next) => {
             'trimbiz_owner_four_staff': 5,
             'trimbiz_owner_five_staff': 6,
             'trimbiz_owner_unlimited_staff': 999,
+            'trimbiz_monthly_renter': 0,
           };
-          return productTeamSizeMapping[productId] || null;
+          return productTeamSizeMapping[productId] ?? null;
         };
 
         const productId = appleSubscription.appleProductId;

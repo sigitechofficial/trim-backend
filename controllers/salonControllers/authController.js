@@ -28,6 +28,8 @@ const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
+const { DateTime } = require('luxon')
+const { isSalonRowActive } = require('../../helper/salonSubscriptionRule')
 const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
 const StripeOnboardingReminderEmail = require('../../helper/StripeOnboardingReminderEmail')
 const {
@@ -138,6 +140,14 @@ let returnFunction = (status, message, data, error) => {
 }
 // ! Module 1 : Auth
 // ! _________________________________________________________________________________________________________________________________
+// A chair renter's own Trim plan: they pay for it themselves, so the app can
+// show "Renew your plan" from this without asking the host shop.
+const renterSubscriptionOf = (salon) => ({
+  active: isSalonRowActive(salon, DateTime.now().toISODate()),
+  expiresOn: salon?.registrationExpiryDate ?? null,
+  status: salon?.subscriptionLatestPaymentStatus ?? null,
+})
+
 exports.googleSignIn = async (req, res) => {
   const { email, dvToken } = req.body
 
@@ -684,9 +694,11 @@ exports.login = async (req, res, next) => {
     // Get external employee's own employeeId
     let externalEmployeeId = null;
     if (User.isExternalEmployee) {
+      // After a shop move the old host row is deleted: prefer the current one.
       const extEmployee = await employee.findOne({
         where: { userId: User.id, isExternalEmployee: true },
         attributes: ['id'],
+        order: [['deleted', 'ASC'], ['id', 'DESC']],
       });
       externalEmployeeId = extEmployee ? extEmployee.id : null;
     }
@@ -796,6 +808,9 @@ exports.login = async (req, res, next) => {
         }
       }
       response.data.profileCompletion.subscriptionStatus = subscriptionStatus;
+      if (User.isExternalEmployee) {
+        response.data.profileCompletion.renterSubscription = renterSubscriptionOf(salon);
+      }
     }
   }
 
@@ -1171,9 +1186,11 @@ exports.session = async (req, res, next) => {
   // Get external employee's own employeeId
   let externalEmployeeId = null;
   if (User.isExternalEmployee) {
+    // After a shop move the old host row is deleted: prefer the current one.
     const extEmployee = await employee.findOne({
       where: { userId: User.id, isExternalEmployee: true },
       attributes: ['id'],
+      order: [['deleted', 'ASC'], ['id', 'DESC']],
     });
     externalEmployeeId = extEmployee ? extEmployee.id : null;
   }
@@ -1276,6 +1293,7 @@ exports.session = async (req, res, next) => {
         accountConnected: salon?.wallet?.accountConnected ? true : false,
         subscriptionStatus: subscriptionStatus, // Subscription status (e.g., 'active', 'canceled', 'cancelled', etc.)
         employeeId: externalEmployeeId,
+        ...(User?.isExternalEmployee ? { renterSubscription: renterSubscriptionOf(salon) } : {}),
       },
       ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
       stripeStatus,

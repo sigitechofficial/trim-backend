@@ -372,9 +372,10 @@ function getTeamSizeFromAppleProduct(productId) {
     'trimbiz_owner_four_staff': 5,                  // Owner + 4 staff = 5 total
     'trimbiz_owner_five_staff': 6,                  // Owner + 5 staff = 6 total
     'trimbiz_owner_unlimited_staff': 999,           // Unlimited
+    'trimbiz_monthly_renter': 0,                    // Chair renter's own plan: no staff
   };
   
-  return productTeamSizeMapping[productId] || null;
+  return productTeamSizeMapping[productId] ?? null;
 }
 
 // Helper function to get staff member count (excluding owner) from product ID
@@ -410,7 +411,7 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
       console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
     }
     
-    if (!newTeamSize) {
+    if (newTeamSize === null || newTeamSize === undefined) { // 0 = the renter plan (no staff)
       console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
       return;
     }
@@ -435,11 +436,13 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
     
     console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
     
-    // Get all active employees (excluding owner) for this salon
+    // Get all staff (excluding owner) for this salon. Chair renters pay for
+    // their own plan, so a downgrade never blocks them.
     const allEmployees = await employee.findAll({
       where: {
         salonDetailId: salon.id,
         isOwner: false,
+        isExternalEmployee: false,
         deleted: false,
       },
       include: [{

@@ -136,6 +136,17 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Chair renter between shops: stays listed until this date (see helper/renterMove.js).
+    renterGraceUntil: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    // Chair renter on the free days before their own plan: the last reminder
+    // sent (14, 7 or 1 days left, 0 once ended), so each goes out once.
+    renterPlanReminderDays: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     deleted: {
       type: DataTypes.BOOLEAN,
       allowNull: true,

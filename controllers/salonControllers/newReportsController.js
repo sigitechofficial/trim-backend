@@ -1516,10 +1516,17 @@ function calculateExpectedRentForEmployee(
 function sumOwnerExpectedRentForPeriod(rentalEmployees, periodStart, periodEnd) {
   let total = 0
   rentalEmployees.forEach((emp) => {
+    // A renter who moved to another shop pays rent only up to the day they left.
+    let end = periodEnd
+    if (emp.leftAt) {
+      const left = toDateOnly(emp.leftAt)
+      if (left < toDateOnly(periodStart)) return
+      if (left < toDateOnly(end)) end = left
+    }
     total += calculateExpectedRentForEmployee(
       emp.employeeWagesMethod,
       periodStart,
-      periodEnd,
+      end,
       getEmployeeRentStartDate(emp),
     )
   })
@@ -1558,8 +1565,13 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
 
   // Get all active rent-a-chair employees with their wages method
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id', 'createdAt'],
+    // Current renters, and renters who moved away (rent counts until leftAt).
+    where: {
+      salonDetailId: salon.id,
+      isExternalEmployee: true,
+      [Op.or]: [{ deleted: false }, { leftAt: { [Op.ne]: null } }],
+    },
+    attributes: ['id', 'createdAt', 'leftAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,
@@ -1627,8 +1639,13 @@ exports.incomeWithRentDaily = async (req, res, next) => {
   if (!salon) throw new AppError('Shop not found', 200)
 
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id', 'createdAt'],
+    // Current renters, and renters who moved away (rent counts until leftAt).
+    where: {
+      salonDetailId: salon.id,
+      isExternalEmployee: true,
+      [Op.or]: [{ deleted: false }, { leftAt: { [Op.ne]: null } }],
+    },
+    attributes: ['id', 'createdAt', 'leftAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,

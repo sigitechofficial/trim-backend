@@ -232,6 +232,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    // Chair renter moved shop after this booking's day: the address the client
+    // actually went to (addressDBS id). Null = use the salon's current address.
+    visitAddressId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     // Accept with a new time: the shop moved the request and waits for the
     // client to confirm (requestOutcome 'proposed'). previous* = the time the
     // client originally asked for.

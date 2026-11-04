@@ -1,4 +1,5 @@
 const express = require('express')
+const adminOnly = require('../../middlewares/adminOnly')
 const fs = require('fs')
 const multer = require('multer')
 const path = require('path')
@@ -9,6 +10,8 @@ const reportController = require('../../controllers/salonControllers/newReportsC
 const customerController = require('../../controllers/userControllers/customerController')
 const protect = require('../../middlewares/accessCheck')
 const loyaltyController = require('../../controllers/loyaltyController')
+const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
+const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
 const catchAsync = require('../../middlewares/catchAync')
 const {
   user,
@@ -228,6 +231,13 @@ router.patch(
   protect,
   catchAsync(adminController.updateSalonBookingApproval),
 )
+// Chair renters moving shop
+router.get('/renter-moves', protect, adminOnly, catchAsync(renterMoveController.adminList))
+router.patch('/renter-moves/:move/cancel', protect, adminOnly, catchAsync(renterMoveController.adminCancel))
+router.patch('/renter-moves/:move/rent-settled', protect, adminOnly, catchAsync(renterMoveController.adminSettleRent))
+router.patch('/renter-moves/:move/retry', protect, adminOnly, catchAsync(renterMoveController.adminRetry))
+router.get('/chair-market', protect, adminOnly, catchAsync(chairMarketController.adminOverview))
+router.patch('/chair-market/offers/:offer/close', protect, adminOnly, catchAsync(chairMarketController.adminCloseOffer))
 router.get(
   '/salon-loyalty/:id',
   protect,

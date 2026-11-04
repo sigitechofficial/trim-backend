@@ -69,6 +69,8 @@ const Slot = require('../../utils/timeSlots')
 const Custom = require('../../utils/customFunctions')
 const Stripe = require('../stripe')
 const loyalty = require('../../helper/loyalty')
+const { activeSalonWhere, activeSalonCaseSql, bookableNowWhere, quoteDate } = require('../../helper/salonSubscriptionRule')
+const renterMove = require('../../helper/renterMove')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -889,28 +891,9 @@ exports.home = async (req, res, next) => {
 
   // Base salon filter (no zone filter at all)
   const salonCondition = {
-    [Op.or]: [
-      {
-        // External employee salons are only visible if their parent salon has an active subscription
-        isExternalEmployee: true,
-        parentSalonId: {
-          [Op.in]: literal(`(
-            SELECT id FROM salonDetails
-            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
-            AND (
-              subscriptionLatestPaymentStatus IS NULL
-              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
-            )
-          )`),
-        },
-      },
-      {
-        registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
-        subscriptionLatestPaymentStatus: {
-          [Op.notIn]: ['expired','payment_failed', 'paused', 'refunded'],
-        },
-      },
-    ],
+    // Shop or chair renter with its own active subscription
+    ...activeSalonWhere(currentDay.currentDateOnly),
+    [Op.and]: [bookableNowWhere(currentDay.currentDateOnly)],
     approvedByAdmin: true,
     status: 1,
     deleted: 0,
@@ -1020,6 +1003,7 @@ exports.home = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'type', // 'between_shops': chair renter with no address yet
           // ⛔️ zoneId removed from filtering entirely; just return whatever is stored
           'zoneId',
         ],
@@ -1259,27 +1243,8 @@ exports.searchSalons = async (req, res, next) => {
     }
 
     const baseSalonFilter = {
-      [Op.or]: [
-        {
-          isExternalEmployee: true,
-          parentSalonId: {
-            [Op.in]: literal(`(
-            SELECT id FROM salonDetails
-            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
-            AND (
-              subscriptionLatestPaymentStatus IS NULL
-              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
-            )
-          )`),
-          },
-        },
-        {
-          registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
-          subscriptionLatestPaymentStatus: {
-            [Op.notIn]: ['expired', 'payment_failed', 'paused', 'refunded'],
-          },
-        },
-      ],
+      ...activeSalonWhere(currentDay.currentDateOnly),
+      [Op.and]: [bookableNowWhere(currentDay.currentDateOnly)],
       approvedByAdmin: true,
       status: 1,
       deleted: 0,
@@ -1564,6 +1529,7 @@ exports.searchSalons = async (req, res, next) => {
             'lng',
             'building',
             'postalCode',
+            'type', // 'between_shops': chair renter with no address yet
             'zoneId',
           ],
         },
@@ -1828,6 +1794,7 @@ exports.salonDetails = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'type', // 'between_shops': chair renter with no address yet
         ],
       },
       {
@@ -1976,6 +1943,10 @@ exports.salonDetails = async (req, res, next) => {
         currencyUnit: CURRENCY_UNIT,
         feedbackCount,
         loyalty: loyaltyCard,
+        // Set for a chair renter who moved shop in the last 30 days.
+        recentMove: await renterMove.recentMove(Number(req.params.id)),
+        // False for a chair renter between shops after the grace period.
+        takingBookings: await renterMove.takingBookings(Number(req.params.id)),
       },
     }),
   )
@@ -4011,6 +3982,9 @@ exports.cancelAppointment = async (req, res, next) => {
       .status(200)
       .json(response({ message: 'Booking request cancelled', data: {} }))
   }
+  // Booked before the barber moved shop: no cancellation charge.
+  if (await renterMove.freeCancelAfterMove(appointment.id)) req.body.cancellationCharges = 0
+
   //& Refund or extra amount chagr will be here
   const updatedBooking = {
     cancellationCharges: req.body.cancellationCharges,
@@ -4151,6 +4125,21 @@ exports.bookAppointment = async (req, res, next) => {
 
   // appointment.initialPayment =
   //   parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
+
+  // Only the server sets where a past visit took place (chair renter moves).
+  delete appointment.visitAddressId
+
+  if (!(await renterMove.takingBookings(appointment.salonDetailId))) {
+    // The app's payment sheet may already hold the deposit; no booking, no charge.
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+    throw new AppError(
+      'This barber isn\'t taking new bookings until they join a new shop.',
+      200,
+    )
+  }
 
   const hasAppointments = await booking.count({
     where: {
@@ -4529,6 +4518,10 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   const customerId = req.user.id
   console.log("CustomerId=================>>>>",customerId)
 
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
@@ -4600,6 +4593,10 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
 
 exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
   //Partial payment upfront
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
@@ -4637,30 +4634,13 @@ exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
 
 //* 5.fetch Appointments -----------------
 
-// Salon "subscription active" rule — IDENTICAL to POST /customer/home's salon filter.
-// Normal salon (isExternalEmployee=0): registrationExpiryDate >= today
-//   AND subscriptionLatestPaymentStatus IS NOT NULL
-//   AND subscriptionLatestPaymentStatus NOT IN ('expired','payment_failed','paused','refunded').
-// External-employee salon: same rule evaluated against its parentSalonId (Home Branch A),
-//   where a NULL parent status counts as active and 'cancelled'/'canceled' are also blocked.
+// Salon "subscription active" rule — same helper as POST /customer/home's salon filter
+// (helper/salonSubscriptionRule.js, incl. the chair renter grace period).
 // `dateOnly` is the server-computed 'YYYY-MM-DD' (CustomDate.currentDay().currentDateOnly),
 // same value Home uses. Returns 1/0; callers coerce to a real boolean before responding.
 // Must be selected inside the `salonDetail` include so the `salonDetail` alias is in scope.
 const salonSubscriptionActiveLiteral = (dateOnly) =>
-  literal(`(CASE
-    WHEN \`salonDetail\`.\`isExternalEmployee\` = 1 THEN (
-      SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-      FROM salonDetails AS parentSalon
-      WHERE parentSalon.id = \`salonDetail\`.\`parentSalonId\`
-        AND parentSalon.registrationExpiryDate >= '${dateOnly}'
-        AND (parentSalon.subscriptionLatestPaymentStatus IS NULL
-             OR parentSalon.subscriptionLatestPaymentStatus NOT IN ('expired','cancelled','canceled','payment_failed','paused','refunded')))
-    ELSE (CASE
-      WHEN \`salonDetail\`.\`registrationExpiryDate\` >= '${dateOnly}'
-        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` IS NOT NULL
-        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` NOT IN ('expired','payment_failed','paused','refunded')
-      THEN 1 ELSE 0 END)
-  END)`)
+  literal(activeSalonCaseSql('`salonDetail`', quoteDate(dateOnly)))
 
 exports.fetchAppointments = async (req, res, next) => {
   // TODO Filters
@@ -4693,6 +4673,7 @@ exports.fetchAppointments = async (req, res, next) => {
       'proposalCount',
       'clientDeclineNote',
       'clientDeclinedAt',
+      'visitAddressId',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4724,6 +4705,7 @@ exports.fetchAppointments = async (req, res, next) => {
 
   // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
   appointments = JSON.parse(JSON.stringify(appointments))
+  await renterMove.applyVisitAddresses(appointments)
   appointments.forEach((a) => {
     if (a.salonDetail) {
       a.salonDetail.subscriptionActive =
@@ -4779,6 +4761,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'proposalCount',
       'clientDeclineNote',
       'clientDeclinedAt',
+      'visitAddressId',
       'loyaltyDiscount',
       'loyaltyPercentage',
       [
@@ -4834,6 +4817,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
               `lng`,
               `postalCode`,
               `province`,
+              `type`, // 'between_shops': chair renter with no address yet
             ],
           },
           {
@@ -4900,6 +4884,11 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
   const output = data.toJSON()
   output.jobs = actualJobs
+  await renterMove.applyVisitAddresses(output)
+  output.freeCancelAfterMove = await renterMove.freeCancelAfterMove(output.id)
+  // "Your barber has moved" card: only for bookings on or after the move.
+  const moved = await renterMove.recentMove(output.salonDetail?.id)
+  output.barberMoved = moved && String(output.on) >= String(moved.moveDate) ? moved : null
 
   // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
   if (output.salonDetail) {
@@ -7516,6 +7505,10 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
   const customerId = req.user.id
   console.log("CustomerId=================>>>>",customerId)
 
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)

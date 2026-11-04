@@ -532,6 +532,9 @@ const getSubscriptionDisplayName = (productId) => {
     'trimbiz_monthly:trimbiz-owner-four-staff': 'Owner + 4 staff members',
     'trimbiz_monthly:trimbiz-owner-five-staff': 'Owner + 5 staff members',
     'trimbiz_monthly:trimbiz-owner-unlimited-staff': 'Owner + Unlimited staff',
+    // Chair renter's own plan (one person, no team)
+    'trimbiz_monthly_renter': 'Chair Renter',
+    'trimbiz_monthly:trimbiz-monthly-renter': 'Chair Renter',
     // RevenueCat lifetime non-renewing products
     'rc_promo_business_access_lifetime': 'Trim Business Lifetime Access',
     'rc_promo_Trim World Wide Pro_lifetime': 'Trim Worldwide Pro Lifetime Access',
@@ -568,12 +571,15 @@ const getTeamSizeFromProductId = (productId) => {
     'trimbiz_monthly:trimbiz-owner-four-staff': 5,
     'trimbiz_monthly:trimbiz-owner-five-staff': 6,
     'trimbiz_monthly:trimbiz-owner-unlimited-staff': UNLIMITED_TEAM_SIZE,
+    // Chair renter's own plan: the renter only, so no team seats
+    'trimbiz_monthly_renter': 0,
+    'trimbiz_monthly:trimbiz-monthly-renter': 0,
     // RevenueCat lifetime non-renewing products
     'rc_promo_business_access_lifetime': UNLIMITED_TEAM_SIZE,
     'rc_promo_Trim World Wide Pro_lifetime': UNLIMITED_TEAM_SIZE,
   };
   
-  return teamSizeMap[productId] || 1; // Default to 1 if not found
+  return teamSizeMap[productId] ?? 1; // Default to 1 if not found (0 is the renter plan)
 };
 
 /**
@@ -1382,14 +1388,15 @@ const handleBillingIssue = async (event) => {
 
 /**
  * Handle subscription plan change (upgrade/downgrade) - blocks employees on downgrade
- * This function handles both regular employees and external employees (rent a chair)
+ * Only staff are blocked; chair renters pay for their own plan.
  * @param {Object} salon - Salon detail instance
  * @param {string} oldProductId - Previous product ID
  * @param {string} newProductId - New product ID
  */
 /**
- * Block ALL employees (regular + rent a chair) of a given salon.
- * Sets employee.status = false and user.status = false for every non-owner employee.
+ * Block all staff of a given salon. Chair renters pay for their own plan, so
+ * they are never blocked because of the host shop's subscription.
+ * Sets employee.status = false and user.status = false for every non-owner staff member.
  */
 const blockAllSalonEmployees = async (salon) => {
   try {
@@ -1399,6 +1406,7 @@ const blockAllSalonEmployees = async (salon) => {
       where: {
         salonDetailId: salon.id,
         isOwner: false,
+        isExternalEmployee: false, // chair renters have their own plan
         deleted: false,
         status: true, // only active ones
       },
@@ -1466,7 +1474,7 @@ const handleSubscriptionPlanChange = async (salon, oldProductId, newProductId) =
       console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
     }
     
-    if (!newTeamSize) {
+    if (newTeamSize === null || newTeamSize === undefined) { // 0 = the renter plan (no staff)
       console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
       return;
     }
@@ -1491,14 +1499,14 @@ const handleSubscriptionPlanChange = async (salon, oldProductId, newProductId) =
     
     console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
     
-    // Get all active employees (excluding owner) for this salon
-    // This includes BOTH regular employees AND external employees (rent a chair)
+    // Get all staff (excluding owner) for this salon. Chair renters pay for
+    // their own plan and do not use the shop's seats, so a downgrade never blocks them.
     const allEmployees = await employee.findAll({
       where: {
         salonDetailId: salon.id,
         isOwner: false,
+        isExternalEmployee: false,
         deleted: false,
-        // Note: We don't filter by isExternalEmployee - we want BOTH types
       },
       include: [{
         model: user,

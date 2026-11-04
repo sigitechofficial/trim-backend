@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Set when a chair renter leaves this shop (the row is also marked deleted).
+    leftAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   })
 
   employee.associate = (models) => {

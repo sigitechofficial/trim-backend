@@ -1,4 +1,6 @@
 const { Op, literal, where } = require('sequelize')
+const { renterFreeDays } = require('../../helper/salonSubscriptionRule')
+const renterMove = require('../../helper/renterMove')
 const fs = require('fs').promises
 const {
   user,
@@ -67,9 +69,10 @@ const getTeamSizeFromAppleProduct = (productId) => {
     'trimbiz_owner_four_staff': 5,                   // Owner + 4 staff
     'trimbiz_owner_five_staff': 6,                   // Owner + 5 staff
     'trimbiz_owner_unlimited_staff': UNLIMITED_TEAM_SIZE,            // Owner + unlimited staff
+    'trimbiz_monthly_renter': 0,                     // Chair renter's own plan: no staff
   };
   
-  return productTeamSizeMapping[productId] || null;
+  return productTeamSizeMapping[productId] ?? null;
 }
 
 /*
@@ -113,6 +116,12 @@ exports.fetchEmployees = async (req, res, next) => {
   
   const condition = { salonDetailId, deleted: false, isExternalEmployee: false }
   if (req?.params?.type == 'external') condition.isExternalEmployee = true
+  // Chair renters who moved to another shop (kept for history, not deleted).
+  if (req?.params?.type == 'left') {
+    condition.isExternalEmployee = true
+    condition.deleted = true
+    condition.leftAt = { [Op.ne]: null }
+  }
 
   const AllEmployess = await employee.findAll({
     where: condition,
@@ -124,6 +133,7 @@ exports.fetchEmployees = async (req, res, next) => {
       'isOwner',
       'isExternalEmployee',
       'deleted',
+      'leftAt',
       [
         literal(
           '(SELECT FORMAT(AVG(ratings.value), 1) FROM ratings WHERE ratings.employeeId = employee.id)',
@@ -138,8 +148,9 @@ exports.fetchEmployees = async (req, res, next) => {
     },
   })
 
+  // Chair renters pay for their own plan, so they never use one of the shop's seats.
   const activeStaffCount = await employee.count({
-    where: { salonDetailId, deleted: false, isOwner: false, status: true },
+    where: { salonDetailId, deleted: false, isOwner: false, status: true, isExternalEmployee: false },
   })
   // activeMembers = owner (1) + active staff (aligns with membersAllowed = owner + N staff)
   const activeMembers = 1 + activeStaffCount
@@ -184,17 +195,20 @@ exports.AddEmployee = async (req, res, next) => {
     attributes: ['id', 'salonName', 'teamSize', 'addressDBId'],
   })
 
+  // Chair renters pay for their own plan, so only staff use the shop's seats.
   let teamCount = await employee.count({
     where: {
       salonDetailId: salonDetails.id,
       isOwner: false,
       status: true,
       deleted: false,
+      isExternalEmployee: false,
     },
   })
   // to equal self employee
 
-  if (req?.body?.registerEmployeeDuringSalonRegistration != 'fromAuth') {
+  const addingRenter = req.body?.isExternalEmployee == 'true'
+  if (!addingRenter && req?.body?.registerEmployeeDuringSalonRegistration != 'fromAuth') {
     const limit = salonDetails.teamSize;
     if (limit !== UNLIMITED_TEAM_SIZE && teamCount >= limit) {
       return next(
@@ -306,6 +320,8 @@ exports.AddEmployee = async (req, res, next) => {
         onlinePayments: true,
         coverImage: employeeInput?.image,
         onlinePayments: false,
+        // The renter's own plan: free days first, so clients can book them at once.
+        ...renterFreeDays(),
       })
 
       externalEmployeeSalonId = externalEmployeeSalon?.id
@@ -998,12 +1014,25 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
   return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
-//*8.Active Block
-exports.activeBlockEmployee = async (req, res, next) => {
-  const userId = req.params.employee
+// The caller's shop: the owner's own shop, or the shop a staff member works at.
+async function callerShop(req) {
+  const own = await salonDetail.findOne({
+    where: { userId: req?.user?.id, deleted: false },
+    attributes: ['id', 'teamSize', 'isExternalEmployee'],
+  })
+  if (own && !own.isExternalEmployee) return own
+  const row = await employee.findOne({
+    where: { userId: req?.user?.id, deleted: false, isExternalEmployee: false },
+    attributes: ['salonDetailId'],
+  })
+  return row ? salonDetail.findByPk(row.salonDetailId, { attributes: ['id', 'teamSize'] }) : null
+}
 
-  const result = await employee.findOne({
-    where: { userId },
+// A team member of the caller's shop only. A chair renter who has moved on is
+// no longer on this shop's team, so the old shop cannot block or delete them.
+const workerAtShop = (userId, salonDetailId) =>
+  employee.findOne({
+    where: { userId, salonDetailId, deleted: false },
     attributes: [
       ['userId', 'id'],
       'status',
@@ -1012,11 +1041,15 @@ exports.activeBlockEmployee = async (req, res, next) => {
       'isExternalEmployee',
     ],
   })
+
+//*8.Active Block
+exports.activeBlockEmployee = async (req, res, next) => {
+  const userId = req.params.employee
+
+  const salon = await callerShop(req)
+  if (!salon) return next(new appError('Data not found', 404))
+  const result = await workerAtShop(userId, salon.id)
   const worker = JSON.parse(JSON.stringify(result))
-  const salon = await salonDetail.findOne({
-    where: { userId: req?.user?.id },
-    attributes: ['id', 'teamSize'],
-  })
 
   if (!worker) return next(new appError('Data not found', 404))
   if (worker.isOwner) {
@@ -1029,13 +1062,15 @@ exports.activeBlockEmployee = async (req, res, next) => {
       isOwner: false,
       status: true,
       deleted: false,
+      isExternalEmployee: false,
       salonDetailId: salon.id,
     },
   })
   console.log('🚀 ~ = ~ activeMembers >= salon?.teamSize:', activeMembers)
   console.log('🚀 ~ = ~ req.body.status:', salon?.teamSize)
   const teamLimit = salon?.teamSize;
-  if (teamLimit !== UNLIMITED_TEAM_SIZE && activeMembers >= teamLimit && req.body.status) {
+  // A chair renter pays for their own plan, so unblocking one needs no free seat.
+  if (!worker.isExternalEmployee && teamLimit !== UNLIMITED_TEAM_SIZE && activeMembers >= teamLimit && req.body.status) {
     return next(
       new appError(
         'Your team size must not exceed the limit of your subscription.',
@@ -1065,6 +1100,15 @@ exports.activeBlockEmployee = async (req, res, next) => {
       booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
     }
   }
+  if (worker?.isExternalEmployee) {
+    // A chair renter has their own account and plan: the shop only blocks
+    // them on its own team, never their login or their own page.
+    await employee.update(
+      { status: req.body?.status || false },
+      { where: { id: employeeId } },
+    )
+    return res.json(returnFunction('1', 'Success', {}, ''))
+  }
   await user.update(
     { status: req.body?.status || false },
     { where: { id: userId } },
@@ -1082,16 +1126,9 @@ exports.activeBlockEmployee = async (req, res, next) => {
 
 exports.deleteEmployee = async (req, res, next) => {
   const userId = req.params.employee
-  const worker = await employee.findOne({
-    where: { userId },
-    attributes: [
-      ['userId', 'id'],
-      'status',
-      ['id', 'employeeId'],
-      'isOwner',
-      'isExternalEmployee',
-    ],
-  })
+  const shop = await callerShop(req)
+  if (!shop) return next(new appError('Data not found', 404))
+  const worker = await workerAtShop(userId, shop.id)
   if (!worker) return next(new appError('Data not found', 404))
   if (worker?.dataValues?.isOwner) {
     return next(new appError('The shop owner cannot be deleted.', 200))
@@ -1099,55 +1136,34 @@ exports.deleteEmployee = async (req, res, next) => {
   // return res.json({ work, employeeId })
 
   if (worker?.isExternalEmployee) {
-    const salon = await salonDetail.findOne({
-      where: { userId },
-      attributes: ['id'],
-    })
-    if (salon) {
-      const work = await booking.findAll({
-        where: {
-          [Op.or]: [{ status: 'assign' }, { status: 'pending' }],
-          salonDetailId: salon?.id,
-        },
-        attributes: [
-          'id',
-          'status',
-          'actualCapturedAmount',
-          'tip',
-          'initialPaymentIntend',
-          'stripeCardId',
-          'total',
-          'subTotal',
-          'initialPayment',
-          'salonDetailId',
-        ],
-      })
-      processAllAppointments(work)
-    }
-  } else {
-    const employeeId = worker?.dataValues?.employeeId
-    console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
-    const work = await jobs.findAll({
-      where: { status: 'assign', employeeId },
-      attributes: ['id', 'bookingId'],
-    })
+    // A chair renter pays for their own plan: removing them from the team
+    // keeps their account, clients and bookings (they become "between shops").
+    await renterMove.removeFromShop({ hostSalonId: shop.id, renterUserId: Number(userId), createdBy: req.user.id })
+    return res.json(returnFunction('1', 'Chair renter removed from your shop.', {}, ''))
+  }
 
-    if (work && work.length > 0) {
-      const jobsIds = work.map((ele) => ele.id)
-      console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
-      const bookingIds = work.map((ele) => ele.bookingId)
-      console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
-      const uniqueBookingIds = [...new Set(bookingIds)]
-      console.log(
-        '🚀 ~ exports.deleteEmployee ~ uniqueBookingIds:',
-        uniqueBookingIds,
-      )
-      jobs.update(
-        { employeeId: null, status: 'pending' },
-        { where: { id: jobsIds } },
-      )
-      booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
-    }
+  const employeeId = worker?.dataValues?.employeeId
+  console.log('🚀 ~ exports.deleteEmployee ~ employeeId:', employeeId)
+  const work = await jobs.findAll({
+    where: { status: 'assign', employeeId },
+    attributes: ['id', 'bookingId'],
+  })
+
+  if (work && work.length > 0) {
+    const jobsIds = work.map((ele) => ele.id)
+    console.log('🚀 ~ exports.deleteEmployee ~ jobsIds:', jobsIds)
+    const bookingIds = work.map((ele) => ele.bookingId)
+    console.log('🚀 ~ exports.deleteEmployee ~ bookingIds:', bookingIds)
+    const uniqueBookingIds = [...new Set(bookingIds)]
+    console.log(
+      '🚀 ~ exports.deleteEmployee ~ uniqueBookingIds:',
+      uniqueBookingIds,
+    )
+    jobs.update(
+      { employeeId: null, status: 'pending' },
+      { where: { id: jobsIds } },
+    )
+    booking.update({ status: 'pending' }, { where: { id: uniqueBookingIds } })
   }
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })

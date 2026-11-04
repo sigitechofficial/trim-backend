@@ -11,16 +11,15 @@ exports.salonBlock = async (userId, newStatus) => {
         {
           model: employee,
           required: false,
-          where: { isOwner: false },
+          // Staff only: chair renters have their own account and plan, so
+          // blocking a shop never blocks them.
+          where: { isOwner: false, isExternalEmployee: false },
           attributes: ['id', 'userId'],
         },
       ],
     })
 
-    const externalEmployees = await salonDetail.findAll({
-      where: { parentSalonId: salon.id },
-      attributes: ['id', 'userId'],
-    })
+    const externalEmployees = []
     const userIdsToblock = [userId]
     const workers = []
     const externalEmployeesSalonId = []

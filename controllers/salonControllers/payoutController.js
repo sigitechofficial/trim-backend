@@ -837,7 +837,8 @@ exports.salaryEmployeeAccount = async (req, res, next) => {
 
 exports.externalEmployeeSummary = async (req, res, next) => {
   const result = await employee.findAll({
-    where: { salonDetailId: req.params.salon, isExternalEmployee: true },
+    // Renters who moved to another shop (leftAt set) owe this shop no new rent.
+    where: { salonDetailId: req.params.salon, isExternalEmployee: true, leftAt: null },
     attributes: [
       'id',
       'position',
@@ -951,46 +952,32 @@ exports.collectedRentTransactionHistory = async (req, res, next) => {
 
 
 //Employee See all the transactions history
+// A chair renter's rent payments at every shop they have rented at (they keep
+// this history after moving shop or while between shops). Newest first, each
+// with the shop's name.
 exports.employeeRentCollectionTransactionHistory = async (req, res, next) => {
-  const userId = req.user.id
-  
-
-  const salonDetialsData= await salonDetail.findOne({
-    where: { userId: userId },
-    attributes: ['id','parentSalonId']
+  const hostRows = await employee.findAll({
+    where: { userId: req.user.id, isExternalEmployee: true },
+    attributes: ['id'],
   })
- 
-  
-  // If salonDetailId is provided, validate that the employee is associated with that salon
-    const employeeAtSalon = await employee.findOne({
-      where: { 
-        userId: userId,
-        salonDetailId: salonDetialsData.parentSalonId 
-      },
-      attributes: ['id']
-    })
-    
-    //   return res.json(employeeAtSalon)
+  const employeeIds = hostRows.map((e) => e.id)
 
-    
-    if (!employeeAtSalon) {
-      return res.status(400).json(response({ message: 'Employee is not associated with the specified shop' }))
-    }
-  
-  
-  // Build where condition
-  const whereCondition = { 
-    employeeId: employeeAtSalon.id,
-    salonDetailId: salonDetialsData.parentSalonId
-  }
-  
-  console.log("Where Condition -------------------->>>",whereCondition)
-  
-  const history = await rentCollection.findAll({
-    where: whereCondition,
-    attributes: { exclude: ['updatedAt', 'employeeId', 'salonDetailId'] },
-  })
-  return res.json(response({ message: 'Success', data: { history } }))
+  const history = employeeIds.length
+    ? await rentCollection.findAll({
+        where: { employeeId: employeeIds },
+        attributes: {
+          exclude: ['updatedAt', 'employeeId', 'salonDetailId'],
+          include: [
+            [
+              literal(`(SELECT salonDetails.salonName FROM salonDetails WHERE salonDetails.id = rentCollection.salonDetailId)`),
+              'salonName',
+            ],
+          ],
+        },
+        order: [['createdAt', 'DESC']],
+      })
+    : []
+  return res.json(response({ message: 'Success', data: { history, currencyUnit: CURRENCY_UNIT } }))
 }
 // 419 employee
 // 1056 userId

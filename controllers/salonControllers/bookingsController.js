@@ -68,6 +68,7 @@ const {
   timeProposed,
 } = require('../eventDrivenCommunication/appointmentRequest')
 const { DateTime } = require('luxon')
+const { isSalonRowActive } = require('../../helper/salonSubscriptionRule')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 const loyalty = require('../../helper/loyalty')
@@ -337,7 +338,7 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { userId: req?.user?.id },
-    attributes: ['id', 'parentSalonId', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate'],
+    attributes: ['id', 'parentSalonId', 'isExternalEmployee', 'renterGraceUntil', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate', 'subscriptionLatestPaymentStatus'],
   })
   // Expire overdue requests first so the calendar and the requests count are current.
   if (salon?.id) await expireOverdueRequestsSafely({ salonDetailId: salon.id })
@@ -413,10 +414,9 @@ exports.calendarAppointments = async (req, res, next) => {
       attributes: ['id', 'salonName', 'registrationExpiryDate', 'registrationDate'],
     })
 
-    if (parentSalon) {
-      parentSalonName = parentSalon.salonName
-      subscriptionSalon = parentSalon
-    }
+    // A chair renter pays for their own plan, so only the shop name comes
+    // from the host; the subscription stays the renter's own.
+    if (parentSalon) parentSalonName = parentSalon.salonName
   }
   if (!salon) {
     throw new AppError('Resource not found', 404)
@@ -557,8 +557,9 @@ exports.calendarAppointments = async (req, res, next) => {
     results.push(unassign)
   }
 
-  // Check salon subscription status (parent salon for rent-a-chair / external employees)
+  // Check salon subscription status (a chair renter's own plan for renters)
   let subscriptionExpire = false
+  const renterBetweenShops = !!(salon?.isExternalEmployee && !salon?.parentSalonId && salon?.renterGraceUntil)
   const subscriptionSalonId = subscriptionSalon?.id ?? salon?.id
   const salonSubscription = await subscriptions.findOne({
     where: { salonDetailId: subscriptionSalonId },
@@ -582,6 +583,10 @@ exports.calendarAppointments = async (req, res, next) => {
     }
   }
 
+  if (salon?.isExternalEmployee) {
+    subscriptionExpire = !isSalonRowActive(salon, DateTime.now().toISODate())
+  }
+
   const output = response({
     message: 'Success.',
     data: {
@@ -595,6 +600,8 @@ exports.calendarAppointments = async (req, res, next) => {
       subscriptionExpire,
       registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
       registrationDate: subscriptionSalon?.registrationDate,
+      renterBetweenShops,
+      renterGraceUntil: renterBetweenShops ? salon.renterGraceUntil : null,
     },
   })
 

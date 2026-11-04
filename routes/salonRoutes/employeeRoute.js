@@ -2,6 +2,8 @@ const express = require('express')
 const router = express.Router()
 const { employee, time, employeService } = require('../../models')
 const employeeController = require('../../controllers/salonControllers/employeeController')
+const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
+const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
 const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
@@ -136,5 +138,31 @@ router.post(
   '/add-external-employee-default-service/:salon',
   catchAsync(employeeController.addExternalEmployeeDefaultService),
 )
+
+// Chair renters moving shop
+router.get('/renter-moves', catchAsync(renterMoveController.list))
+router.post('/renter-moves/invite', catchAsync(renterMoveController.invite))
+router.post('/renter-moves/leave', catchAsync(renterMoveController.leave))
+router.patch('/renter-moves/:move/respond', catchAsync(renterMoveController.respond))
+router.patch('/renter-moves/:move/rent-settled', catchAsync(renterMoveController.settleRent))
+router.patch('/renter-moves/:move/cancel', catchAsync(renterMoveController.cancel))
+
+// Chair market: renters open to work, shops' offers and counter offers
+router.get('/chair-market/me', catchAsync(chairMarketController.getMyPrefs))
+router.put('/chair-market/me', catchAsync(chairMarketController.saveMyPrefs))
+router.get('/chair-market/shops/:shop', catchAsync(chairMarketController.shopProfile))
+router.get('/chair-market/renters', catchAsync(chairMarketController.listRenters))
+router.get('/chair-market/renters/:renter', catchAsync(chairMarketController.renterProfile))
+router.get('/chair-market/rent-hint', catchAsync(chairMarketController.rentHint))
+router.get('/chair-market/offers', catchAsync(chairMarketController.listOffers))
+router.post('/chair-market/offers', catchAsync(chairMarketController.sendOffer))
+router.post('/chair-market/offers/:offer/counter', catchAsync(chairMarketController.counter))
+router.patch('/chair-market/offers/:offer/accept', catchAsync(chairMarketController.accept))
+router.patch('/chair-market/offers/:offer/decline', catchAsync(chairMarketController.decline))
+router.get('/chair-market/listing', catchAsync(chairMarketController.getMyListing))
+router.put('/chair-market/listing', catchAsync(chairMarketController.saveMyListing))
+router.get('/chair-market/hiring-shops', catchAsync(chairMarketController.listHiringShops))
+router.post('/chair-market/apply', catchAsync(chairMarketController.applyToShop))
+router.post('/chair-market/hiring-shops/:shop/hide', catchAsync(chairMarketController.hideShop))
 
 module.exports = router
