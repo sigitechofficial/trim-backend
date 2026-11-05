@@ -93,7 +93,7 @@ function seed(db) {
   return { ownerA, ownerB, renter, customer, shopA, shopB, rSalon, hostRowA, ownerRow, cut, b, job }
 }
 
-test('invite → accept → rent settled → move re-links the renter to the new shop', async () => {
+test('invite → accept → move runs on its date and re-links the renter to the new shop', async () => {
   const { db, move } = load()
   const s = seed(db)
 
@@ -104,11 +104,10 @@ test('invite → accept → rent settled → move re-links the renter to the new
   await move.respond({ renterUserId: s.renter.id, moveId: m.id, accept: true })
   assert.equal(m.status, 'accepted')
 
-  // Waits until the old shop confirms the rent.
-  assert.equal(await move.runMove(m.id), 'waiting')
-  assert.equal(s.rSalon.parentSalonId, s.shopA.id)
+  // The old shop cannot stop the renter leaving.
+  await assert.rejects(move.cancel({ userId: s.ownerA.id, moveId: m.id }), /Only the chair renter or their new shop/)
 
-  await move.settleRent({ hostUserId: s.ownerA.id, moveId: m.id })
+  // Runs on its date without waiting for the old shop.
   assert.equal(await move.runMove(m.id), 'completed')
 
   assert.equal(s.hostRowA.deleted, true)

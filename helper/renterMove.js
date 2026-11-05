@@ -224,7 +224,7 @@ async function respond({ renterUserId, moveId, accept }) {
   if (accept && fromSalon) {
     push([fromSalon.userId], {
       title: 'Chair renter leaving',
-      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
+      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. If they owe you any rent, please settle it with them before then.`,
     }, { moveId: move.id })
   }
   return move
@@ -259,7 +259,7 @@ async function createAcceptedMove({ renterUserId, toSalonId, moveDate, rentAmoun
     const name = `${renter?.firstName || ''} ${renter?.lastName || ''}`.trim()
     push([fromSalon?.userId], {
       title: 'Chair renter leaving',
-      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
+      body: `${name} is moving to another shop on ${prettyDate(move.moveDate)}. If they owe you any rent, please settle it with them before then.`,
     }, { moveId: move.id })
   }
   return move
@@ -287,7 +287,7 @@ async function leave({ renterUserId, moveDate }) {
   const fromSalon = await salonDetail.findByPk(renterSalon.parentSalonId, { attributes: ['userId'] })
   push([fromSalon?.userId], {
     title: 'Chair renter leaving',
-    body: `${renterSalon.salonName} is leaving your shop on ${prettyDate(move.moveDate)}. Please confirm their rent is settled.`,
+    body: `${renterSalon.salonName} is leaving your shop on ${prettyDate(move.moveDate)}. If they owe you any rent, please settle it with them before then.`,
   }, { moveId: move.id })
   return move
 }
@@ -351,6 +351,13 @@ async function cancel({ userId, moveId }) {
   const allowed = [move.renterUserId, ...shops.map((s) => s.userId)]
   if (!allowed.includes(userId)) throw new AppError('Data not found', 404)
   if (!OPEN_STATUSES.includes(move.status)) throw new AppError('This move is already closed.', 200)
+  // The renter's current shop cannot stop a renter leaving; it can only cancel
+  // a removal it started itself.
+  const fromShop = move.fromSalonId ? await salonDetail.findByPk(move.fromSalonId, { attributes: ['userId'] }) : null
+  const toShop = move.toSalonId ? await salonDetail.findByPk(move.toSalonId, { attributes: ['userId'] }) : null
+  if (fromShop && fromShop.userId === userId && userId !== move.renterUserId && toShop?.userId !== userId && move.createdBy !== userId) {
+    throw new AppError('Only the chair renter or their new shop can cancel this move.', 200)
+  }
   await move.update({ status: 'cancelled' })
   await cancelLinkedOffer(move.id)
   push(allowed.filter((id) => id !== userId), {
@@ -387,7 +394,7 @@ async function listFor(userId) {
     const role = m.renterUserId === userId ? 'renter' : ids.includes(m.fromSalonId) ? 'from' : 'to'
     return { ...(m.toJSON ? m.toJSON() : m), role }
   })
-  // The old shop sees what the renter still owes before confirming the rent.
+  // The old shop sees what the renter still owes in Rent collection, to settle it with them.
   await Promise.all(out.map(async (m) => {
     if (m.role === 'from' && OPEN_STATUSES.includes(m.status)) m.rentDue = await rentDueFor(m.fromEmployeeId)
   }))
@@ -492,8 +499,8 @@ async function runMove(moveId) {
     await sequelize.transaction(async (t) => {
       const move = await renterMove.findByPk(moveId, { transaction: t, lock: t.LOCK.UPDATE })
       if (!move || move.status !== 'accepted' || move.moveDate > today()) return
-      // The old shop must confirm the rent first (not needed when joining from the grace period).
-      if (move.fromSalonId && !move.rentSettledAt) return
+      // The move runs on its date. The old shop was told in advance and settles
+      // any rent with the renter itself; Trim does not hold the move for it.
 
       const renterSalon = await salonDetail.findByPk(move.renterSalonId, { transaction: t })
       const owner = await employee.findOne({
