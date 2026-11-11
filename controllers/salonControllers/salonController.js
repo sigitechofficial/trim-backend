@@ -121,6 +121,7 @@ exports.addSalonDetail = async (req, res, next) => {
     businessPhoneNum,
     isVATRegistered,
     vatType,
+    workMode,
   } = req.body;
 
   const salon = await salonDetail.findOne({ where: { userId } });
@@ -161,6 +162,8 @@ exports.addSalonDetail = async (req, res, next) => {
     businessPhoneNum,
     isVATRegistered,
     vatType,
+    // 'mobile': no shop, the address is a private base for travel distance.
+    workMode: ['shop', 'mobile', 'both'].includes(workMode) ? workMode : 'shop',
   });
 
   const ownerEmployee = await employee.create({

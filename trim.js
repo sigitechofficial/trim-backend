@@ -199,6 +199,11 @@ const chairReady = Promise.all([
   ensureChairMarketSchema(db).then(() => console.log('[chairMarketSchema] ensured')),
 ]).catch((err) => console.error('[chair schema / renter plan migration] failed:', err.message))
 
+const { ensureMobileBarberSchema } = require('./helper/mobileBarberSchema')
+ensureMobileBarberSchema(db)
+  .then(() => console.log('[mobileBarberSchema] ensured'))
+  .catch((err) => console.error('[mobileBarberSchema] failed:', err.message))
+
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)
@@ -269,5 +274,6 @@ require('./jobs/bookingRequestCron')
 
 // ─── Renter Move Cron (chair renters moving shop on their move date) ─────────
 require('./jobs/renterMoveCron')
+require('./jobs/mobileVisitCron')
 
 // hello

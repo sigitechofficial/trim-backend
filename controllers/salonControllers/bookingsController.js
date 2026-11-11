@@ -72,6 +72,8 @@ const { isSalonRowActive } = require('../../helper/salonSubscriptionRule')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
 const loyalty = require('../../helper/loyalty')
+const mobileBarber = require('../../helper/mobileBarber')
+const mobileVisitStatus = require('../../helper/mobileVisitStatus')
 const {
   resolveRequestActor,
   ownRequestBookingIds,
@@ -658,6 +660,7 @@ exports.salonBookings = async (req, res, next) => {
       'countryCode',
       'phoneNum',
       'vatAmount',
+      'isMobileVisit',
       [
         literal(`(SELECT CONCAT(users.firstName, ' ', users.lastName)
                 FROM users
@@ -770,6 +773,8 @@ exports.salonBookings = async (req, res, next) => {
       total: booking.total,
       services,
       specialists: specialists.length > 0 ? [...new Set(specialists)] : [''],
+      // Home visit: the calendar shows a "Mobile visit" tag.
+      isMobileVisit: !!booking.isMobileVisit,
     }
     bookings.push(retObj)
   })
@@ -1098,7 +1103,20 @@ exports.bookingDetails = async (req, res, next) => {
     loyaltyDiscount: bookingData.loyaltyDiscount,
     loyaltyPercentage: bookingData.loyaltyPercentage,
     loyaltyCard,
+    // Home visit: the client's address (postcode area only until accepted).
+    isMobileVisit: !!bookingData.isMobileVisit,
+    travelFee: bookingData.travelFee,
+    travelMiles: bookingData.travelMiles,
   };
+  if (bookingData.isMobileVisit) {
+    const holder = { isMobileVisit: true, visitAddressId: bookingData.visitAddressId, status: bookingData.status }
+    await mobileBarber.attachVisitAddress(holder)
+    bookingDetail.visitAddress = holder.visitAddress || null
+    // On my way / Arrived buttons and their times.
+    Object.assign(bookingDetail, mobileVisitStatus.statusFields(bookingData), {
+      visitWindow: mobileVisitStatus.windowState(bookingData),
+    })
+  }
 
   return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));
 };
@@ -1226,6 +1244,11 @@ exports.bookingRequests = async (req, res, next) => {
       'proposedAt',
       'proposalCount',
       'clientDeclineNote',
+      'status',
+      'isMobileVisit',
+      'visitAddressId',
+      'travelFee',
+      'travelMiles',
     ],
     include: [
       { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
@@ -1244,6 +1267,8 @@ exports.bookingRequests = async (req, res, next) => {
     ],
     order: [['requestExpiresAt', 'ASC']],
   })
+  // Home visits show the postcode area only until accepted.
+  await mobileBarber.attachVisitAddress(requests)
   return res.json(
     response({
       message: 'Booking requests',
@@ -1375,6 +1400,8 @@ exports.proposeBookingTime = async (req, res, next) => {
     }
   })
   const endTime = cursor
+  // Home visit: the suggested barber must travel here and have travel time.
+  await mobileBarber.checkVisitMove({ bookingId: request.id, employeeId, on, startTime, endTime })
 
   // Who the client asked for vs who the shop suggests (names for the client).
   const staffNames = async (ids) => {
@@ -2129,6 +2156,12 @@ exports.employeeAvailability = async (req, res, next) => {
       startTime: br.breakStart,
       endTime: br.breakEnd,
     })
+  }
+
+  // Travel time around this barber's home visits that day.
+  if (employeeId > 0) {
+    const travel = await mobileBarber.travelBlocks([employeeId], jobDate)
+    busyTimes.push(...(travel.get(Number(employeeId)) || []))
   }
 
   console.log('TIMES BUSY', JSON.parse(JSON.stringify(busyTimes)))
@@ -3809,6 +3842,14 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = dateManipulation.dayOnDate(appointmentDate)
 
+  // Home visit: keeps travel time around it (the barber stays the same here).
+  await mobileBarber.checkVisitMove({
+    bookingId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+
   // services offered by single employees
   if (employeeId) {
     const availability = await jobs.findOne({
@@ -3962,7 +4003,17 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const assignTimeSlots = Custom.scheduleSessions(appointment, servicesinput)
   // console.log("ðŸš€ ~ assignTimeSlots:", assignTimeSlots);
 
-  JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  // Home visit: every service stays with the one barber who travels.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId: req.body?.employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  JobsInput = visitMove
+    ? assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
+    : Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   appointment.status = 'book'
   const findUnAssign = JobsInput.find((el) => el.status === 'pending')
   if (findUnAssign) {
@@ -4020,7 +4071,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     )
 
     await booking.update({
-      total:appointment.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, appointment.total),
       discount:0,
       vatAmount:appointment.vatOriginalAmount,
     },
@@ -4602,6 +4653,9 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       "noshowPolicyVersion",
       "cancellationPolicyVersion",
       "by",
+      "isMobileVisit",
+      "travelFee",
+      "arrivedAt",
     ],
     include: [
       { model: user, attributes: ["id", "stripeCustomerId", "firstName", "lastName"] },
@@ -4625,6 +4679,11 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     );
   }
 
+  // Home visit: the client was not in when the barber got there.
+  if (appointment.isMobileVisit && !appointment.arrivedAt) {
+    throw new AppError('Tap "I\'ve arrived" on this home visit first, then mark the no-show.', 200);
+  }
+
   const updatedBooking = { tip: 0 };
 
   if (
@@ -4645,9 +4704,14 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     const paid =
       parseFloat(appointment.actualCapturedAmount)
 
-    const noshowCharges = parseFloat(
-      (appointment.total * (refundPercentage / 100)).toFixed(2)
-    );
+    // Home visit: the percentage on the services, plus the full travel fee.
+    const noshowCharges = appointment.isMobileVisit
+      ? mobileBarber.noShowCharge({
+          total: appointment.total,
+          travelFee: appointment.travelFee,
+          percent: refundPercentage,
+        })
+      : parseFloat((appointment.total * (refundPercentage / 100)).toFixed(2));
 
     if (paid > noshowCharges) {
       // -----> CASE: Initial payment greater, refund the difference

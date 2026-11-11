@@ -9,6 +9,7 @@ const {
 } = require('../../controllers/adminController/adminController')
 const protect = require('../../middlewares/accessCheck')
 const loyaltyController = require('../../controllers/loyaltyController')
+const mobileBarberController = require('../../controllers/mobileBarberController')
 const publicProtected = require('../../middlewares/publicProtected')
 const catchAsync = require('../../middlewares/catchAync')
 const {
@@ -89,6 +90,8 @@ router.post(
   '/salon-availability/salon/:salon',
   catchAsync(appController.salonAvailability),
 )
+router.post('/mobile-visit/quote', publicProtected, catchAsync(mobileBarberController.quote))
+router.get('/mobile-visit/active', protect, catchAsync(mobileBarberController.activeVisit))
 router.post(
   '/book-appointment',
   protect,

@@ -176,6 +176,13 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0,
     },
+    // How the business works: 'shop', 'mobile' (travels to clients only; the
+    // address is a private base used for distance) or 'both'.
+    workMode: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
+      defaultValue: 'shop',
+    },
     deleted: {
       type: DataTypes.BOOLEAN,
       allowNull: true,

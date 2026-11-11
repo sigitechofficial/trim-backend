@@ -261,6 +261,19 @@ module.exports = (sequelize, DataTypes) => {
     loyaltyDiscount: { type: DataTypes.DECIMAL(20, 2), allowNull: false, defaultValue: 0 },
     loyaltyPercentage: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
     loyaltyCardId: { type: DataTypes.INTEGER, allowNull: true },
+    // Mobile barber visit: the barber travels to the client's address
+    // (visitAddressId). travelFee is part of total, set by the server.
+    isMobileVisit: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    travelFee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+    travelMiles: { type: DataTypes.DECIMAL(6, 1), allowNull: true },
+    // Home visit day (helper/mobileVisitStatus.js): barber set off with an ETA,
+    // arrived, and the one-off reminder / running-late notice times.
+    onTheWayAt: { type: DataTypes.DATE, allowNull: true },
+    etaMinutes: { type: DataTypes.INTEGER, allowNull: true },
+    arrivedAt: { type: DataTypes.DATE, allowNull: true },
+    arrivedDistanceM: { type: DataTypes.INTEGER, allowNull: true }, // metres from the pin at I've arrived
+    barberRemindedAt: { type: DataTypes.DATE, allowNull: true },
+    lateNoticeAt: { type: DataTypes.DATE, allowNull: true },
   })
 
   booking.associate = (models) => {

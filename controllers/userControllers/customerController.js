@@ -57,6 +57,8 @@ const loyalty = require('../../helper/loyalty')
 const { activeSalonWhere, activeSalonCaseSql, bookableNowWhere, quoteDate } = require('../../helper/salonSubscriptionRule')
 const renterMove = require('../../helper/renterMove')
 const chairMarket = require('../../helper/chairMarket')
+const mobileBarber = require('../../helper/mobileBarber')
+const mobileVisitStatus = require('../../helper/mobileVisitStatus')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -902,12 +904,28 @@ exports.home = async (req, res, next) => {
     )
   )`;
 
+  // Mobile barbers who travel to this point count as near too; "Comes to you"
+  // keeps only them.
+  const reach = targetLat && targetLng
+    ? await mobileBarber.salonsReaching({ lat: targetLat, lng: targetLng })
+    : new Map();
+  const reachIds = [...reach.keys()].filter(Number.isInteger);
+  const comesToYou = ['true', '1', true, 1].includes(req.body?.comesToYou ?? req.query?.comesToYou);
+  if (comesToYou && !reachIds.length) {
+    return res.status(200).json(response({ data: { slons: [], appointments: [], currencyUnit: CURRENCY_UNIT, distanceUnit: 'km' } }));
+  }
+  const reachSql = `salonDetail.id IN (${reachIds.join(',') || 0})`;
+  const nearSql = comesToYou
+    ? reachSql
+    : reachIds.length ? `(${formula} <= ${rangeInKm} OR ${reachSql})` : `${formula} <= ${rangeInKm}`;
+
   // Optional filters (price, time, service type) added via subqueries
   const finalSalonCondition = {
     ...salonCondition,
 
-    // Distance gating only when coords are provided
-    ...(targetLat && targetLng ? { [Op.and]: literal(`${formula} <= ${rangeInKm}`) } : {}),
+    // Distance gating only when coords are provided (kept with the
+    // bookable-now rule from salonCondition, not instead of it)
+    ...(targetLat && targetLng ? { [Op.and]: [...(salonCondition[Op.and] || []), literal(nearSql)] } : {}),
 
     // Max price across any service in the salon
     ...((req.body.price || req.query.price) && {
@@ -1008,7 +1026,7 @@ exports.home = async (req, res, next) => {
     ],
 
     // When NOT favorites view, apply HAVING distance <= range
-    having: !req.params?.favorite ? literal(`${formula} <= ${rangeInKm}`) : undefined,
+    having: !req.params?.favorite && targetLat && targetLng ? literal(nearSql) : !req.params?.favorite ? literal(`${formula} <= ${rangeInKm}`) : undefined,
   };
 
   // Always compute/sort by distance if coords present
@@ -1039,6 +1057,15 @@ exports.home = async (req, res, next) => {
       results = results.map((s) => ({ ...s, loyaltyOffer: offers.get(s.id) || null }))
     } catch (err) {
       console.error('[loyalty] home offers failed:', err.message)
+    }
+
+    // Mobile barber badge; a mobile-only barber's base address stays private.
+    await mobileBarber.decorateSalons(results)
+    for (const s of results) {
+      if (s.mobile) {
+        s.mobile.comesToYou = reach.has(s.id)
+        s.mobile.milesToYou = reach.get(s.id) ?? null
+      }
     }
   }
 
@@ -1456,6 +1483,18 @@ exports.searchSalons = async (req, res, next) => {
     )
   )`
 
+    // Mobile barbers who travel to this point count as near too; "Comes to
+    // you" keeps only them.
+    const reach = hasCoords
+      ? await mobileBarber.salonsReaching({ lat: latNum, lng: lngNum })
+      : new Map()
+    const reachIds = [...reach.keys()].filter(Number.isInteger)
+    const comesToYou = truthy(req.body?.comesToYou)
+    if (comesToYou) andFragments.push({ id: { [Op.in]: reachIds.length ? reachIds : [0] } })
+    const nearSql = reachIds.length
+      ? `(${formula} <= ${rangeInKm} OR salonDetail.id IN (${reachIds.join(',')}))`
+      : `${formula} <= ${rangeInKm}`
+
     const finalWhere =
       andFragments.length === 1 ? andFragments[0] : { [Op.and]: andFragments }
 
@@ -1539,7 +1578,7 @@ exports.searchSalons = async (req, res, next) => {
 
     if (hasCoords) {
       queryBody.attributes = [...attributes, [literal(`${formula}`), 'distance']]
-      queryBody.having = literal(`${formula} <= ${rangeInKm}`)
+      queryBody.having = literal(nearSql)
       queryBody.order = [[literal('distance'), 'ASC']]
     } else {
       queryBody.order = [['salonName', 'ASC']]
@@ -1655,6 +1694,15 @@ exports.searchSalons = async (req, res, next) => {
       salons.forEach((s) => { s.loyaltyOffer = offers.get(s.id) || null })
     } catch (err) {
       console.error('[loyalty] search offers failed:', err.message)
+    }
+
+    // Mobile barber badge; a mobile-only barber's base address stays private.
+    await mobileBarber.decorateSalons(salons)
+    for (const s of salons) {
+      if (s.mobile) {
+        s.mobile.comesToYou = reach.has(s.id)
+        s.mobile.milesToYou = reach.get(s.id) ?? null
+      }
     }
 
     const payload = {
@@ -1917,6 +1965,16 @@ exports.salonDetails = async (req, res, next) => {
     console.error('[loyalty] shop page summary failed:', err.message)
   }
 
+  // Mobile barbers here (who comes to you, radius, travel fee). A mobile-only
+  // barber's base address is reduced to the area.
+  let mobile = { workMode: 'shop', mobile: false, mobileOnly: false, barbers: [] }
+  let detail = results
+  if (results) {
+    detail = results.toJSON()
+    await mobileBarber.decorateSalons(detail)
+    mobile = detail.mobile
+  }
+
   return res.status(200).json(
     response({
       message:"Data loaded",
@@ -1924,7 +1982,8 @@ exports.salonDetails = async (req, res, next) => {
         announcements: announcements,
         customerStatus,
         like,
-        detail: results,
+        detail,
+        mobile,
         policies,
         currencyUnit: CURRENCY_UNIT,
         feedbackCount,
@@ -2230,6 +2289,10 @@ exports.employeeAvailability = async (req, res, next) => {
     })
   }
 
+  // Travel time around this barber's home visits that day.
+  const travel = await mobileBarber.travelBlocks([bookingEmployeeId], jobDate)
+  busyTimes.push(...(travel.get(Number(bookingEmployeeId)) || []))
+
   const availableTimeSlots = Slot.getAvailableTimeSlots(
     jobDate,
     openingTime,
@@ -2285,6 +2348,9 @@ exports.salonAvailability = async (req, res, next) => {
     return res.status(200).json(response({ data: { availableTimeSlots } }))
   }
 
+  // Travel time around home visits that day, per barber.
+  const travel = await mobileBarber.travelBlocks(employees.map((e) => e.id), jobDate)
+
   // For each employee calculate their available slots
   const employeeSlotSets = await Promise.all(
     employees.map(async (emp) => {
@@ -2321,6 +2387,7 @@ exports.salonAvailability = async (req, res, next) => {
           startTime: formatBusyTime(b.breakStart),
           endTime: formatBusyTime(b.breakEnd),
         })),
+        ...(travel.get(Number(emp.id)) || []),
       ]
 
       return Slot.getAvailableTimeSlots(
@@ -2340,7 +2407,8 @@ exports.salonAvailability = async (req, res, next) => {
 
 exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const { bookingId } = req.params
-  const { appointment, services, employeeId } = req.body
+  const { appointment, services } = req.body
+  let { employeeId } = req.body
   const userId = req.user.id;
   console.log(
     'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ employeeId:',
@@ -2362,6 +2430,16 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   appointment.endTime = DateManupulation.convertTo24HourFormat(
     appointment.endTime,
   )
+  // Home visit: stays with a barber who travels, with travel time around it.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  if (visitMove) employeeId = req.body.employeeId = visitMove.employeeId
+
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = DateManupulation.dayOnDate(appointmentDate)
 
@@ -2451,7 +2529,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 
   await booking.update(
     {
-      total:req.body.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
     },
     { where: { id: bookingId } },
   )
@@ -2466,7 +2544,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 
     await booking.update(
       {
-        total:req.body.total,
+        total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
         discount:0,
         vatAmount:req.body.vatOriginalAmount,
       },
@@ -2542,6 +2620,17 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   console.log('ðŸš€ ~ assignTimeSlots:', assignTimeSlots)
 
   JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  // Home visit: every service stays with the one barber who travels.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId: req.body.employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  if (visitMove) {
+    JobsInput = assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
+  }
   appointment.status = 'book'
   const findUnAssign =
     JobsInput.length > 0
@@ -2595,7 +2684,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
 
   await booking.update(
     {
-      total:req.body.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
     },
     { where: { id: bookingId } },
   )
@@ -2610,7 +2699,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
 
     await booking.update(
       {
-        total:req.body.total,
+        total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
         discount:0.00,
       },
       { where: { id: bookingId } },
@@ -2786,6 +2875,10 @@ exports.cancelAppointment = async (req, res, next) => {
       'noshowPolicyVersion',
       'cancellationPolicyVersion',
       'by',
+      'isMobileVisit',
+      'travelFee',
+      'onTheWayAt',
+      'arrivedAt',
     ],
     include: [
       {
@@ -2889,6 +2982,16 @@ exports.cancelAppointment = async (req, res, next) => {
     return res
       .status(200)
       .json(response({ message: 'Booking request cancelled', data: {} }))
+  }
+  // Home visit: the policy applies to the services only; the travel fee is
+  // charged only once the barber has set off. Worked out here, not in the app.
+  if (appointment.isMobileVisit) {
+    req.body.cancellationCharges = mobileBarber.cancellationCharge({
+      total: appointment.total,
+      travelFee: appointment.travelFee,
+      percent: req.body?.cancellationPercentage,
+      barberSetOff: !!(appointment.onTheWayAt || appointment.arrivedAt),
+    })
   }
   // Booked before the barber moved shop: no cancellation charge.
   if (await renterMove.freeCancelAfterMove(appointment.id)) req.body.cancellationCharges = 0
@@ -3034,9 +3137,6 @@ exports.bookAppointment = async (req, res, next) => {
   // appointment.initialPayment =
   //   parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
 
-  // Only the server sets where a past visit took place (chair renter moves).
-  delete appointment.visitAddressId
-
   if (!(await renterMove.takingBookings(appointment.salonDetailId))) {
     // The app's payment sheet may already hold the deposit; no booking, no charge.
     if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
@@ -3115,6 +3215,61 @@ exports.bookAppointment = async (req, res, next) => {
     appointment.loyaltyPercentage = quoted.percentage
     appointment.loyaltyCardId = quoted.cardId
     loyaltyLines = quoted.lines
+  }
+
+  // Mobile barber home visit: checked and priced here, never taken from the app.
+  delete appointment.isMobileVisit
+  delete appointment.travelFee
+  delete appointment.travelMiles
+  delete appointment.visitAddressId
+  // Releases the deposit the app's payment sheet may already hold; no booking, no charge.
+  const releaseHold = async () => {
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+  }
+  if (!req.body.mobileVisit) {
+    // A mobile-only business has no shop to visit (older apps can't ask for a home visit).
+    const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['workMode'] })
+    if (shop?.workMode === 'mobile') {
+      await releaseHold()
+      throw new AppError('This barber only visits clients at home. Please update the app and choose your address.', 200)
+    }
+  }
+  if (req.body.mobileVisit) {
+    let visit
+    try {
+      // No barber chosen ("any barber"): the first mobile barber who can go.
+      if (!req.body.employeeId) {
+        const picked = await mobileBarber.pickMobileBarber({
+          salonDetailId: appointment.salonDetailId,
+          lat: req.body.mobileVisit.lat,
+          lng: req.body.mobileVisit.lng,
+          serviceIds: (services || []).map((s) => s.serviceId),
+          on: appointment.on,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+        })
+        if (!picked.available) throw new AppError(picked.reason, 200)
+        req.body.employeeId = picked.employeeId
+      }
+      visit = await mobileBarber.prepareBooking({
+        appointment: {
+          ...appointment,
+          startTime: DateManupulation.convertTo24HourFormat(appointment.startTime),
+          endTime: DateManupulation.convertTo24HourFormat(appointment.endTime),
+        },
+        employeeId: req.body.employeeId,
+        services,
+        mobileVisit: req.body.mobileVisit,
+        sentTravelFee: req.body.travelFee,
+      })
+    } catch (err) {
+      await releaseHold()
+      throw err
+    }
+    Object.assign(appointment, visit)
   }
 
   appointment.startTime = DateManupulation.convertTo24HourFormat(
@@ -3199,6 +3354,9 @@ exports.bookAppointment = async (req, res, next) => {
       ],
     })
     employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
+    // Travel time around home visits counts as busy when picking a barber.
+    const travel = await mobileBarber.travelBlocks(employeeData.map((e) => e.id), appointment.on)
+    for (const emp of employeeData) emp.jobs.push(...(travel.get(Number(emp.id)) || []))
   }
 
   console.log(
@@ -3224,7 +3382,9 @@ exports.bookAppointment = async (req, res, next) => {
   }
   // Manual approval: the booking waits for the shop. Its jobs keep their normal
   // status, so the time slot stays held; accept restores 'book' / 'pending'.
-  const needsApproval = await requiresApproval(appointment.salonDetailId, customerId)
+  // A home visit always waits for the barber to accept it.
+  const needsApproval =
+    appointment.isMobileVisit || (await requiresApproval(appointment.salonDetailId, customerId))
   if (needsApproval) {
     appointment.status = 'requested'
     appointment.requestExpiresAt = requestExpiresAt(appointment.on, appointment.startTime)
@@ -3465,7 +3625,9 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   )
 
   // Manual-approval shop: authorise only; captured when the shop accepts.
-  const needsApproval = await requiresApproval(req.body.salonId, customerId)
+  // A home visit always waits for the barber to accept it.
+  const mobileVisit = req.body.mobileVisit === true || req.body.mobileVisit === 'true'
+  const needsApproval = mobileVisit || (await requiresApproval(req.body.salonId, customerId))
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
@@ -3582,6 +3744,12 @@ exports.fetchAppointments = async (req, res, next) => {
       'clientDeclineNote',
       'clientDeclinedAt',
       'visitAddressId',
+      'isMobileVisit',
+      'travelFee',
+      'travelMiles',
+      'onTheWayAt',
+      'etaMinutes',
+      'arrivedAt',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -3670,6 +3838,12 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'clientDeclineNote',
       'clientDeclinedAt',
       'visitAddressId',
+      'isMobileVisit',
+      'travelFee',
+      'travelMiles',
+      'onTheWayAt',
+      'etaMinutes',
+      'arrivedAt',
       'loyaltyDiscount',
       'loyaltyPercentage',
       [
@@ -3793,6 +3967,13 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
   const output = data.toJSON()
   output.jobs = actualJobs
   await renterMove.applyVisitAddresses(output)
+  // Home visit: salonDetail.addressDB is now the client's own address.
+  if (output.isMobileVisit) {
+    const visit = await addressDBS.findByPk(output.visitAddressId)
+    output.visitAddress = visit ? { ...visit.toJSON(), note: visit.title || '' } : null
+    // "Your barber is on the way / has arrived" banner.
+    Object.assign(output, mobileVisitStatus.statusFields(output))
+  }
   output.freeCancelAfterMove = await renterMove.freeCancelAfterMove(output.id)
   // "Your barber has moved" card: only for bookings on or after the move.
   const moved = await renterMove.recentMove(output.salonDetail?.id)
@@ -6655,7 +6836,7 @@ exports.sendReminder = async (req, res) => {
           },
         ],
       },
-      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder'],
+      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder', 'isMobileVisit', 'visitAddressId'],
       include: [
         {
           model: jobs,
@@ -6785,9 +6966,19 @@ exports.sendReminder = async (req, res) => {
               body: `Your booking with ${salonUser.firstName} is in about 2 hours ${dateShort}  @ ${time12Hour}`,
             };
 
+      // Home visit: say the barber is coming to the client.
+      if (b.isMobileVisit) {
+        notifCustomer.body = notifCustomer.body.replace('Your booking with', 'Your home visit from')
+      }
+
       // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
       const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for a';
-      const serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
+      let serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
+      if (b.isMobileVisit && b.visitAddressId) {
+        const visit = await addressDBS.findByPk(b.visitAddressId)
+        const line = mobileBarber.addressLine(visit)
+        if (line) serviceTextWithPrefix += `. Home visit: ${line}`
+      }
       const notifSalon =
         which === '24h'
           ? {

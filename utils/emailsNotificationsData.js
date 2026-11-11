@@ -12,6 +12,7 @@ const {
 } = require('../models')
 const { literal } = require('sequelize')
 const { emailDateFormate } = require('./emailDateFormate')
+const mobileBarber = require('../helper/mobileBarber')
 
 exports.bookingDataForEmailAndNotifications = async (bookingId) => {
   const data = await booking.findByPk(bookingId, {
@@ -35,6 +36,9 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
       'customerId',
       'noshowPolicyVersion',
       'cancellationPolicyVersion',
+      'isMobileVisit',
+      'visitAddressId',
+      'travelFee',
 
       'by',
       [
@@ -195,5 +199,15 @@ exports.bookingDataForEmailAndNotifications = async (bookingId) => {
 
   const appointmentDate = emailDateFormate(data.on, data.startTime)
   const output = JSON.parse(JSON.stringify(data))
+  // Home visit: emails and pushes show the client's address (postcode area
+  // only while the request waits for the barber).
+  if (output.isMobileVisit && output.visitAddressId) {
+    await mobileBarber.attachVisitAddress(output)
+    if (output.visitAddress && output.salonDetail) {
+      output.salonDetail.addressDB = output.visitAddress
+      salon.latitude = output.visitAddress.lat
+      salon.longitude = output.visitAddress.lng
+    }
+  }
   return { appointment: output, appointmentDate, salon, client, employeeData }
 }

@@ -5,6 +5,7 @@ const employeeController = require('../../controllers/salonControllers/employeeC
 const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
 const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
 const hiringRequestsController = require('../../controllers/salonControllers/hiringRequestsController')
+const mobileBarberController = require('../../controllers/mobileBarberController')
 const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
@@ -173,5 +174,13 @@ router.patch('/chair-market/renters/:renter/cover', catchAsync(chairMarketContro
 router.get('/chair-market/team/:employee/cover', catchAsync(chairMarketController.teamCover))
 router.patch('/chair-market/team/:employee/cover', catchAsync(chairMarketController.setTeamCover))
 
+// Mobile barber: "Mobile visits" settings
+router.get('/mobile-visits/me', catchAsync(mobileBarberController.getMine))
+router.put('/mobile-visits/me', catchAsync(mobileBarberController.saveMine))
+router.put('/mobile-visits/work-mode', catchAsync(mobileBarberController.setWorkMode))
+router.get('/mobile-visits/team', catchAsync(mobileBarberController.team))
+router.put('/mobile-visits/team/:employee', catchAsync(mobileBarberController.setStaffAllowed))
+router.post('/mobile-visits/bookings/:booking/on-the-way', catchAsync(mobileBarberController.onTheWay))
+router.post('/mobile-visits/bookings/:booking/arrived', catchAsync(mobileBarberController.arrived))
 
 module.exports = router

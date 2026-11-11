@@ -12,6 +12,7 @@ const protect = require('../../middlewares/accessCheck')
 const loyaltyController = require('../../controllers/loyaltyController')
 const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
 const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
+const mobileBarberController = require('../../controllers/mobileBarberController')
 const catchAsync = require('../../middlewares/catchAync')
 const {
   user,
@@ -238,6 +239,7 @@ router.patch('/renter-moves/:move/rent-settled', protect, adminOnly, catchAsync(
 router.patch('/renter-moves/:move/retry', protect, adminOnly, catchAsync(renterMoveController.adminRetry))
 router.get('/chair-market', protect, adminOnly, catchAsync(chairMarketController.adminOverview))
 router.patch('/chair-market/offers/:offer/close', protect, adminOnly, catchAsync(chairMarketController.adminCloseOffer))
+router.get('/mobile-barbers', protect, catchAsync(mobileBarberController.adminList))
 router.get(
   '/salon-loyalty/:id',
   protect,
