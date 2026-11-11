@@ -35,6 +35,17 @@ test('computeLines never takes more than the price', () => {
   assert.equal(lines[0].loyaltyDiscount, 0)
 })
 
+test('computeLines: 100% makes eligible services free, excluded ones stay', () => {
+  const { lines, loyaltyDiscount } = r.computeLines(
+    [{ serviceId: 1, price: 25.5 }, { serviceId: 2, price: 22.5 }],
+    100,
+    [2],
+  )
+  assert.equal(lines[0].loyaltyDiscount, 25.5)
+  assert.equal(lines[1].loyaltyDiscount, 0)
+  assert.equal(loyaltyDiscount, 25.5)
+})
+
 test('rewardStatus', () => {
   const now = new Date('2026-10-19T12:00:00Z')
   assert.equal(r.rewardStatus(null), 'none')
@@ -98,7 +109,8 @@ test('validateSettings', () => {
   assert.ok(r.validateSettings({ visitsRequired: 21 }).error)
   assert.ok(r.validateSettings({ visitsRequired: 2.5 }).error)
   assert.ok(r.validateSettings({ discountPercentage: 4 }).error)
-  assert.ok(r.validateSettings({ discountPercentage: 51 }).error)
+  assert.ok(r.validateSettings({ discountPercentage: 101 }).error)
+  assert.equal(r.validateSettings({ discountPercentage: 100 }).values.discountPercentage, 100)
   assert.ok(r.validateSettings({ isActive: 'yes' }).error)
   assert.ok(r.validateSettings({ excludedServiceIds: 'x' }).error)
   assert.ok(r.validateSettings({ rewardExpiryDays: 1000 }).error)

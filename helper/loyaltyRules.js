@@ -3,12 +3,13 @@
  * helper/loyalty.js loads the data and calls these.
  */
 
-// Allowed settings (agreed with the client, 2026-10-19).
+// Allowed settings (agreed with the client 2026-10-19; up to 100% off from
+// 2026-10-27 so a shop can give a free visit).
 const LIMITS = {
   visitsMin: 2,
   visitsMax: 20,
   percentMin: 5,
-  percentMax: 50,
+  percentMax: 100,
   expiryDaysMax: 730,
 }
 
