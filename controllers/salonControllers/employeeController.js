@@ -148,10 +148,10 @@ exports.fetchEmployees = async (req, res, next) => {
     },
   })
 
-  // Chair renters pay for their own plan, so they never use one of the shop's seats.
+  // Staff use the shop's seats; chair renters only when the shop covers their plan.
   const activeStaffCount = await employee.count({
     where: { salonDetailId, deleted: false, isOwner: false, status: true, isExternalEmployee: false },
-  })
+  }) + await require('../../helper/renterCoverage').coveredCount(salonDetailId)
   // activeMembers = owner (1) + active staff (aligns with membersAllowed = owner + N staff)
   const activeMembers = 1 + activeStaffCount
 
@@ -205,6 +205,8 @@ exports.AddEmployee = async (req, res, next) => {
       isExternalEmployee: false,
     },
   })
+  // Chair renters whose plan the shop covers use seats too.
+  teamCount += await require('../../helper/renterCoverage').coveredCount(salonDetails.id)
   // to equal self employee
 
   const addingRenter = req.body?.isExternalEmployee == 'true'
@@ -220,7 +222,9 @@ exports.AddEmployee = async (req, res, next) => {
     }
   }
   const salonDetailId = salonDetails.id
-  const userExist = await user.findOne({
+  // Someone with only a client app account (e.g. hired from a client app
+  // application) can still get a business account with the same email.
+  const sameContact = await user.findAll({
     where: {
       [Op.or]: [
         { email: email },
@@ -229,6 +233,7 @@ exports.AddEmployee = async (req, res, next) => {
       deletedAt: { [Op.is]: null },
     },
   })
+  const userExist = sameContact.find((u) => u.userTypeId !== 1) || null
 
   //   return res.json(req.body)
   if (userExist) {
@@ -392,6 +397,22 @@ exports.AddEmployee = async (req, res, next) => {
       link: req.body.link,
     }
     inviteEmployeeEmail([email], emailData)
+    // A new team member or chair renter fills one position of the shop's advert.
+    const joined = await require('../../helper/hiringRequests').onHired({
+      shopSalonId: salonDetailId,
+      kind: isExternalEmployeeCondition ? 'chair' : 'staff',
+      email,
+      phone: phoneNum,
+      offerId: req.body.hiringOfferId,
+    })
+    // A chair renter hired with "Trim plan included": the shop covers their plan.
+    if (joined?.coversPlan && externalEmployeeSalonId) {
+      try {
+        await require('../../helper/renterCoverage').startCover(salonDetailId, externalEmployeeSalonId, { notify: false })
+      } catch (err) {
+        await require('../../helper/renterCoverage').coverFailed(salonDetailId, externalEmployeeSalonId, err.message)
+      }
+    }
     return res.json(
       returnFunction(
         '1',

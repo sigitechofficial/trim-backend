@@ -31,11 +31,6 @@ module.exports = async function Throw(
     userId: userId,
   }
   if (validData.rating) input.type = 'rating'
-  else if (
-    validData.type === 'rentChairAdvertisementEnquiry' ||
-    validData.type === 'rentChairAdvertisementEnquiryMessage'
-  )
-    input.type = 'advert'
   if (broadcastTo) input.to = broadcastTo
 
   pushNotification.create(input)

@@ -23,6 +23,36 @@ async function ensureChairMarketSchema(db) {
     skills: { type: DataTypes.STRING(255), allowNull: true },
     hiddenShopIds: { type: DataTypes.TEXT, allowNull: true },
   })
+  await addMissingColumns(qi, 'chairOffers', {
+    kind: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'chair' },
+    source: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'business' },
+    applicantInfo: { type: DataTypes.TEXT, allowNull: true },
+    payType: { type: DataTypes.STRING(16), allowNull: true },
+    coversPlan: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    planWish: { type: DataTypes.STRING(8), allowNull: true },
+    stage: { type: DataTypes.STRING(16), allowNull: true },
+    startAsks: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    startAskedOn: { type: DataTypes.DATEONLY, allowNull: true },
+  })
+  // Client app applicants have no renter shop yet.
+  const offerCols = await qi.describeTable('chairOffers')
+  if (offerCols.renterSalonId && offerCols.renterSalonId.allowNull === false) {
+    await qi.changeColumn('chairOffers', 'renterSalonId', { type: DataTypes.INTEGER, allowNull: true })
+    console.log('[chairMarketSchema] chairOffers.renterSalonId can now be empty')
+  }
+  await addMissingColumns(qi, 'chairOfferRounds', {
+    payType: { type: DataTypes.STRING(16), allowNull: true },
+  })
+  await addMissingColumns(qi, 'shopChairListings', {
+    coversPlan: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  })
+  await addMissingColumns(qi, 'salonDetails', {
+    renterCoveredBy: { type: DataTypes.INTEGER, allowNull: true },
+    renterOwnExpiry: { type: DataTypes.DATEONLY, allowNull: true },
+    renterOwnStatus: { type: DataTypes.STRING(32), allowNull: true },
+    renterGraceCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    renterUncoveredBy: { type: DataTypes.INTEGER, allowNull: true },
+  })
 }
 
 module.exports = { ensureChairMarketSchema }

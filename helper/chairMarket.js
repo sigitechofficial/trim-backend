@@ -101,10 +101,26 @@ function prettyDate(v) {
 
 // The name a side shows in notifications: the shop's or the renter's.
 async function sideName(offer, side) {
+  if (side !== 'shop' && !offer.renterSalonId) return applicantName(offer)
   const id = side === 'shop' ? offer.shopSalonId : offer.renterSalonId
   const s = await salonDetail.findByPk(id, { attributes: ['salonName'] })
   return s?.salonName || (side === 'shop' ? 'The shop' : 'The renter')
 }
+
+// Client app applicants: what they entered when applying.
+function applicantOf(offer) {
+  try {
+    return JSON.parse(offer.applicantInfo || '{}') || {}
+  } catch (_) {
+    return {}
+  }
+}
+function applicantName(offer) {
+  const a = applicantOf(offer)
+  return `${a.firstName || ''} ${a.lastName || ''}`.trim() || 'The applicant'
+}
+// "chair offer" or "job offer", for messages.
+const offerWord = (offer) => (offer.kind === 'staff' ? 'job offer' : 'chair offer')
 
 // ---------------------------------------------------------------- helpers
 
@@ -595,9 +611,11 @@ function listingJson(listing, shop) {
       skills: [],
       terms: '',
       note: '',
+      coversPlan: false,
     }
   }
   return {
+    coversPlan: !!listing.coversPlan,
     isHiring: !!listing.isHiring,
     chairs: listing.chairs || 1,
     rentAmount: listing.rentAmount != null ? Number(listing.rentAmount) : null,
@@ -681,6 +699,8 @@ async function saveMyListing(userId, body = {}) {
     skills: skillsOf(body.skills).join(',') || null,
     terms: text(body.terms, MAX_TERMS),
     note: text(body.note, MAX_MESSAGE),
+    // "Trim plan included": the shop covers the renter's plan (uses a team seat).
+    coversPlan: body.coversPlan === true || body.coversPlan === 'true',
   }
   const existing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
   const listing = existing ? await existing.update(values) : await shopChairListing.create(values)
@@ -825,6 +845,9 @@ async function applyToShop(userId, body = {}) {
       trialDate: t.trialDate,
       shopTerms: listing.terms || null,
       renterTerms: asListed ? null : t.terms,
+      // The shop decides coverage; the renter starts from what the listing says.
+      coversPlan: !!listing.coversPlan,
+      planWish: t.planWish,
       expiresAt: expiry(),
     }, { transaction })
     await chairOfferRound.create({ offerId: o.id, by: 'renter', ...t, terms: asListed ? null : t.terms }, { transaction })
@@ -857,8 +880,19 @@ async function hideShop(userId, shopSalonId) {
 
 // ---------------------------------------------------------------- offers
 
-function readTerms(body) {
+const PAY_TYPES = ['salary', 'commission']
+
+// Offer terms. rentAmount/rentCycle hold the rent for a chair, or the pay for a
+// staff job (payType 'salary' with a cycle, or 'commission' as a percentage).
+function readTerms(body, kind = 'chair') {
+  const payType = kind === 'staff' ? (PAY_TYPES.includes(body.payType) ? body.payType : 'salary') : null
+  if (payType === 'commission' && money(body.rentAmount) != null && money(body.rentAmount) > 100) {
+    throw new AppError('Commission must be a percentage from 0 to 100.', 200)
+  }
   return {
+    payType,
+    coversPlan: kind === 'chair' ? body.coversPlan === true || body.coversPlan === 'true' : false,
+    planWish: kind === 'chair' && ['covered', 'own'].includes(body.planWish) ? body.planWish : null,
     rentAmount: money(body.rentAmount),
     rentCycle: cycleOf(body.rentCycle) || (body.rentAmount != null && body.rentAmount !== '' ? 'Weekly' : null),
     startDate: dateOnly(body.startDate, 'start date'),
@@ -910,6 +944,7 @@ async function sendOffer(userId, body = {}) {
       startDate: t.startDate,
       trialDate: t.trialDate,
       shopTerms: t.terms,
+      coversPlan: t.coversPlan,
       expiresAt: expiry(),
     }, { transaction })
     await chairOfferRound.create({ offerId: o.id, by: 'shop', ...t }, { transaction })
@@ -949,7 +984,7 @@ async function counter(userId, offerId, body = {}) {
   assertOpen(offer)
   if (offer.lastBy === side) throw new AppError('Please wait for the other side to answer your last offer.', 200)
   if (offer.rounds >= MAX_ROUNDS) throw new AppError('This offer has had too many rounds. Please accept or decline it.', 200)
-  const t = readTerms({ ...body, rentCycle: body.rentCycle || offer.rentCycle })
+  const t = readTerms({ ...body, rentCycle: body.rentCycle || offer.rentCycle, payType: body.payType || offer.payType }, offer.kind)
   checkTrial(t)
   await sequelize.transaction(async (transaction) => {
     await chairOfferRound.create({ offerId: offer.id, by: side, ...t }, { transaction })
@@ -960,13 +995,17 @@ async function counter(userId, offerId, body = {}) {
       rentCycle: t.rentCycle,
       startDate: t.startDate,
       trialDate: t.trialDate,
+      ...(offer.kind === 'staff' ? { payType: t.payType } : {}),
+      // Only the shop decides whether it covers the renter's plan.
+      ...(side === 'shop' && offer.kind !== 'staff' ? { coversPlan: t.coversPlan } : {}),
+      ...(side === 'renter' && offer.kind !== 'staff' && t.planWish ? { planWish: t.planWish } : {}),
       ...(side === 'shop' ? { shopTerms: t.terms ?? offer.shopTerms } : { renterTerms: t.terms ?? offer.renterTerms }),
       expiresAt: expiry(),
     }, { transaction })
   })
   push([await otherSideUserId(offer, side)], {
     title: 'New counter offer',
-    body: `${await sideName(offer, side)} sent a counter offer${t.rentAmount != null ? `: £${t.rentAmount} ${String(t.rentCycle || '').toLowerCase()}` : ''}${t.startDate ? `, starting ${prettyDate(t.startDate)}` : ''}.`,
+    body: `${await sideName(offer, side)} sent a counter offer${t.rentAmount != null ? `: ${t.payType === 'commission' ? `${t.rentAmount}% commission` : `£${t.rentAmount} ${String(t.rentCycle || '').toLowerCase()}`.trim()}` : ''}${t.startDate ? `, starting ${prettyDate(t.startDate)}` : ''}.`,
   }, { offerId: offer.id })
   return offer
 }
@@ -980,7 +1019,15 @@ async function accept(userId, offerId) {
     where: { id: offer.shopSalonId, deleted: false, [Op.and]: [activeSalonWhere(today())] },
     attributes: ['id', 'userId', 'salonName', 'teamSize'],
   })
-  if (!shop) throw new AppError('This shop cannot take chair renters right now.', 200)
+  if (!shop) throw new AppError(offer.kind === 'staff' ? 'This shop cannot take new staff right now.' : 'This shop cannot take chair renters right now.', 200)
+
+  // Someone from the client app (not a chair renter yet, or a staff job): no move.
+  if (!offer.renterSalonId) return require('./hiringOffers').acceptApplicant({ offer, side, shop, userId })
+
+  // A covered chair uses one of the shop's team seats.
+  if (offer.coversPlan && (await require('./renterCoverage').seatsLeft(shop)) < 1) {
+    throw new AppError('Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
+  }
 
   // Claim the offer first, so a double tap or both sides at once cannot make two moves.
   const [claimed] = await chairOffer.update(
@@ -1006,6 +1053,8 @@ async function accept(userId, offerId) {
   }
   await offer.update({ status: 'accepted', moveId: move.id })
   await renterWorkPref.update({ openToWork: false }, { where: { renterSalonId: offer.renterSalonId } })
+  // The chair is taken from now on; it frees up again if the move is cancelled.
+  await require('./hiringRequests').reserve(offer.shopSalonId, 'chair', offer.id)
 
   // The renter took this deal: their other open offers close.
   const others = await chairOffer.findAll({
@@ -1037,8 +1086,8 @@ async function decline(userId, offerId) {
   await offer.update({ status, closedAt: new Date() })
   const who = await sideName(offer, side)
   push([await otherSideUserId(offer, side)], {
-    title: status === 'declined' ? 'Chair offer declined' : 'Chair offer withdrawn',
-    body: status === 'declined' ? `${who} declined the chair offer.` : `${who} withdrew the chair offer.`,
+    title: status === 'declined' ? `${offer.kind === 'staff' ? 'Job' : 'Chair'} offer declined` : `${offer.kind === 'staff' ? 'Job' : 'Chair'} offer withdrawn`,
+    body: status === 'declined' ? `${who} declined the ${offerWord(offer)}.` : `${who} withdrew the ${offerWord(offer)}.`,
   }, { offerId: offer.id })
   return offer
 }
@@ -1077,11 +1126,21 @@ async function listOffers(userId) {
     const shopUser = j.shop?.user || {}
     if (j.shop) delete j.shop.user
     const renter = j.renter || {}
-    j.renter = { firstName: renter.firstName, lastName: renter.lastName, image: renter.image }
+    const applicant = j.renterSalonId ? null : applicantOf(o)
+    j.renter = applicant
+      ? { firstName: applicant.firstName || renter.firstName, lastName: applicant.lastName || renter.lastName, image: renter.image }
+      : { firstName: renter.firstName, lastName: renter.lastName, image: renter.image }
+    // What a client app applicant told the shop (contact details only after a deal).
+    j.applicant = applicant
+      ? { experience: applicant.experience ?? null, location: applicant.location || null, days: applicant.days || [], skills: applicant.skills || [], note: applicant.note || null }
+      : null
+    delete j.applicantInfo
     j.contact = accepted
       ? side === 'renter'
         ? { email: shopUser.email || null, phone: [shopUser.countryCode, shopUser.phoneNum].filter(Boolean).join(' ') || null }
-        : { email: renter.email || null, phone: [renter.countryCode, renter.phoneNum].filter(Boolean).join(' ') || null }
+        : applicant
+          ? { email: applicant.email || renter.email || null, phone: applicant.phone || [renter.countryCode, renter.phoneNum].filter(Boolean).join(' ') || null }
+          : { email: renter.email || null, phone: [renter.countryCode, renter.phoneNum].filter(Boolean).join(' ') || null }
       : null
     return {
       ...j,
@@ -1109,7 +1168,7 @@ async function expireOffers() {
 async function renterPlans() {
   const rows = await salonDetail.findAll({
     where: { isExternalEmployee: true, deleted: false },
-    attributes: ['id', 'salonName', 'parentSalonId', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'metadata'],
+    attributes: ['id', 'salonName', 'parentSalonId', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'metadata', 'renterCoveredBy', 'renterOwnExpiry', 'renterOwnStatus', 'renterGraceCount'],
     include: [{ model: user, attributes: ['firstName', 'lastName', 'email', 'countryCode', 'phoneNum', 'deleted'] }],
     order: [['registrationExpiryDate', 'ASC']],
     limit: 1000,
@@ -1135,8 +1194,12 @@ async function renterPlans() {
         currentShop: r.parentSalonId ? hostName.get(r.parentSalonId) || null : null,
         expiresOn: r.registrationExpiryDate || null,
         status,
-        // free = the 30 days given when renters got their own plan
-        state: !active ? 'ended' : status === 'renter_switch' ? 'free' : status === 'trial' ? 'trial' : 'paid',
+        // free = free days (when renters got their own plan, or after a shop
+        // stopped covering them); covered = the shop's plan covers it
+        state: !active ? 'ended' : status === 'shop_covered' ? 'covered' : status === 'renter_switch' ? 'free' : status === 'trial' ? 'trial' : 'paid',
+        coveredBy: r.renterCoveredBy ? hostName.get(r.renterCoveredBy) || null : null,
+        ownPlanUntil: r.renterCoveredBy ? r.renterOwnExpiry || null : null,
+        timesUncovered: Number(r.renterGraceCount || 0),
         planName: status === 'renter_switch' ? null : meta?.subscriptionName || null,
       }
     })
@@ -1225,6 +1288,12 @@ async function adminOverview() {
       j.history = (j.history || []).sort((a, b) => a.id - b.id)
       if (j.status === 'open' && j.expiresAt && new Date(j.expiresAt) < now) j.status = 'expired'
       j.startedBy = j.createdBy === j.renterUserId ? 'renter' : 'shop'
+      // Client app applicants: who they are (they have no renter shop).
+      if (!j.renterSalonId) {
+        const a = applicantOf(o)
+        j.applicant = { name: `${a.firstName || ''} ${a.lastName || ''}`.trim() || null, email: a.email || null, phone: a.phone || null }
+      }
+      delete j.applicantInfo
       return j
     }),
   }
@@ -1245,6 +1314,17 @@ async function adminCloseOffer(offerId) {
 }
 
 module.exports = {
+  applicantOf,
+  applicantName,
+  offerWord,
+  readTerms,
+  checkTrial,
+  loadForUser,
+  assertOpen,
+  otherSideUserId,
+  push,
+  prettyDate,
+  expiry,
   adminOverview,
   adminCloseOffer,
   SKILLS,

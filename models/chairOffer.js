@@ -5,7 +5,25 @@ module.exports = (sequelize, DataTypes) => {
     'chairOffer',
     {
       renterUserId: { type: DataTypes.INTEGER, allowNull: false },
-      renterSalonId: { type: DataTypes.INTEGER, allowNull: false },
+      // Null for someone who applied from the client app and is not a chair renter yet.
+      renterSalonId: { type: DataTypes.INTEGER, allowNull: true },
+      // 'chair' (rent a chair) or 'staff' (a job in the shop's team).
+      kind: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'chair' },
+      // 'business' (a chair renter in the business app) or 'client' (the client app).
+      source: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'business' },
+      // Client app applicants: name, email, phone, experience, location, days, note (JSON).
+      applicantInfo: { type: DataTypes.TEXT, allowNull: true },
+      // Staff jobs: 'salary' or 'commission' (rentAmount holds the amount or %).
+      payType: { type: DataTypes.STRING(16), allowNull: true },
+      // Chair offers: the shop covers the renter's Trim plan (uses a team seat).
+      coversPlan: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      // What the renter or applicant asked for: 'covered' (the shop's plan) or
+      // 'own' (their own £6.99 plan). The shop decides with coversPlan.
+      planWish: { type: DataTypes.STRING(8), allowNull: true },
+      // After a client app applicant is accepted: starting | joined | not_started.
+      stage: { type: DataTypes.STRING(16), allowNull: true },
+      startAsks: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      startAskedOn: { type: DataTypes.DATEONLY, allowNull: true },
       shopSalonId: { type: DataTypes.INTEGER, allowNull: false },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       // open | accepted | declined | withdrawn | expired | closed (renter took another offer)

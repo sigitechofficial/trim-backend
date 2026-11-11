@@ -5,7 +5,10 @@
  * Every shop row, a normal shop or a chair renter's own shop
  * (isExternalEmployee=1), is active on its OWN subscription:
  *   registrationExpiryDate >= today AND
- *   subscriptionLatestPaymentStatus NOT IN ('expired','payment_failed','paused','refunded').
+ *   subscriptionLatestPaymentStatus NOT IN ('expired','paused','refunded').
+ * A failed renewal ('payment_failed') does not switch a shop off: the store
+ * keeps it going for its billing grace period, and the webhook moves
+ * registrationExpiryDate to the end of that grace period.
  * A chair renter pays for their own plan, so the host shop's subscription no
  * longer decides whether the renter can be found and booked.
  *
@@ -16,7 +19,7 @@
 const { Op } = require('sequelize')
 const { DateTime } = require('luxon')
 
-const BLOCKED_STATUSES = ['expired', 'payment_failed', 'paused', 'refunded']
+const BLOCKED_STATUSES = ['expired', 'paused', 'refunded']
 const BLOCKED_STATUSES_SQL = `(${BLOCKED_STATUSES.map((s) => `'${s}'`).join(',')})`
 
 const quoteDate = (dateOnly) => `'${String(dateOnly).replace(/[^0-9-]/g, '')}'`

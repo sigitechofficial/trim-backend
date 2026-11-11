@@ -1363,6 +1363,14 @@ const handleBillingIssue = async (event) => {
     }
 
     salon.subscriptionLatestPaymentStatus = 'payment_failed';
+    // The store keeps the plan going during its billing grace period: keep the
+    // shop (or chair renter) bookable until then.
+    const graceMs = Number(event.grace_period_expiration_at_ms)
+    if (Number.isFinite(graceMs) && graceMs > 0) {
+      const graceEnd = new Date(graceMs).toISOString().slice(0, 10)
+      const current = salon.registrationExpiryDate ? String(salon.registrationExpiryDate).slice(0, 10) : ''
+      if (graceEnd > current) salon.registrationExpiryDate = graceEnd
+    }
     await salon.save();
 
     // Always find by salonDetailId and subscriptionSource only

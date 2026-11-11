@@ -57,73 +57,21 @@ router.get('/service-types', publicProtected, catchAsync(fetchServiceTypes))
 router.post('/search', publicProtected, catchAsync(appController.searchSalons))
 router.get('/favorites/:favorite', protect, catchAsync(appController.home))
 
+// Applications for a chair or a staff job (offers with terms, like the business app)
+const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
+router.get('/applications', protect, catchAsync(chairMarketController.listOffers))
+router.post('/applications', protect, catchAsync(chairMarketController.applyFromClient))
+router.post('/applications/:offer/counter', protect, catchAsync(chairMarketController.counter))
+router.patch('/applications/:offer/accept', protect, catchAsync(chairMarketController.accept))
+router.patch('/applications/:offer/decline', protect, catchAsync(chairMarketController.decline))
+
 router.get(
   '/salon-detail/:id',
   publicProtected,
   catchAsync(appController.salonDetails),
 )
 
-router.post(
-  '/rent-chair-advertisement-enquiry',
-  publicProtected,
-  catchAsync(appController.submitRentChairAdvertisementEnquiry),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiries',
-  protect,
-  catchAsync(appController.listRentChairAdvertisementEnquiries),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiry/by-salon/:salonDetailId',
-  protect,
-  catchAsync(appController.getRentChairAdvertisementEnquiryBySalon),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.getRentChairAdvertisementEnquiryMessages),
-)
-
-router.post(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.sendRentChairAdvertisementEnquiryMessage),
-)
-
 //! Staff advertisement (customer side)
-router.post(
-  '/staff-advertisement-enquiry',
-  publicProtected,
-  catchAsync(appController.submitStaffAdvertisementEnquiry),
-)
-
-router.get(
-  '/staff-advertisement-enquiries',
-  protect,
-  catchAsync(appController.listStaffAdvertisementEnquiries),
-)
-
-router.get(
-  '/staff-advertisement-enquiry/by-salon/:salonDetailId',
-  protect,
-  catchAsync(appController.getStaffAdvertisementEnquiryBySalon),
-)
-
-router.get(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.getStaffAdvertisementEnquiryMessages),
-)
-
-router.post(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.sendStaffAdvertisementEnquiryMessage),
-)
-
 router.get('/salon-times/:salon', catchAsync(appController.salonTimes))
 router.get('/employee-times/:employee', catchAsync(appController.employeeTimes))
 router.get('/employee-detail/:id', catchAsync(appController.employeeDetails))

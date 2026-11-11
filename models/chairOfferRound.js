@@ -7,6 +7,8 @@ module.exports = (sequelize, DataTypes) => {
       by: { type: DataTypes.STRING(8), allowNull: false }, // 'shop' | 'renter'
       rentAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       rentCycle: { type: DataTypes.STRING(16), allowNull: true },
+      // Staff jobs: 'salary' or 'commission'.
+      payType: { type: DataTypes.STRING(16), allowNull: true },
       startDate: { type: DataTypes.DATEONLY, allowNull: false },
       trialDate: { type: DataTypes.DATEONLY, allowNull: true },
       terms: { type: DataTypes.TEXT, allowNull: true },

@@ -187,7 +187,7 @@ async function handleV2Webhook(notification, res) {
       case 'DID_FAIL_TO_RENEW':
       case 'EXPIRED':
         if (subtype === 'BILLING_RETRY' || notificationType === 'DID_FAIL_TO_RENEW') {
-          await handleRenewalFailure(transactionData, salonUser, salon);
+          await handleRenewalFailure(transactionData, salonUser, salon, gracePeriodEndOf(renewalJWT));
         } else {
           await handleGracePeriodExpired(transactionData, salonUser, salon);
         }
@@ -964,7 +964,19 @@ async function handleRenewal(transaction, salonUser, salon) {
   console.log(`   Subscription: ${subscriptionName}`);
 }
 
-async function handleRenewalFailure(transaction, salonUser, salon) {
+// Apple's billing grace period end (ms) from the signed renewal info, or null.
+function gracePeriodEndOf(renewalJWT) {
+  try {
+    if (!renewalJWT) return null
+    const info = JSON.parse(Buffer.from(renewalJWT.split('.')[1], 'base64').toString())
+    const ms = Number(info?.gracePeriodExpiresDate)
+    return Number.isFinite(ms) && ms > 0 ? ms : null
+  } catch (_) {
+    return null
+  }
+}
+
+async function handleRenewalFailure(transaction, salonUser, salon, graceMs = null) {
   console.log('❌ Handling DID_FAIL_TO_RENEW');
   const subscription = await subscriptions.findOne({
     where: {
@@ -980,6 +992,13 @@ async function handleRenewalFailure(transaction, salonUser, salon) {
   }
   
   salon.subscriptionLatestPaymentStatus = 'payment_failed';
+  // Apple keeps the plan going during its billing grace period: keep the shop
+  // (or chair renter) bookable until then.
+  if (graceMs) {
+    const graceEnd = new Date(graceMs).toISOString().slice(0, 10);
+    const current = salon.registrationExpiryDate ? String(salon.registrationExpiryDate).slice(0, 10) : '';
+    if (graceEnd > current) salon.registrationExpiryDate = graceEnd;
+  }
   await salon.save();
   
   console.log(`⚠️ Renewal failure processed for salon ${salon.id}`);

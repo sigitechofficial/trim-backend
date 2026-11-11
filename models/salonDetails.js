@@ -147,6 +147,35 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Chair renter whose Trim plan a shop covers: that shop's id. While set,
+    // the renter row mirrors the shop's plan date and status 'shop_covered';
+    // the renter's own plan is kept in renterOwnExpiry / renterOwnStatus.
+    renterCoveredBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    renterOwnExpiry: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    renterOwnStatus: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
+    // How many times this renter got free days after a shop stopped covering
+    // them: 7 days the first time, 3 after that (helper/renterCoverage.js).
+    // The shop whose plan stopped covering this renter because that plan lapsed
+    // (or ran out of seats). When the shop's plan is active again the owner
+    // is asked once to cover them again; then it is cleared.
+    renterUncoveredBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    renterGraceCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
     deleted: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
@@ -336,10 +365,6 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.rentCollection) // only for external employee salon id
     models.rentCollection.belongsTo(salonDetail)
-
-    salonDetail.hasMany(models.rentChairAdvertisementEnquiry)
-
-    salonDetail.hasMany(models.staffAdvertisementEnquiry)
   }
 
   return salonDetail

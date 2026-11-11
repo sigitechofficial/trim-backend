@@ -146,6 +146,8 @@ const renterSubscriptionOf = (salon) => ({
   active: isSalonRowActive(salon, DateTime.now().toISODate()),
   expiresOn: salon?.registrationExpiryDate ?? null,
   status: salon?.subscriptionLatestPaymentStatus ?? null,
+  // Set when the renter's shop covers their plan (status 'shop_covered').
+  coveredByShop: salon?.subscriptionLatestPaymentStatus === 'shop_covered',
 })
 
 exports.googleSignIn = async (req, res) => {
@@ -567,10 +569,14 @@ exports.login = async (req, res, next) => {
   else if (req.body.loginBy == 'email' && !password)
     throw new appError('Please provide Password', 200);
 
-  const User = await user.findOne({
+  // One email can have a client app account and a business account (e.g. a
+  // client hired from the client app): sign in to the business one.
+  const sameEmail = await user.findAll({
     where: { email, deleted: false },
     include: [{ model: deviceToken, required: false, attributes: ['tokenId', 'userId'] }],
+    order: [['id', 'DESC']],
   });
+  const User = sameEmail.find((u) => u.userTypeId != 1) || sameEmail[0] || null;
 
   if (!User && !password) {
     return res.json(

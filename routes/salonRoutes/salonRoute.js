@@ -319,25 +319,6 @@ router.get('/announcements', catchAsync(salonController.fetchAnnouncements))
 
 //! Client Feed Back
 router.get('/notifications', catchAsync(salonController.fetchNotifications))
-router.get(
-  '/rent-chair-advertisement-enquiries',
-  catchAsync(salonController.listRentChairAdvertisementEnquiries),
-)
-router.get(
-  '/rent-chair-advertisement-enquiry/:enquiryId',
-  catchAsync(salonController.getRentChairAdvertisementEnquiryDetail),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  catchAsync(salonController.getRentChairAdvertisementEnquiryMessages),
-)
-
-router.post(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  catchAsync(salonController.sendRentChairAdvertisementEnquiryMessage),
-)
-
 //! Staff advertisement (owner side)
 router.get(
   '/staff-advertisement-status',
@@ -347,23 +328,6 @@ router.post(
   '/staff-advertisement',
   catchAsync(salonController.updateStaffAdvertisement),
 )
-router.get(
-  '/staff-advertisement-enquiries',
-  catchAsync(salonController.listStaffAdvertisementEnquiries),
-)
-router.get(
-  '/staff-advertisement-enquiry/:enquiryId',
-  catchAsync(salonController.getStaffAdvertisementEnquiryDetail),
-)
-router.get(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  catchAsync(salonController.getStaffAdvertisementEnquiryMessages),
-)
-router.post(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  catchAsync(salonController.sendStaffAdvertisementEnquiryMessage),
-)
-
 router.get(
   '/client-feedback/salon/:salon',
   catchAsync(customerController.clientFeedBack),

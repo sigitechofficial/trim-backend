@@ -16,7 +16,13 @@ if (enabled) {
     try {
       const summary = await renterMove.runDue()
       summary.offersExpired = await chairMarket.expireOffers()
-      if (summary.completed || summary.failed || summary.graceReminders || summary.graceEnded || summary.planReminders || summary.offersExpired) {
+      const cover = await require('../helper/renterCoverage').syncCoverage()
+      summary.coverageEnded = cover.ended
+      summary.coverOwnersTold = cover.ownersTold + cover.ownersAsked
+      const starts = await require('../helper/hiringOffers').runStartChecks()
+      summary.startQuestions = starts.asked
+      summary.startsClosed = starts.closed
+      if (summary.completed || summary.failed || summary.graceReminders || summary.graceEnded || summary.planReminders || summary.offersExpired || summary.coverageEnded || summary.coverOwnersTold || summary.startQuestions || summary.startsClosed) {
         console.log('[RenterMoves] run summary:', summary)
       }
     } catch (err) {

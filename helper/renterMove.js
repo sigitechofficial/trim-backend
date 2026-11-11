@@ -334,7 +334,11 @@ async function settleRent({ hostUserId, moveId }) {
 // A chair market offer whose move was cancelled shows as cancelled too.
 async function cancelLinkedOffer(moveId) {
   try {
-    if (chairOffer) await chairOffer.update({ status: 'cancelled', closedAt: new Date() }, { where: { moveId, status: 'accepted' } })
+    if (!chairOffer) return
+    const linked = await chairOffer.findAll({ where: { moveId, status: 'accepted' }, attributes: ['id', 'shopSalonId'] })
+    await chairOffer.update({ status: 'cancelled', closedAt: new Date() }, { where: { moveId, status: 'accepted' } })
+    // The chair it reserved is free again.
+    for (const o of linked) await require('./hiringRequests').release(o.shopSalonId, 'chair')
   } catch (err) {
     console.error('[renterMove] cancelling linked offer failed:', err.message)
   }
@@ -590,8 +594,40 @@ async function runMove(moveId) {
   if (notify) {
     await declinePendingRequests(notify.move, notify.toSalon)
     notifyMoved(notify)
+    // Coverage and the shop's chair advert follow the renter.
+    await afterRenterMoved(notify.move, notify.renterSalon, notify.toSalon)
   }
   return result
+}
+
+// After a move: the old shop's coverage of the renter's plan ends, the new
+// shop covers it if the deal said so, and the new shop's chair advert counts
+// the chair as filled (a chair market deal already reserved it on accept).
+async function afterRenterMoved(move, renterSalon, toSalon) {
+  try {
+    // Required here so the unit tests can load this file without every model.
+    const coverage = require('./renterCoverage')
+    const { onHired } = require('./hiringRequests')
+    const deal = toSalon && chairOffer ? await chairOffer.findOne({ where: { moveId: move.id }, attributes: ['id', 'coversPlan'] }) : null
+    const newShopCovers = !!deal?.coversPlan
+    const fresh = await salonDetail.findByPk(move.renterSalonId)
+    // The old shop's coverage ends. Say nothing when the new shop covers it at once.
+    if (fresh?.renterCoveredBy && fresh.renterCoveredBy !== toSalon?.id) await coverage.endCover(fresh, 'left', { notify: !newShopCovers })
+    if (!toSalon) return
+    if (newShopCovers) {
+      try {
+        await coverage.startCover(toSalon.id, move.renterSalonId)
+      } catch (err) {
+        await coverage.coverFailed(toSalon.id, move.renterSalonId, err.message)
+      }
+    }
+    if (!deal) {
+      const u = await user.findByPk(move.renterUserId, { attributes: ['email', 'phoneNum'] })
+      await onHired({ shopSalonId: toSalon.id, kind: 'chair', email: u?.email, phone: u?.phoneNum })
+    }
+  } catch (err) {
+    console.error('[renterMove] after-move updates failed:', err.message)
+  }
 }
 
 // Booking requests the renter had not answered, dated on or after the move:

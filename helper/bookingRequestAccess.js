@@ -2,7 +2,7 @@
 //
 // Staff sessions use the shop owner's user id in the JWT; the device token is
 // also linked to the staff member's own user (userTypeId 3), which is how the
-// acting staff member is identified (same approach as rentChairEnquiryHelper).
+// acting staff member is identified.
 //
 // Permission "bookingRequests": none | low (own bookings only) | high (all).
 // Staff without that key yet inherit it from "appointments" (the level that

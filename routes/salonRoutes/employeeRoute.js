@@ -4,6 +4,7 @@ const { employee, time, employeService } = require('../../models')
 const employeeController = require('../../controllers/salonControllers/employeeController')
 const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
 const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
+const hiringRequestsController = require('../../controllers/salonControllers/hiringRequestsController')
 const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
@@ -164,5 +165,13 @@ router.put('/chair-market/listing', catchAsync(chairMarketController.saveMyListi
 router.get('/chair-market/hiring-shops', catchAsync(chairMarketController.listHiringShops))
 router.post('/chair-market/apply', catchAsync(chairMarketController.applyToShop))
 router.post('/chair-market/hiring-shops/:shop/hide', catchAsync(chairMarketController.hideShop))
+// Hiring requests: client app applications and business app chair offers in one list
+router.get('/hiring-requests', catchAsync(hiringRequestsController.list))
+router.get('/hiring-requests/count', catchAsync(hiringRequestsController.count))
+router.post('/chair-market/offers/:offer/start', catchAsync(chairMarketController.startDecision))
+router.patch('/chair-market/renters/:renter/cover', catchAsync(chairMarketController.setCover))
+router.get('/chair-market/team/:employee/cover', catchAsync(chairMarketController.teamCover))
+router.patch('/chair-market/team/:employee/cover', catchAsync(chairMarketController.setTeamCover))
+
 
 module.exports = router

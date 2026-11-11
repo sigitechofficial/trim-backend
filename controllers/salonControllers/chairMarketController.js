@@ -45,12 +45,45 @@ exports.counter = async (req, res) => {
 
 exports.accept = async (req, res) => {
   const { offer, move } = await market.accept(req.user.id, req.params.offer)
-  return ok(res, 'Offer accepted. The move is set up.', { offer, move })
+  return ok(res, move ? 'Offer accepted. The move is set up.' : `Offer accepted. Start date: ${market.prettyDate(offer.startDate)}.`, { offer, move })
 }
 
 exports.decline = async (req, res) => {
   const offer = await market.decline(req.user.id, req.params.offer)
   return ok(res, offer.status === 'declined' ? 'Offer declined.' : 'Offer withdrawn.', { offer })
+}
+
+// ---- Shop: client app applicants on their start date ----
+
+// { action: 'not_started' } or { action: 'new_date', startDate }
+exports.startDecision = async (req, res) => {
+  const offer = await require('../../helper/hiringOffers').startDecision(req.user.id, req.params.offer, req.body?.action, req.body)
+  return ok(res, req.body?.action === 'new_date' ? 'Start date changed.' : 'Offer closed. The place is open again.', { offer })
+}
+
+// ---- Shop: cover a chair renter's Trim plan ----
+
+// { cover: true | false }
+exports.setCover = async (req, res) => {
+  const cover = req.body?.cover === true || req.body?.cover === 'true'
+  const r = await require('../../helper/renterCoverage').setCover(req.user.id, req.params.renter, cover)
+  return ok(res, cover ? 'Your plan now covers this chair renter.' : r.graceDays ? `Your plan no longer covers this chair renter. They have ${r.graceDays} days to choose their own plan.` : 'Your plan no longer covers this chair renter. They are back on their own plan.', r)
+}
+
+exports.teamCover = async (req, res) =>
+  ok(res, 'Success.', await require('../../helper/renterCoverage').teamRowCover(req.user.id, req.params.employee))
+
+exports.setTeamCover = async (req, res) => {
+  const cover = req.body?.cover === true || req.body?.cover === 'true'
+  const r = await require('../../helper/renterCoverage').setTeamRowCover(req.user.id, req.params.employee, cover)
+  return ok(res, cover ? 'Your plan now covers this chair renter.' : r.graceDays ? `Your plan no longer covers this chair renter. They have ${r.graceDays} days to choose their own plan.` : 'Your plan no longer covers this chair renter. They are back on their own plan.', r)
+}
+
+// ---- Client app: applications for a chair or a job ----
+
+exports.applyFromClient = async (req, res) => {
+  const offer = await require('../../helper/hiringOffers').applyFromClient(req.user.id, req.body)
+  return ok(res, 'Application sent.', { offer })
 }
 
 // ---- Shop: "Hiring chair renters" listing ----
