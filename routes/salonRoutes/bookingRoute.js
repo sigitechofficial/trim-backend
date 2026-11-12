@@ -18,7 +18,8 @@ router.use(validateToken)
 router.use(sameShop)
 router.param('bookingId', (req, res, next) => sameShop(req, res, next))
 // Staff permissions, checked on the server (the app only hid the buttons).
-router.use(['/editService', '/jobStatus', '/serviceData', '/mark-appointment-no-show'], needLevel('appointments', 'low', { own: true }))
+const ownAppointments = needLevel('appointments', 'low', { own: true })
+router.use(['/editService', '/jobStatus', '/serviceData'], ownAppointments)
 router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
 router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
 router.use('/importClients', needLevel('client', 'low'))
@@ -112,11 +113,13 @@ router.post('/editService', notWhileRequested, catchAsync(bookingsController.edi
 //!New Routes
 router.patch(
   '/mark-appointment-no-show/:bookingId',
+  ownAppointments,
   notWhileRequested,
   catchAsync(bookingsController.markAppointmentAsNoShow),
 )
 router.patch(
   '/mark-appointment-cancel/:bookingId',
+  needLevel('appointments', 'high'),
   notWhileRequested,
   catchAsync(bookingsController.markAppointmentAscancel),
 )

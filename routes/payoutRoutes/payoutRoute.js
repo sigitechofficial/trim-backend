@@ -2,7 +2,7 @@ const express = require('express')
 const router = express.Router()
 const payoutController = require('../../controllers/salonControllers/payoutController')
 const protect = require('../../middlewares/accessCheck')
-const { ownerOnly, sameShop } = require('../../middlewares/shopRole')
+const { ownerOnly, sameShop, needLevel } = require('../../middlewares/shopRole')
 
 const catchAsync = require('../../middlewares/catchAync')
 router.use(protect)
@@ -11,6 +11,13 @@ router.use(sameShop)
 router.param('employee', (req, res, next) => sameShop(req, res, next))
 router.param('salon', (req, res, next) => sameShop(req, res, next))
 // Sending money is for the owner only.
+// Pay and payout records: staff see only their own (paths ending in their
+// employee id) unless they manage the team (teamMember high).
+const ownRecord = async (req) => {
+  const m = req.path.match(/\/(\d+)\/?$/)
+  return Boolean(m && req._actor?.employeeId && Number(m[1]) === req._actor.employeeId)
+}
+router.use(needLevel('teamMember', 'high', { skip: ownRecord }))
 router.use(['/transfer-salary-to-employee', '/transfer-to-commission-employee', '/transfer-to-rent-a-chair-employee', '/collect-rent'], ownerOnly)
 
 router.get(

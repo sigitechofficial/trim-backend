@@ -133,3 +133,9 @@ test('appointments at low: only bookings with a service of theirs', async () => 
   const high = { ...opts, access: [{ employeeId: 2, key: 'appointments', level: 'high' }] }
   assert.equal(await run(load(STAFF, high).needLevel('appointments', 'low', { own: true }), { bookingId: 71 }), 'next')
 })
+
+test('skip sees the actor (payout: own record)', async () => {
+  const own = async (req) => req._actor?.employeeId === 2
+  assert.equal(await run(load(STAFF).needLevel('teamMember', 'high', { skip: own })), 'next')
+  assert.match(await run(load({ ...STAFF, employeeId: 3 }).needLevel('teamMember', 'high', { skip: own })), /don't have access/)
+})
