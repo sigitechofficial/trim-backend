@@ -109,6 +109,14 @@ test('buttons open 3 hours before the visit, and not for a cancelled one', async
   await assert.rejects(s.arrived({ userId: x.staffUser.id, bookingId: x.b.id, ...AT_DOOR }), /no longer active/)
 })
 
+test('a finished visit shows as over, so the apps hide On my way / I\'ve arrived', async () => {
+  const { db, s } = load()
+  const x = seed(db)
+  assert.equal(s.windowState(x.b), 'open')
+  x.b.status = 'complete'
+  assert.equal(s.windowState(x.b), 'over')
+})
+
 test('arrived keeps the time and tells the client once', async () => {
   const { db, pushes, s } = load()
   const x = seed(db)

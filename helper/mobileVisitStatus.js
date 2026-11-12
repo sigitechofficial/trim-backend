@@ -59,6 +59,8 @@ function endOf(b) {
 
 /** Can the barber use the On my way / Arrived buttons on this booking right now? */
 function windowState(b, now = DateTime.now()) {
+  // A finished, cancelled or no-show visit has nothing left to do.
+  if (b?.status && !ACTIVE.includes(b.status)) return 'over'
   const start = appointmentStart(b.on, b.startTime)
   if (now < start.minus({ hours: OPEN_HOURS_BEFORE })) return 'early'
   if (now > endOf(b).plus({ hours: OPEN_HOURS_AFTER })) return 'over'
