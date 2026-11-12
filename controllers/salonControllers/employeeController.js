@@ -1,6 +1,7 @@
 const { Op, literal, where } = require('sequelize')
 const { renterFreeDays } = require('../../helper/salonSubscriptionRule')
 const renterMove = require('../../helper/renterMove')
+const { revokeStaffDevices } = require('../../helper/staffDevices')
 const fs = require('fs').promises
 const {
   user,
@@ -1144,6 +1145,8 @@ exports.activeBlockEmployee = async (req, res, next) => {
     { status: req.body?.status || false },
     { where: { userId: userId } },
   )
+  // Blocked: signed out of every device now (their token uses the owner's id).
+  if (!req.body?.status) await revokeStaffDevices(userId)
 
   blockEmployees(req.body?.status || false, worker)
   return res.json(returnFunction('1', 'Success', {}, ''))
@@ -1194,7 +1197,8 @@ exports.deleteEmployee = async (req, res, next) => {
   }
   user.update({ deleted: true }, { where: { id: userId } })
   employee.update({ deleted: true }, { where: { userId: userId } })
-  deviceToken.destroy({ where: { userId } })
+  // Also the owner-keyed rows of their phones, so their token stops working.
+  await revokeStaffDevices(userId)
   return res.json(returnFunction('1', 'Success', {}, ''))
 }
 
