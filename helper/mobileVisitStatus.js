@@ -39,8 +39,7 @@ async function push(userIds, notification, data) {
   try {
     const ids = [...new Set(userIds.filter(Boolean))]
     if (!ids.length) return
-    const rows = await deviceToken.findAll({ where: { userId: ids }, attributes: ['tokenId'] })
-    const tokens = rows.map((r) => r.tokenId).filter(Boolean)
+    const tokens = await require('./staffDevices').ownDeviceTokens(ids)
     if (tokens.length) await Throw(tokens, notification, { type: 'mobileVisit', ...data }, ids[0])
   } catch (err) {
     console.error('[mobileVisit] push failed:', err.message)
@@ -129,7 +128,7 @@ async function onTheWay({ userId, bookingId, etaMinutes }) {
   await b.update({ onTheWayAt: new Date(), etaMinutes: eta, lateNoticeAt: null })
   const { shop, emp } = await barberOf(b)
   const at = DateTime.now().setZone('Europe/London').plus({ minutes: eta }).toFormat('h:mm a')
-  push([b.customerId], {
+  await push([b.customerId], {
     title: 'Your barber is on the way',
     body: `${barberName(shop, emp)} is on the way · about ${eta} min (around ${at}).`,
   }, { bookingId: b.id, visitStatus: 'on_the_way' })
@@ -156,7 +155,7 @@ async function arrived({ userId, bookingId, lat, lng }) {
   }
   await b.update({ arrivedAt: new Date(), onTheWayAt: b.onTheWayAt || new Date(), arrivedDistanceM: distance })
   const { shop, emp } = await barberOf(b)
-  push([b.customerId], {
+  await push([b.customerId], {
     title: 'Your barber has arrived',
     body: `${barberName(shop, emp)} is at your address.`,
   }, { bookingId: b.id, visitStatus: 'arrived' })
@@ -179,7 +178,7 @@ async function runVisitNotices(now = DateTime.now()) {
     const { shop, emp } = await barberOf(b)
     if (!b.onTheWayAt && !b.barberRemindedAt && now >= appointmentStart(b.on, b.startTime)) {
       await b.update({ barberRemindedAt: new Date() })
-      push([emp?.userId, shop?.userId], {
+      await push([emp?.userId, shop?.userId], {
         title: 'Home visit now',
         body: 'Your home visit starts now. Tap "On my way" so your client knows when you will arrive.',
       }, { bookingId: b.id, visitStatus: 'none' })
@@ -188,7 +187,7 @@ async function runVisitNotices(now = DateTime.now()) {
     const due = expectedAt(b)
     if (due && !b.lateNoticeAt && now >= DateTime.fromISO(due).plus({ minutes: LATE_GRACE_MINUTES })) {
       await b.update({ lateNoticeAt: new Date() })
-      push([b.customerId], {
+      await push([b.customerId], {
         title: 'Your barber is running a little late',
         body: `${barberName(shop, emp)} is still on the way. Thanks for your patience.`,
       }, { bookingId: b.id, visitStatus: 'on_the_way' })

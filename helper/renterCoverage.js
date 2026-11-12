@@ -48,8 +48,7 @@ const pretty = (d) => DateTime.fromISO(String(d).slice(0, 10)).toFormat('d LLL y
 
 async function push(userId, title, body, data = { type: 'renterPlan' }) {
   try {
-    const rows = await deviceToken.findAll({ where: { userId }, attributes: ['tokenId'] })
-    const tokens = rows.map((r) => r.tokenId).filter(Boolean)
+    const tokens = await require('./staffDevices').ownDeviceTokens(userId)
     if (tokens.length) Throw(tokens, { title, body }, data, userId)
     else await pushNotification.create({ at: new Date(), title, body, data, userId })
   } catch (err) {

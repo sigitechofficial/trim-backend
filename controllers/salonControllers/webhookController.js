@@ -74,11 +74,8 @@ async function maybeSendPayoutBlockedEmail(
   })
   if (!salonOwner?.email) return false
 
-  const tokens = await deviceToken.findAll({
-    where: { userId: salon.userId },
-    attributes: ['tokenId'],
-  })
-  const tokenArray = tokens.map((t) => t.tokenId)
+  // The owner's own phones only, not staff phones linked to the owner.
+  const tokenArray = await require('../../helper/staffDevices').ownDeviceTokens(salon.userId)
   if (tokenArray.length > 0) {
     ThrowNotification(tokenArray, {
       title: 'Payouts Blocked',
@@ -552,11 +549,8 @@ case 'account.updated': {
     currentlyDue.length > 0 &&
     status === STRIPE_STATUS.ACTION_REQUIRED
   ) {
-    const tokens = await deviceToken.findAll({
-      where: { userId: salon.userId },
-      attributes: ['tokenId'],
-    })
-    const tokenArray = tokens.map((t) => t.tokenId)
+    // The owner's own phones only, not staff phones linked to the owner.
+    const tokenArray = await require('../../helper/staffDevices').ownDeviceTokens(salon.userId)
     if (tokenArray.length > 0) {
       ThrowNotification(tokenArray, {
         title: 'Action Required',
@@ -566,11 +560,8 @@ case 'account.updated': {
   }
 
   if (isComplete) {
-    const tokens = await deviceToken.findAll({
-      where: { userId: salon.userId },
-      attributes: ['tokenId'],
-    })
-    const tokenArray = tokens.map((t) => t.tokenId)
+    // The owner's own phones only, not staff phones linked to the owner.
+    const tokenArray = await require('../../helper/staffDevices').ownDeviceTokens(salon.userId)
     if (tokenArray.length > 0) {
       ThrowNotification(tokenArray, {
         title: 'Account Verified',

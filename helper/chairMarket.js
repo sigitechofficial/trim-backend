@@ -131,8 +131,7 @@ async function push(userIds, notification, data) {
     const ids = [...new Set(userIds.filter(Boolean))]
     const payload = { type: 'chairOffer', ...data }
     for (const id of ids) {
-      const rows = await deviceToken.findAll({ where: { userId: id }, attributes: ['tokenId'] })
-      const tokens = rows.map((r) => r.tokenId).filter(Boolean)
+      const tokens = await require('./staffDevices').ownDeviceTokens(id)
       if (tokens.length) Throw(tokens, notification, payload, id)
       else await pushNotification.create({ at: new Date(), title: notification.title, body: notification.body, data: payload, userId: id })
     }
