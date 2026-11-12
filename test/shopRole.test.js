@@ -13,30 +13,45 @@ function table(rows) {
   }
 }
 
-function load(actor, { access = [], defaults = [] } = {}) {
+const { Op } = require('sequelize')
+
+function load(actor, { access = [], defaults = [], bookings = [], jobRows = [] } = {}) {
   const stub = (rel, exports) => {
     const file = require.resolve(path.join(__dirname, '..', rel))
     require.cache[file] = { id: file, filename: file, loaded: true, exports }
   }
   stub('models/index.js', {
     employee: table([
-      { id: 1, salonDetailId: 10, isOwner: true },
-      { id: 2, salonDetailId: 10, isOwner: false },
+      { id: 1, salonDetailId: 10, isOwner: true, userId: 501 },
+      { id: 2, salonDetailId: 10, isOwner: false, userId: 502 },
       { id: 3, salonDetailId: 10, isOwner: false },
       { id: 9, salonDetailId: 99, isOwner: false },
     ]),
     employeeAccess: table(access),
     employeeAccessDefault: table(defaults),
+    booking: { async findByPk(id) { return bookings.find((b) => b.id === Number(id)) || null } },
+    jobs: {
+      ...table(jobRows),
+      async findByPk(id) { return jobRows.find((j) => j.id === Number(id)) || null },
+    },
   })
+  // employee.findAll({ where: { salonDetailId, [Op.or]: [{ id: {in} }, { userId: {in} }] } })
+  const db = require.cache[require.resolve('../models/index.js')].exports
+  db.employee.findAll = async ({ where }) => {
+    const [a, b] = where[Op.or]
+    return db.employee.rows.filter((e) => e.salonDetailId === where.salonDetailId &&
+      (a.id[Op.in].includes(e.id) || b.userId[Op.in].includes(e.userId)))
+  }
+  delete require.cache[require.resolve('../middlewares/bookingRequestGuard')]
   stub('helper/bookingRequestAccess.js', { resolveRequestActor: async () => actor })
   delete require.cache[require.resolve('../middlewares/shopRole')]
   return require('../middlewares/shopRole')
 }
 
-async function run(mw, body = {}) {
+async function run(mw, body = {}, params = {}) {
   let out = 'next'
   const res = { json: (j) => { out = j.message; return res } }
-  await mw({ body, params: {} }, res, (err) => { if (err) throw err })
+  await mw({ body, params }, res, (err) => { if (err) throw err })
   return out
 }
 
@@ -87,4 +102,34 @@ test('profile edits: own needs updateProfile high, others go through team rules'
   assert.match(await run(load(STAFF, own).profileOrTeamEdit, { employeeId: 3 }), /manage team members/)
   assert.match(await run(load(STAFF).profileOrTeamEdit, { employeeId: 2 }), /don't have access/)
   assert.equal(await run(load(OWNER).profileOrTeamEdit, { employeeId: 2 }), 'next')
+})
+
+test('same shop: booking, job, member and shop ids must be the caller’s', async () => {
+  const opts = {
+    bookings: [{ id: 70, salonDetailId: 10 }, { id: 80, salonDetailId: 99 }],
+    jobRows: [{ id: 700, bookingId: 70, employeeId: 2 }, { id: 800, bookingId: 80, employeeId: 9 }],
+  }
+  const { sameShop } = load(OWNER, opts)
+  assert.equal(await run(sameShop, { bookingId: 70, employeeId: [2, 502], salonDetailId: 10 }), 'next')
+  assert.equal(await run(sameShop, { jobId: 700 }), 'next')
+  assert.match(await run(sameShop, { bookingId: 80 }), /another shop/)
+  assert.match(await run(sameShop, {}, { bookingId: '80' }), /another shop/)
+  assert.match(await run(sameShop, { jobIds: [800] }), /another shop/)
+  assert.match(await run(sameShop, { employeeId: 9 }), /not in your shop/)
+  assert.match(await run(sameShop, {}, { employee: '9' }), /not in your shop/)
+  assert.match(await run(sameShop, { salonDetailId: 99 }), /another shop/)
+  assert.equal(await run(load({ shopId: null }).sameShop, { salonDetailId: 99 }), 'next')
+})
+
+test('appointments at low: only bookings with a service of theirs', async () => {
+  const opts = {
+    access: [{ employeeId: 2, key: 'appointments', level: 'low' }],
+    jobRows: [{ id: 700, bookingId: 70, employeeId: 2 }, { id: 701, bookingId: 71, employeeId: 3 }],
+  }
+  const guard = load(STAFF, opts).needLevel('appointments', 'low', { own: true })
+  assert.equal(await run(guard, { bookingId: 70 }), 'next')
+  assert.equal(await run(guard, { jobId: 700 }), 'next')
+  assert.match(await run(guard, { bookingId: 71 }), /your own appointments/)
+  const high = { ...opts, access: [{ employeeId: 2, key: 'appointments', level: 'high' }] }
+  assert.equal(await run(load(STAFF, high).needLevel('appointments', 'low', { own: true }), { bookingId: 71 }), 'next')
 })

@@ -8,13 +8,18 @@ const hiringRequestsController = require('../../controllers/salonControllers/hir
 const mobileBarberController = require('../../controllers/mobileBarberController')
 const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
-const { ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit } = require('../../middlewares/shopRole')
+const { ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, sameShop } = require('../../middlewares/shopRole')
 const catchAsync = require('../../middlewares/catchAync')
 const multer = require('multer')
 const path = require('path')
 
 // !Module:1 Auth
 router.use(validateToken)
+// Team member and shop ids sent by the app must be this shop's.
+router.use(sameShop)
+router.param('employee', (req, res, next) => sameShop(req, res, next))
+router.param('employeeId', (req, res, next) => sameShop(req, res, next))
+router.param('salonDetailId', (req, res, next) => sameShop(req, res, next))
 // Owner-only team admin; access-level and pay edits are checked per member.
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
 router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)

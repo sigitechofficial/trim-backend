@@ -5,7 +5,7 @@ const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
 // Refuses these changes while a booking is still an unanswered request.
 const notWhileRequested = require('../../middlewares/bookingRequestGuard')
-const { needLevel } = require('../../middlewares/shopRole')
+const { needLevel, sameShop } = require('../../middlewares/shopRole')
 const { booking } = require('../../models')
 
 // A booking request's decline goes through cancelBooking and has its own check.
@@ -14,8 +14,11 @@ const isRequest = async (req) =>
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
+// Booking, job, team member and shop ids sent by the app must be this shop's.
+router.use(sameShop)
+router.param('bookingId', (req, res, next) => sameShop(req, res, next))
 // Staff permissions, checked on the server (the app only hid the buttons).
-router.use(['/editService', '/jobStatus', '/serviceData', '/mark-appointment-no-show'], needLevel('appointments', 'low'))
+router.use(['/editService', '/jobStatus', '/serviceData', '/mark-appointment-no-show'], needLevel('appointments', 'low', { own: true }))
 router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
 router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
 router.use('/importClients', needLevel('client', 'low'))

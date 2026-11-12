@@ -4,8 +4,16 @@
 // so every owner endpoint used to accept staff too: a staff tap on "Delete
 // account" deleted the owner's account. resolveRequestActor tells owner and
 // staff apart by the device token.
-const { employee, employeeAccess, employeeAccessDefault } = require('../models')
-const { resolveRequestActor } = require('../helper/bookingRequestAccess')
+const { Op } = require('sequelize')
+const { booking, employee, employeeAccess, employeeAccessDefault, jobs } = require('../models')
+const { resolveRequestActor: resolveActor } = require('../helper/bookingRequestAccess')
+const { bookingIdOf } = require('./bookingRequestGuard')
+
+// Several guards may run on one request: work out the actor once.
+async function resolveRequestActor(req) {
+  if (!req._actor) req._actor = await resolveActor(req)
+  return req._actor
+}
 
 const deny = (res, message) => res.json({ status: '0', message, data: {}, error: '' })
 
@@ -66,15 +74,20 @@ const atLeast = (level, min) => LEVELS.indexOf(level) >= LEVELS.indexOf(min)
 
 // Staff need at least `min` ('low' or 'high') on permission `key`; the owner
 // always passes. Until now only the app checked these keys.
-function needLevel(key, min, { skip } = {}) {
+// own: at 'low', staff may act only on bookings that have a service of theirs.
+function needLevel(key, min, { skip, own } = {}) {
   return async function permissionGuard(req, res, next) {
     try {
       const actor = await resolveRequestActor(req)
       req.actor = actor
       if (!actor.shopId || actor.isOwner) return next()
       if (skip && (await skip(req))) return next()
-      if (actor.employeeId && atLeast(await staffLevel(actor.employeeId, actor.shopId, key), min)) {
-        return next()
+      const level = actor.employeeId ? await staffLevel(actor.employeeId, actor.shopId, key) : 'none'
+      if (atLeast(level, min)) {
+        if (!own || level === 'high') return next()
+        const bookingId = await bookingIdOf(req)
+        if (!bookingId || (await jobs.count({ where: { bookingId, employeeId: actor.employeeId } }))) return next()
+        return deny(res, 'You can only change your own appointments.')
       }
       return deny(res, "You don't have access to do this.")
     } catch (err) {
@@ -100,4 +113,44 @@ async function profileOrTeamEdit(req, res, next) {
   }
 }
 
-module.exports = { ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, staffLevel }
+const ids = (v) => (Array.isArray(v) ? v : [v]).map((x) => parseInt(x, 10)).filter((x) => x > 0)
+
+// Ids the app sends (booking, job, team member, shop) must belong to the
+// caller's shop. A team member may be sent as the employee row id or their
+// user id, so either is accepted.
+async function sameShop(req, res, next) {
+  try {
+    const actor = await resolveRequestActor(req)
+    if (!actor.shopId) return next()
+    const shopId = actor.shopId
+    const p = req.params || {}
+    const b = req.body || {}
+
+    const shops = ids([p.salonDetailId, p.salon, b.salonDetailId].filter((x) => x != null))
+    if (shops.some((id) => id !== shopId)) return deny(res, 'This belongs to another shop.')
+
+    const bookingId = await bookingIdOf(req)
+    if (bookingId) {
+      const row = await booking.findByPk(bookingId, { attributes: ['salonDetailId'] })
+      if (row && row.salonDetailId !== shopId) return deny(res, 'This booking belongs to another shop.')
+    }
+
+    const members = [...new Set(ids([p.employee, p.employeeId, b.employeeId].filter((x) => x != null)))]
+    if (members.length) {
+      const found = await employee.findAll({
+        where: {
+          salonDetailId: shopId,
+          [Op.or]: [{ id: { [Op.in]: members } }, { userId: { [Op.in]: members } }],
+        },
+        attributes: ['id', 'userId'],
+      })
+      const known = new Set(found.flatMap((e) => [e.id, e.userId]))
+      if (members.some((id) => !known.has(id))) return deny(res, 'This team member is not in your shop.')
+    }
+    return next()
+  } catch (err) {
+    return next(err)
+  }
+}
+
+module.exports = { sameShop, ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, staffLevel }

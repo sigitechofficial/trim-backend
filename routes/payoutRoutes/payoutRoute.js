@@ -2,10 +2,14 @@ const express = require('express')
 const router = express.Router()
 const payoutController = require('../../controllers/salonControllers/payoutController')
 const protect = require('../../middlewares/accessCheck')
-const { ownerOnly } = require('../../middlewares/shopRole')
+const { ownerOnly, sameShop } = require('../../middlewares/shopRole')
 
 const catchAsync = require('../../middlewares/catchAync')
 router.use(protect)
+// Team member and shop ids must be this shop's.
+router.use(sameShop)
+router.param('employee', (req, res, next) => sameShop(req, res, next))
+router.param('salon', (req, res, next) => sameShop(req, res, next))
 // Sending money is for the owner only.
 router.use(['/transfer-salary-to-employee', '/transfer-to-commission-employee', '/transfer-to-rent-a-chair-employee', '/collect-rent'], ownerOnly)
 
