@@ -128,6 +128,8 @@ test("I've arrived works only within 100 m of the client's pin", async () => {
   await assert.rejects(s.arrived({ userId: x.staffUser.id, bookingId: x.b.id }), /allow location/)
   // About 330 m away (down the road).
   await assert.rejects(s.arrived({ userId: x.staffUser.id, bookingId: x.b.id, lat: 51.5037, lng: -0.1246 }), /about 33\d m away/)
+  // About 10.9 km away: said in miles.
+  await assert.rejects(s.arrived({ userId: x.staffUser.id, bookingId: x.b.id, lat: 51.5987, lng: -0.1246 }), /about 6\.\d miles away/)
   assert.equal(x.b.arrivedAt, null)
   assert.equal(pushes.length, 0)
   const out = await s.arrived({ userId: x.staffUser.id, bookingId: x.b.id, ...AT_DOOR })

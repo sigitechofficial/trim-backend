@@ -24,6 +24,13 @@ const LATE_GRACE_MINUTES = 10
 const ACTIVE = ['book', 'pending']
 const ARRIVE_RADIUS_M = 100 // "I've arrived" works only this close to the client's pin
 
+// "330 m" nearby; further away in miles, as the apps show distances ("6.9 mi").
+function howFar(metres) {
+  if (metres < 1000) return `${metres} m`
+  const miles = metres / 1609.344
+  return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} miles`
+}
+
 /** Straight-line distance in metres between two {lat, lng}, or null. */
 function metresBetween(a, b) {
   const p = [a?.lat, a?.lng, b?.lat, b?.lng].map((v) => (v === null || v === undefined || v === '' ? NaN : Number(v)))
@@ -152,7 +159,7 @@ async function arrived({ userId, bookingId, lat, lng }) {
   const pin = b.visitAddressId ? await addressDBS.findByPk(b.visitAddressId, { attributes: ['id', 'lat', 'lng'] }) : null
   const distance = metresBetween(here, pin)
   if (distance !== null && distance > ARRIVE_RADIUS_M) {
-    throw new AppError(`You need to be at the client's address to tap I've arrived. You are about ${distance} m away.`, 200)
+    throw new AppError(`You need to be at the client's address to tap I've arrived. You are about ${howFar(distance)} away.`, 200)
   }
   await b.update({ arrivedAt: new Date(), onTheWayAt: b.onTheWayAt || new Date(), arrivedDistanceM: distance })
   const { shop, emp } = await barberOf(b)
