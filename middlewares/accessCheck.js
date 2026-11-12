@@ -44,8 +44,9 @@ module.exports = async function validateToken(req, res, next) {
         })
 
         if (employeeDevice) {
+          // Only a current, unblocked team member gets the owner link back.
           const staffEmployee = await employee.findOne({
-            where: { userId: employeeDevice.userId },
+            where: { userId: employeeDevice.userId, deleted: false, status: true },
             attributes: ['id', 'salonDetailId'],
           })
 

@@ -62,8 +62,7 @@ const plusDays = (isoDate, days) => DateTime.fromISO(isoDate).plus({ days }).toI
 async function tokensFor(userIds) {
   const ids = [...new Set(userIds.filter(Boolean))]
   if (!ids.length) return []
-  const rows = await deviceToken.findAll({ where: { userId: ids }, attributes: ['tokenId'] })
-  return rows.map((r) => r.tokenId).filter(Boolean)
+  return require('./staffDevices').ownDeviceTokens(ids)
 }
 
 // Each person gets the push on their phones and a line in their in-app

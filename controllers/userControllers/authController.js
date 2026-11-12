@@ -45,7 +45,6 @@ const createSendToken = (
   authStatus = AUTH_STATUS.LOGIN_SUCCESS,
 ) => {
   const token = signTocken(userRecord.id, dvToken)
-  redis_Client.hSet(`trim${userRecord.id}`, dvToken, token)
   const message =
     authStatus === AUTH_STATUS.NEW_SOCIAL_USER_CREATED
       ? 'Account created'

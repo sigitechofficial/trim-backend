@@ -169,7 +169,6 @@ exports.googleSignIn = async (req, res) => {
 
   if (userData) {
     const token = signTocken(userData.id, dvToken)
-    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
     return res.status(200).json({
       status: '1',
       message: `Welcome to Trim`,
@@ -260,8 +259,6 @@ exports.signup = async (req, res, next) => {
     })
     //  to return a response indicating successful social sign-up
     const token = signTocken(userData.id, dvToken)
-    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
-    
     // Only send welcome email if we have a valid name
     const fullName = `${userData.firstName} ${userData.lastName}`.trim()
     if (fullName) {
@@ -312,7 +309,6 @@ exports.signup = async (req, res, next) => {
         })
       // creating accessToken
       const token = signTocken(userExist.id, dvToken)
-      redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
       // Apple gets status '1' (go to home), Google/Facebook get status '2'
       return res.status(200).json({
         status: userExist.signedFrom === 'apple' ? '1' : '2',
@@ -535,7 +531,6 @@ exports.verifyOTP = async (req, res, next) => {
       userId: userExist.id,
     })
   const token = signTocken(userExist.id, dvToken)
-  redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
   EmailWelcome(
     [userExist.email],
     `${userExist.firstName} ${userExist.lastName}`,
@@ -654,7 +649,6 @@ exports.login = async (req, res, next) => {
   }
 
   let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : '';
-  redis_Client.hSet(`trim${User.id}`, dvToken, token);
 
   const response = {
     status: '1',
@@ -861,7 +855,6 @@ exports.login = async (req, res, next) => {
     }
 
     token = signTocken(salon.userId, dvToken);
-    redis_Client.hSet(`trim${salon.userId}`, dvToken, token);
     result.bookingRequests = requestsLevelFrom(result);
     response.data.accessLevels = result;
 
@@ -1005,7 +998,6 @@ exports.verifyPasswordOtp = async (req, res, next) => {
   otpData.verifiedInForgetCase = true
   await otpData.save()
   const accessToken = signTocken(otpData.userId, dvToken)
-  redis_Client.hSet(`trim${otpData.userId}`, dvToken, accessToken)
   return res.json(
     returnFunction('1', 'OTP verified successfully!', { accessToken }, ''),
   )
@@ -1023,7 +1015,6 @@ exports.resetPassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password reset',
@@ -1057,7 +1048,6 @@ exports.updatePassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password updated',

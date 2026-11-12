@@ -44,8 +44,7 @@ async function ownShopOf(userId) {
 async function push(userIds, title, body, data) {
   for (const id of [...new Set(userIds.filter(Boolean))]) {
     try {
-      const rows = await deviceToken.findAll({ where: { userId: id }, attributes: ['tokenId'] })
-      const tokens = rows.map((r) => r.tokenId).filter(Boolean)
+      const tokens = await require('./staffDevices').ownDeviceTokens(id)
       if (tokens.length) Throw(tokens, { title, body }, data, id)
       else await pushNotification.create({ at: new Date(), title, body, data, userId: id })
     } catch (err) {
