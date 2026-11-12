@@ -24,6 +24,7 @@ const {
 } = require('../models')
 const AppError = require('../utils/appError')
 const Throw = require('../utils/throwNotification')
+const { shopWhere } = require('./branchScope')
 
 const digits = (v) => String(v || '').replace(/\D/g, '')
 // Last 9 digits, so "+44 7911 123456" and "07911123456" match.
@@ -36,7 +37,7 @@ const SHOP_ATTRS = ['id', 'userId', 'salonName', 'isExternalEmployee', 'staffAdv
   'rentChairAdvertisementStatus', 'rentChairAdvertisementChairCount']
 
 async function ownShopOf(userId) {
-  const shop = await salonDetail.findOne({ where: { userId, deleted: false, isExternalEmployee: false }, attributes: SHOP_ATTRS })
+  const shop = await salonDetail.findOne({ where: { ...(await shopWhere(userId)), deleted: false, isExternalEmployee: false }, attributes: SHOP_ATTRS })
   if (!shop) throw new AppError('Only a shop owner can do this.', 200)
   return shop
 }

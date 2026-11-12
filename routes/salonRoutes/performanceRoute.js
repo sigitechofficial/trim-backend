@@ -7,6 +7,8 @@ const catchAsync = require('../../middlewares/catchAync')
 
 // !Module:1 Auth
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Dashboard
 router.get('/section-one', catchAsync(Controller.performanceDashboadSectionOne))
 router.get('/section-two', catchAsync(Controller.performanceDashboadSectionTwo))

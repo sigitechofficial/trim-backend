@@ -40,6 +40,14 @@ async function staffRequestsLevel(employeeId, salonDetailId) {
 
 const fullName = (u) => `${u?.firstName ?? ''} ${u?.lastName ?? ''}`.trim()
 
+// A staff member by their own user id (staffUserId in Step A tokens).
+async function staffByUserId(userId, salonDetailId) {
+  const u = await user.findOne({ where: { id: userId, userTypeId: 3 }, attributes: ['id', 'firstName', 'lastName'] })
+  if (!u) return null
+  const staff = await employee.findOne({ where: { userId: u.id, salonDetailId, deleted: false }, attributes: ['id'] })
+  return { employeeId: staff ? staff.id : null, name: fullName(u) }
+}
+
 // The staff member behind a device token within a shop, or null (owner device).
 async function staffByDeviceToken(tokenId, salonDetailId) {
   if (!tokenId) return null
@@ -74,7 +82,10 @@ async function resolveRequestActor(req) {
   })
   if (!shop) return { shopId: null, isOwner: false, employeeId: null, level: 'none', name: '' }
 
-  const staff = await staffByDeviceToken(req.user?.dvToken, shop.id)
+  // Tokens from Step A name the staff member; older ones are found by device.
+  const staff = req.user?.staffUserId
+    ? await staffByUserId(req.user.staffUserId, shop.id)
+    : await staffByDeviceToken(req.user?.dvToken, shop.id)
   if (!staff) {
     return { shopId: shop.id, isOwner: true, employeeId: null, level: 'high', name: fullName(shop.user) }
   }

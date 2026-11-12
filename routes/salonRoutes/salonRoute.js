@@ -48,6 +48,8 @@ router.get(
 )
 
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Owner-only: account, subscription, billing and bank. Staff are refused.
 router.use(
   [

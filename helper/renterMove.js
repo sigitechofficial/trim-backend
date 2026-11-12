@@ -38,6 +38,7 @@ const AppError = require('../utils/appError')
 const { updateServiceCategoryIds } = require('../utils/updateServiceCategoryIds')
 const barberMovedEmail = require('./barberMovedEmail')
 const { calculateDueRents } = require('../utils/dueRents')
+const { shopWhere } = require('./branchScope')
 
 const GRACE_DAYS = Number(process.env.RENTER_GRACE_DAYS) || 14
 const FREE_CANCEL_DAYS = 7
@@ -82,7 +83,7 @@ async function push(userIds, notification, data) {
 
 async function hostSalonOf(userId) {
   const salon = await salonDetail.findOne({
-    where: { userId, deleted: false },
+    where: { ...(await shopWhere(userId)), deleted: false },
     attributes: ['id', 'userId', 'salonName', 'teamSize', 'addressDBId', 'isExternalEmployee'],
   })
   if (!salon || salon.isExternalEmployee) throw new AppError('Only a shop owner can do this.', 200)

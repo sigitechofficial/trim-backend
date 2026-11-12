@@ -14,6 +14,8 @@ const isRequest = async (req) =>
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Booking, job, team member and shop ids sent by the app must be this shop's.
 router.use(sameShop)
 router.param('bookingId', (req, res, next) => sameShop(req, res, next))

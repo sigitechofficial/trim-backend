@@ -108,4 +108,16 @@ async function actingSalonId(req) {
   return (await actorFor(req)).salonId
 }
 
-module.exports = { branchScope, actorFor, actingSalonId, branchesFor }
+// For helpers handed a user id: the `where` that finds that user's shop. When
+// the user is the one making this request, it is the acting branch; otherwise
+// (jobs, webhooks, another user) the shop they own, as before.
+async function shopWhere(userId) {
+  const req = require('./requestContext').currentRequest()
+  if (req?.user?.id != null && Number(req.user.id) === Number(userId)) {
+    const salonId = await actingSalonId(req)
+    if (salonId) return { id: salonId }
+  }
+  return { userId }
+}
+
+module.exports = { branchScope, actorFor, actingSalonId, branchesFor, shopWhere }

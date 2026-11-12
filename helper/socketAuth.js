@@ -18,7 +18,7 @@ async function socketRooms(token) {
   } catch {
     return null
   }
-  const { id, dvToken } = claims || {}
+  const { id, dvToken, staffUserId } = claims || {}
   if (!id || !dvToken) return null
 
   const device = await deviceToken.findOne({
@@ -32,11 +32,16 @@ async function socketRooms(token) {
   if (!shop) return { rooms: new Set([`${id}`]), kind: 'client' }
 
   // Staff devices: the same token also sits on the staff member's own user.
-  const staffDevice = await deviceToken.findOne({
-    where: { tokenId: dvToken },
-    attributes: ['userId'],
-    include: { model: user, where: { userTypeId: 3, status: true }, attributes: [], required: true },
-  })
+  // Tokens from Step A name the staff member; older ones are found by device.
+  const staffDevice = staffUserId
+    ? await user
+        .findOne({ where: { id: staffUserId, userTypeId: 3, status: true }, attributes: ['id'] })
+        .then((u) => (u ? { userId: u.id } : null))
+    : await deviceToken.findOne({
+        where: { tokenId: dvToken },
+        attributes: ['userId'],
+        include: { model: user, where: { userTypeId: 3, status: true }, attributes: [], required: true },
+      })
   if (!staffDevice) return { rooms: new Set([`${shop.id}S`]), kind: 'owner' }
 
   const staff = await employee.findOne({

@@ -56,8 +56,8 @@ const generateOTP = () =>
 //! Function to create JWT Tocken
 const { requestsLevelFrom } = require('../../helper/bookingRequestAccess')
 
-const signTocken = (id, dvToken) => {
-  return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
+const signTocken = (id, dvToken, extra = {}) => {
+  return jwt.sign({ id, dvToken, ...extra }, process.env.JWT_ACCESS_SECRET)
 }
 
 const defaultAccess = [
@@ -854,7 +854,9 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    token = signTocken(salon.userId, dvToken);
+    // Staff sessions keep the owner's id (every shop lookup uses it) and now
+    // also say who the staff member is (Step A, 0.1).
+    token = signTocken(salon.userId, dvToken, { staffUserId: User.id });
     result.bookingRequests = requestsLevelFrom(result);
     response.data.accessLevels = result;
 
@@ -893,6 +895,23 @@ exports.login = async (req, res, next) => {
   response.data.isExternalEmployee = User.isExternalEmployee;
   if (response && response.data && response.data.isExternalEmployee) {
     response.data.profileCompletion.hasSubscription = true;
+  }
+
+  // Step A: every branch this login can open (the app's branch switcher).
+  // [{ salonId, name, role }], home branch first. New field; old apps ignore it.
+  if (response.data.accessToken) {
+    try {
+      const claims = jwt.verify(response.data.accessToken, process.env.JWT_ACCESS_SECRET)
+      const list = await require('../../helper/branchScope').branchesFor({ user: claims })
+      const names = await salonDetail.findAll({
+        where: { id: list.map((b) => b.salonId) },
+        attributes: ['id', 'salonName'],
+      })
+      const nameOf = new Map(names.map((n) => [n.id, n.salonName]))
+      response.data.branches = list.map((b) => ({ salonId: b.salonId, name: nameOf.get(b.salonId) || '', role: b.role }))
+    } catch (err) {
+      console.warn('[login] branch list failed:', err.message)
+    }
   }
 
   return res.json(

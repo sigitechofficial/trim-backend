@@ -61,6 +61,8 @@ app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cors())
+// Lets helpers that only get a user id find the request's acting branch.
+app.use(require('./helper/requestContext').requestContext)
 app.use(morgan('dev')) // Added for logging
 
 // Swagger Documentation
