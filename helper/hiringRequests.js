@@ -257,4 +257,19 @@ async function onHired({ shopSalonId, kind, email, phone, offerId }) {
   }
 }
 
-module.exports = { list, newCount, reserve, release, onHired, openCount, push, applicantOf }
+/**
+ * The days a client-app applicant said they want to work, for the offer the
+ * owner is adding them from (Hiring requests → Started). Empty when unknown,
+ * so the caller keeps the shop's own hours.
+ */
+async function applicantDays({ shopSalonId, offerId }) {
+  if (!(Number(offerId) > 0)) return []
+  const offer = await chairOffer.findOne({
+    where: { id: Number(offerId), shopSalonId, source: 'client', status: 'accepted', stage: 'starting' },
+    attributes: ['id', 'applicantInfo'],
+  })
+  const days = offer ? applicantOf(offer).days : null
+  return Array.isArray(days) ? days.filter((d) => typeof d === 'string') : []
+}
+
+module.exports = { list, newCount, reserve, release, onHired, openCount, push, applicantOf, applicantDays }

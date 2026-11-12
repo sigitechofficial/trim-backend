@@ -375,12 +375,18 @@ exports.AddEmployee = async (req, res, next) => {
       employeeId: employeeData.id,
     })
 
+    // Added from Hiring requests → "Started": open only the days the applicant
+    // asked to work (the owner can change them later); otherwise the shop's days.
+    const wantedDays = new Set(await require('../../helper/hiringRequests').applicantDays({
+      shopSalonId: salonDetailId,
+      offerId: req.body.hiringOfferId,
+    }))
     salonDetails.times.map(async (dat) => {
       const newTime = new time()
       newTime.openingTime = dat.openingTime
       newTime.closingTime = dat.closingTime
       newTime.day = dat.day
-      newTime.status = dat.status
+      newTime.status = wantedDays.size ? Boolean(dat.status) && wantedDays.has(dat.day) : dat.status
       newTime.employeeId = workerId
       if (externalEmployeeSalonId) {
         newTime.salonDetailId = externalEmployeeSalonId
