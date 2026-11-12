@@ -39,6 +39,7 @@ const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
 const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees')
+const { actingSalonId } = require('../../helper/branchScope')
 
 const {
   processAllAppointments,
@@ -85,7 +86,7 @@ exports.fetchEmployees = async (req, res, next) => {
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'teamSize'],
   })
@@ -187,7 +188,7 @@ exports.AddEmployee = async (req, res, next) => {
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: {
       model: time,
@@ -469,7 +470,7 @@ exports.getEmployeeTiming = async (req, res, next) => {
 exports.getServices = async (req, res, next) => {
   const userId = req.user.id
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'isExternalEmployee',
       'id',
@@ -503,7 +504,7 @@ exports.getServices = async (req, res, next) => {
 exports.addEmployeeService = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { serviceIds, employeeId, salonDetailId } = req.body
   // ittirating the array and add the srevices of employee
@@ -862,7 +863,7 @@ exports.updateEmployeTimings = async (req, res, next) => {
 exports.updateEmployeeService = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { serviceIds, employeeId } = req.body
   const associatedServices = [...new Set(serviceIds)]
@@ -1045,7 +1046,7 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
 // The caller's shop: the owner's own shop, or the shop a staff member works at.
 async function callerShop(req) {
   const own = await salonDetail.findOne({
-    where: { userId: req?.user?.id, deleted: false },
+    where: { id: await actingSalonId(req), deleted: false },
     attributes: ['id', 'teamSize', 'isExternalEmployee'],
   })
   if (own && !own.isExternalEmployee) return own

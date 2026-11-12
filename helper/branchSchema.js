@@ -1,0 +1,43 @@
+/**
+ * Idempotent schema setup for branches and roles (Step A; global sync is off).
+ * Creates brands, adds the new salonDetails/employee columns and fills
+ * employee.role for rows from before Step A. Safe on every boot.
+ * sql/multi_branch.sql makes the same changes by hand.
+ */
+async function addMissingColumns(qi, table, columns) {
+  const existing = await qi.describeTable(table)
+  for (const [name, definition] of Object.entries(columns)) {
+    if (existing[name]) continue
+    await qi.addColumn(table, name, definition)
+    console.log(`[branchSchema] added column ${table}.${name}`)
+  }
+}
+
+async function addIndexOnce(qi, table, fields, name) {
+  const indexes = await qi.showIndex(table)
+  if (indexes.some((i) => i.name === name)) return
+  await qi.addIndex(table, fields, { name })
+}
+
+async function ensureBranchSchema(db) {
+  const qi = db.sequelize.getQueryInterface()
+  const { DataTypes } = db.Sequelize
+  await db.brand.sync()
+  await addMissingColumns(qi, 'salonDetails', {
+    brandId: { type: DataTypes.INTEGER, allowNull: true },
+    planSource: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'own' },
+    pausedReason: { type: DataTypes.STRING(32), allowNull: true },
+    closedAt: { type: DataTypes.DATE, allowNull: true },
+  })
+  await addIndexOnce(qi, 'salonDetails', ['brandId'], 'salonDetails_brandId')
+  await addMissingColumns(qi, 'employees', {
+    role: { type: DataTypes.STRING(16), allowNull: true },
+    bookable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  })
+  // Rows from before Step A: the owner row is 'owner', everyone else 'barber'.
+  await db.sequelize.query(
+    "UPDATE employees SET role = CASE WHEN isOwner = 1 THEN 'owner' ELSE 'barber' END WHERE role IS NULL",
+  )
+}
+
+module.exports = { ensureBranchSchema }

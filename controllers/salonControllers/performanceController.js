@@ -37,6 +37,7 @@ const response = ({ status, message, data, error }) => {
 }
 
 const CustomDate = require('../../utils/currentDay')
+const { actingSalonId } = require('../../helper/branchScope')
 //* 1.Performance Dashboad-> Section One includes(Sales and appointments tabs)
 
 exports.performanceDashboadSectionOne = async (req, res, next) => {
@@ -57,7 +58,7 @@ exports.performanceDashboadSectionOne = async (req, res, next) => {
   const { prevStartDate, prevEndDate } = getPreviousDates(startDate, endDate)
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       //^Appointments Section
@@ -394,7 +395,7 @@ exports.performanceDashboadSectionTwo = async (req, res, next) => {
   //TODO will we count clients from (cacnel appointments as well)
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       //^Appointments Section
@@ -634,7 +635,7 @@ exports.performanceDashboadSectionTwo = async (req, res, next) => {
 
 exports.performanceDashboadSectionThree = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -709,7 +710,7 @@ exports.performanceDashboadSectionThree = async (req, res, next) => {
 
 exports.appointmentsGraph = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -766,7 +767,7 @@ exports.appointmentsGraph = async (req, res, next) => {
 
 exports.salesGraph = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -856,7 +857,7 @@ exports.occupancyRateGraph = async (req, res, next) => {
   const { prevStartDate, prevEndDate } = getPreviousDates(startDate, endDate)
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       // available and working time of current filter date
@@ -951,7 +952,7 @@ exports.returningClientRateGraph = async (req, res, next) => {
 
   const { prevStartDate, prevEndDate } = getPreviousDates(startDate, endDate)
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       //^Appointments Section
@@ -1048,7 +1049,7 @@ exports.returningClientRateGraph = async (req, res, next) => {
 
 exports.salesReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -1079,7 +1080,7 @@ exports.salesReport = async (req, res, next) => {
 
 exports.appointmentReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -1126,7 +1127,7 @@ exports.appointmentReport = async (req, res, next) => {
 
 exports.salesSummaryReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 

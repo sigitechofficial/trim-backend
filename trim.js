@@ -157,6 +157,11 @@ if (syncDb) {
 
 // Global sync is disabled above, so ensure ONLY the advert columns/tables exist
 // (idempotent, targeted — does not touch the rest of the schema).
+const { ensureBranchSchema } = require('./helper/branchSchema')
+ensureBranchSchema(db)
+  .then(() => console.log('[branchSchema] ensured'))
+  .catch((err) => console.error('[branchSchema] failed:', err.message))
+
 const { ensureAdvertSchema } = require('./helper/advertSchema')
 ensureAdvertSchema(db)
   .then(() => console.log('[advertSchema] ensured'))
