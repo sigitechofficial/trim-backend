@@ -58,6 +58,7 @@ const { activeSalonWhere, activeSalonCaseSql, bookableNowWhere, quoteDate } = re
 const renterMove = require('../../helper/renterMove')
 const chairMarket = require('../../helper/chairMarket')
 const mobileBarber = require('../../helper/mobileBarber')
+const { barberClash } = require('../../helper/bookingClash')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
@@ -3285,39 +3286,22 @@ exports.bookAppointment = async (req, res, next) => {
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = DateManupulation.dayOnDate(appointmentDate)
 
-  // services offered by single employees
+  // A chosen barber who is already booked at this time (in any of their
+  // shops) can't be booked twice: no booking, and any held deposit is released.
   if (req.body.employeeId) {
-    const availability = await jobs.findOne({
-      where: {
-        status: 'assign', //TODO add  Date check
-        on: appointment.on,
-        employeeId: req.body.employeeId,
-        [Op.or]: [
-          {
-            // Case starts within the busy time range
-            startTime: {
-              [Op.between]: [appointment.startTime, appointment.endTime],
-            },
-          },
-          {
-            //  when ends within the busy time range
-            endTime: {
-              [Op.between]: [appointment.startTime, appointment.endTime],
-            },
-          },
-          {
-            //when within the job time range
-            [Op.and]: [
-              { startTime: { [Op.lte]: appointment.startTime } },
-              { endTime: { [Op.gte]: appointment.endTime } },
-            ],
-          },
-        ],
-      },
-      attributes: ['startTime', 'endTime'],
+    const clash = await barberClash({
+      employeeId: req.body.employeeId,
+      on: appointment.on,
+      startTime: appointment.startTime,
+      endTime: appointment.endTime,
     })
-
-    // if(availability){ return res.status(200).json(response({ status :'2',message:"Time slot booked by another customer"}))}//!TODO comment cause we already capture upfront amount.
+    if (clash) {
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError('Sorry, this time was just booked. Please choose another time.', 200)
+    }
   }
 
   let employeeData, JobsInput
