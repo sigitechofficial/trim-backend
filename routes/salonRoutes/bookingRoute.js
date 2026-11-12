@@ -5,9 +5,20 @@ const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
 // Refuses these changes while a booking is still an unanswered request.
 const notWhileRequested = require('../../middlewares/bookingRequestGuard')
+const { needLevel } = require('../../middlewares/shopRole')
+const { booking } = require('../../models')
+
+// A booking request's decline goes through cancelBooking and has its own check.
+const isRequest = async (req) =>
+  (await booking.findByPk(parseInt(req.body?.bookingId, 10) || 0, { attributes: ['status'] }))?.status === 'requested'
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
+// Staff permissions, checked on the server (the app only hid the buttons).
+router.use(['/editService', '/jobStatus', '/serviceData', '/mark-appointment-no-show'], needLevel('appointments', 'low'))
+router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
+router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
+router.use('/importClients', needLevel('client', 'low'))
 //! Bookings
 // get All Bookings
 router.get('/salonBookings', catchAsync(bookingsController.salonBookings))

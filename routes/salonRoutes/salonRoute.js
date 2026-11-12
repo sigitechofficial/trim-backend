@@ -21,7 +21,7 @@ const {
 const factory = require('../../controllers/handlerFactory')
 const loyaltyController = require('../../controllers/loyaltyController')
 const validateToken = require('../../middlewares/accessCheck')
-const { ownerOnly } = require('../../middlewares/shopRole')
+const { ownerOnly, needLevel } = require('../../middlewares/shopRole')
 const multer = require('multer')
 const catchAsync = require('../../middlewares/catchAync')
 const requireCronSecret = require('../../middlewares/requireCronSecret')
@@ -75,6 +75,25 @@ router.use(
     '/salonVatUpdate',
   ],
   ownerOnly,
+)
+// Staff permissions, checked on the server (the app only hid the buttons).
+router.use('/active-block-customer', needLevel('appointments', 'high'))
+router.use(['/new-allergy', '/remove-allergy', '/add-update-client-note'], needLevel('client', 'low'))
+router.use(
+  ['/addService', '/addServiceImages', '/updateService', '/addCategory', '/updateCategory', '/change-category-status'],
+  needLevel('services', 'high'),
+)
+router.use('/feedback-reply', needLevel('feedback', 'high'))
+router.use(['/add-coupon', '/update-coupon', '/delete-coupon'], needLevel('manageDeals', 'high'))
+router.use('/send-custom-notifications', needLevel('sendNotification', 'low'))
+router.use(
+  [
+    '/updateSalonDetail', '/addGalleryImages', '/updateGalleryImages', '/deleteGalleryImages',
+    '/updateSalonTimings', '/save-working-hour', '/updateCancellationPolicies', '/updateDepositPolicies',
+    '/updateNoShowPolicies', '/updatereschedulePolicy', '/updateSalonAddress', '/addSocialLinks',
+    '/updateSocialLinks', '/online-offline',
+  ],
+  needLevel('updateProfile', 'high'),
 )
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({

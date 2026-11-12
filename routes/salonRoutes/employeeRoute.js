@@ -8,7 +8,7 @@ const hiringRequestsController = require('../../controllers/salonControllers/hir
 const mobileBarberController = require('../../controllers/mobileBarberController')
 const factory = require('../../controllers/handlerFactory')
 const validateToken = require('../../middlewares/accessCheck')
-const { ownerOnly, teamEditGuard } = require('../../middlewares/shopRole')
+const { ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit } = require('../../middlewares/shopRole')
 const catchAsync = require('../../middlewares/catchAync')
 const multer = require('multer')
 const path = require('path')
@@ -18,6 +18,8 @@ router.use(validateToken)
 // Owner-only team admin; access-level and pay edits are checked per member.
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
 router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)
+router.use(['/AddEmployee', '/addEmployeeService'], needLevel('teamMember', 'high'))
+router.use(['/updateEmployee', '/updateEmployeTimings'], profileOrTeamEdit)
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {

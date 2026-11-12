@@ -69,3 +69,22 @@ test('team edits by staff: need teamMember high, never self or owner', async () 
   assert.equal(await run(load(STAFF, dflt).teamEditGuard, { employeeId: 3 }), 'next')
   assert.match(await run(load(STAFF).teamEditGuard, { employeeId: 3 }), /manage team members/)
 })
+
+test('permission keys: owner passes, staff need the level', async () => {
+  const low = { access: [{ employeeId: 2, key: 'client', level: 'low' }] }
+  assert.equal(await run(load(OWNER).needLevel('client', 'high')), 'next')
+  assert.equal(await run(load(STAFF, low).needLevel('client', 'low')), 'next')
+  assert.match(await run(load(STAFF, low).needLevel('client', 'high')), /don't have access/)
+  assert.match(await run(load(STAFF, low).needLevel('services', 'low')), /don't have access/)
+  // A skipped request (e.g. declining a booking request) goes to its own check.
+  assert.equal(await run(load(STAFF).needLevel('appointments', 'high', { skip: async () => true })), 'next')
+  assert.match(await run(load({ shopId: 10, isOwner: false, employeeId: null }).needLevel('client', 'low')), /don't have access/)
+})
+
+test('profile edits: own needs updateProfile high, others go through team rules', async () => {
+  const own = { access: [{ employeeId: 2, key: 'updateProfile', level: 'high' }] }
+  assert.equal(await run(load(STAFF, own).profileOrTeamEdit, { employeeId: 2 }), 'next')
+  assert.match(await run(load(STAFF, own).profileOrTeamEdit, { employeeId: 3 }), /manage team members/)
+  assert.match(await run(load(STAFF).profileOrTeamEdit, { employeeId: 2 }), /don't have access/)
+  assert.equal(await run(load(OWNER).profileOrTeamEdit, { employeeId: 2 }), 'next')
+})

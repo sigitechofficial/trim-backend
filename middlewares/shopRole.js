@@ -62,4 +62,42 @@ async function teamEditGuard(req, res, next) {
   }
 }
 
-module.exports = { ownerOnly, teamEditGuard, staffLevel }
+const atLeast = (level, min) => LEVELS.indexOf(level) >= LEVELS.indexOf(min)
+
+// Staff need at least `min` ('low' or 'high') on permission `key`; the owner
+// always passes. Until now only the app checked these keys.
+function needLevel(key, min, { skip } = {}) {
+  return async function permissionGuard(req, res, next) {
+    try {
+      const actor = await resolveRequestActor(req)
+      req.actor = actor
+      if (!actor.shopId || actor.isOwner) return next()
+      if (skip && (await skip(req))) return next()
+      if (actor.employeeId && atLeast(await staffLevel(actor.employeeId, actor.shopId, key), min)) {
+        return next()
+      }
+      return deny(res, "You don't have access to do this.")
+    } catch (err) {
+      return next(err)
+    }
+  }
+}
+
+// Editing a team member's profile or hours: their own needs updateProfile
+// 'high', anyone else's goes through teamEditGuard.
+async function profileOrTeamEdit(req, res, next) {
+  try {
+    const actor = await resolveRequestActor(req)
+    const employeeId = parseInt(req.body?.employeeId, 10)
+    if (actor.shopId && !actor.isOwner && actor.employeeId && employeeId === actor.employeeId) {
+      req.actor = actor
+      if ((await staffLevel(actor.employeeId, actor.shopId, 'updateProfile')) === 'high') return next()
+      return deny(res, "You don't have access to do this.")
+    }
+    return teamEditGuard(req, res, next)
+  } catch (err) {
+    return next(err)
+  }
+}
+
+module.exports = { ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, staffLevel }
