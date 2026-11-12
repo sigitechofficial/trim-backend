@@ -75,8 +75,10 @@ async function staffByDeviceToken(tokenId, salonDetailId) {
  * (including chair renters, who own their own shop). shopId is null if unknown.
  */
 async function resolveRequestActor(req) {
-  const shop = await salonDetail.findOne({
-    where: { userId: req.user.id },
+  // The branch this request acts on (x-salon-id; the home shop for old apps).
+  const salonId = await require('./branchScope').actingSalonId(req)
+  const shop = salonId && await salonDetail.findOne({
+    where: { id: salonId },
     attributes: ['id', 'userId'],
     include: { model: user, attributes: ['firstName', 'lastName'] },
   })

@@ -5130,3 +5130,26 @@ exports.createConnectionToken = async (req, res, next) => {
     }, ''),
   );
 };
+
+/*
+    Branches (Step A)
+    ________________________________________
+*/
+const branchesHelper = () => require('../../helper/branches')
+
+exports.myBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', await branchesHelper().myBranches(req.user.id), ''))
+
+exports.addBranch = async (req, res) => {
+  try {
+    const branch = await branchesHelper().addBranch(req.user.id, req.body)
+    return res.json(returnFunction('1', 'Branch added.', branch, ''))
+  } catch (err) {
+    // Over the plan's branch limit: the app opens the branch-plan paywall.
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+exports.renameBrand = async (req, res) =>
+  res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))

@@ -54,6 +54,7 @@ router.use(require('../../middlewares/branchScope'))
 router.use(
   [
     '/account-delete',
+    '/branches',
     '/registration',
     '/salonTiming',
     '/AddCard',
@@ -448,6 +449,10 @@ router.patch(
 )
 
 router.post('/account-delete', catchAsync(salonController.accountDelete))
+// Branches (Step A), owner only.
+router.get('/branches', catchAsync(salonController.myBranches))
+router.post('/branches', catchAsync(salonController.addBranch))
+router.patch('/branches/brand', catchAsync(salonController.renameBrand))
 
 router.patch(
   '/change-category-status/:id',
