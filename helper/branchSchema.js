@@ -33,6 +33,7 @@ async function ensureBranchSchema(db) {
   await addMissingColumns(qi, 'employees', {
     role: { type: DataTypes.STRING(16), allowNull: true },
     bookable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    allBranches: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   })
   // Rows from before Step A: the owner row is 'owner', everyone else 'barber'.
   await db.sequelize.query(

@@ -454,6 +454,9 @@ router.get('/branches', catchAsync(salonController.myBranches))
 router.post('/branches', catchAsync(salonController.addBranch))
 router.patch('/branches/brand', catchAsync(salonController.renameBrand))
 router.post('/branches/:salonId/close', catchAsync(salonController.closeBranch))
+router.get('/branches/members/:employeeId', catchAsync(salonController.memberBranches))
+router.post('/branches/:salonId/members', catchAsync(salonController.addMemberToBranch))
+router.patch('/branches/members/:employeeId/all-branches', catchAsync(salonController.setMemberAllBranches))
 router.post('/branches/:salonId/reopen', catchAsync(salonController.reopenBranch))
 
 router.patch(

@@ -5205,5 +5205,22 @@ exports.reopenBranch = async (req, res) => {
   }
 }
 
+// Step B: one person in several branches.
+const membersHelper = () => require('../../helper/branchMembers')
+
+exports.memberBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', { branches: await membersHelper().memberBranches(req.user.id, req.params.employeeId) }, ''))
+
+exports.addMemberToBranch = async (req, res) => {
+  const r = await membersHelper().addToBranch(req.user.id, req.body?.employeeId, req.params.salonId, { role: req.body?.role })
+  return res.json(returnFunction('1', r.created ? 'Added to the branch.' : 'Already works in this branch.', { employeeId: r.row.id, salonId: r.row.salonDetailId }, ''))
+}
+
+exports.setMemberAllBranches = async (req, res) => {
+  const on = req.body?.allBranches === true || req.body?.allBranches === 'true'
+  const r = await membersHelper().setAllBranches(req.user.id, req.params.employeeId, on)
+  return res.json(returnFunction('1', on ? 'Now a manager over all branches.' : 'Manager of their current branches only.', r, ''))
+}
+
 exports.renameBrand = async (req, res) =>
   res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))

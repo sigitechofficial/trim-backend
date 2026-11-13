@@ -54,6 +54,13 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: true,
     },
+    // Step B: a manager over every branch of the brand; new branches get a
+    // row for them too.
+    allBranches: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   })
 
   employee.associate = (models) => {

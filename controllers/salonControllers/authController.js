@@ -1345,9 +1345,14 @@ exports.employeeSession = async (req, res, next) => {
   if (!User) {
     throw new appError('Inavlid user', 400)
   }
-  // If user is an employee
+  // If user is an employee. Step B: someone in several branches gets the row
+  // (and permissions) of the branch the app is in (x-salon-id).
+  const askedSalon = parseInt(req.get('x-salon-id'), 10)
+  const inAsked = askedSalon > 0
+    ? await employee.findOne({ where: { userId, salonDetailId: askedSalon, deleted: false }, attributes: ['id'] })
+    : null
   const employeeDetails = await employee.findOne({
-    where: {
+    where: inAsked ? { id: inAsked.id } : {
       userId: userId,
     },
     include: [

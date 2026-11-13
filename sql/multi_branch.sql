@@ -26,3 +26,5 @@ ALTER TABLE employees
   ADD COLUMN role VARCHAR(16) NULL,
   ADD COLUMN bookable TINYINT(1) NOT NULL DEFAULT 1;
 UPDATE employees SET role = CASE WHEN isOwner = 1 THEN 'owner' ELSE 'barber' END WHERE role IS NULL;
+-- Step B
+ALTER TABLE employees ADD COLUMN allBranches TINYINT(1) NOT NULL DEFAULT 0;

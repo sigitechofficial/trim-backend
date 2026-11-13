@@ -133,6 +133,9 @@ async function addBranch(ownerUserId, body = {}) {
       await copyRows(loyaltyExcludedService, { loyaltyProgramId: oldId }, (r) => ({ loyaltyProgramId: newId, serviceId: services.get(r.serviceId) ?? r.serviceId }), transaction)
     }
 
+    // Step B: managers over all branches work here too.
+    await require('./branchMembers').addAllBranchManagers(ownerUserId, branch.id, transaction)
+
     // The brand's plan covers the branch.
     if (b.planProductId) await require('./brandPlan').mirrorBrandPlan(b.id, transaction)
     return { salonId: branch.id, name: branch.salonName, brandId: b.id, copiedFrom: from.id, services: services.size, categories: categories.size }
