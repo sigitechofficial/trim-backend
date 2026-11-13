@@ -25,16 +25,29 @@ router.param('salonDetailId', (req, res, next) => sameShop(req, res, next))
 // Owner-only team admin; access-level and pay edits are checked per member.
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
 router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)
-// Step C: changing one person's access by hand takes them off their custom
-// role (otherwise the next change to the role would undo it).
-router.use(['/access-levels/create', '/access-levels/update'], (req, res, next) => {
-  res.on('finish', () => {
+// Step C: changing one person's access by hand to something other than their
+// custom role's levels takes them off the role (otherwise the next change to
+// the role would undo it). Saving the role's own levels keeps it.
+router.use(['/access-levels/create', '/access-levels/update'], async (req, res, next) => {
+  try {
     const id = parseInt(req.body?.employeeId, 10)
-    if (res.statusCode < 400 && id > 0) {
-      require('../../models').employee.update({ customRoleId: null }, { where: { id } }).catch(() => {})
+    const db = require('../../models')
+    const e = id > 0 ? await db.employee.findByPk(id, { attributes: ['id', 'customRoleId'] }) : null
+    const role = e?.customRoleId ? await db.customRole.findByPk(e.customRoleId) : null
+    if (role) {
+      const want = typeof role.levels === 'string' ? JSON.parse(role.levels) : role.levels
+      const sent = Object.fromEntries((req.body?.accesslevels || []).map((a) => [a.key, a.level]))
+      const differs = Object.keys(want).some((k) => (sent[k] || 'none') !== want[k])
+      if (differs) {
+        res.on('finish', () => {
+          if (res.statusCode < 400) db.employee.update({ customRoleId: null }, { where: { id } }).catch(() => {})
+        })
+      }
     }
-  })
-  next()
+    next()
+  } catch (err) {
+    next(err)
+  }
 })
 router.use(['/AddEmployee', '/addEmployeeService'], needLevel('teamMember', 'high'))
 router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'], profileOrTeamEdit)
