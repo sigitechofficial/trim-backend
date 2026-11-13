@@ -80,6 +80,9 @@ const LABEL_OF = {
   ...Object.fromEntries(ACTIONS.map(([, , , action, label]) => [action, label])),
   'login.ok': 'Logged in',
   'login.failed': 'Failed login (wrong password)',
+  'login.new_device': 'Confirmed a new device',
+  'device.signed_out': 'Signed a device out',
+  'security.managers_two_step': 'Changed two-step login for managers',
   'approval.requested': 'Asked for approval',
   'approval.approved': 'Approved a request',
   'approval.declined': 'Declined a request',
@@ -161,6 +164,23 @@ async function record(entry) {
   }
 }
 
+// The 5th wrong password within 15 minutes: email the person (once).
+async function failedLoginAlert(userId) {
+  const { Op } = require('sequelize')
+  const since = new Date(Date.now() - 15 * 60 * 1000)
+  const n = await db.activityLog.count({ where: { actorUserId: userId, action: 'login.failed', createdAt: { [Op.gte]: since } } })
+  if (n !== 4) return // this one is the 5th; it is saved right after
+  const u = await db.user.findByPk(userId, { attributes: ['email', 'firstName'] })
+  if (!u?.email) return
+  const { transporter } = require('./transpoter')
+  await transporter.sendMail({
+    from: process.env.EMAIL_USERNAME,
+    to: [u.email],
+    subject: 'Several failed logins to your Trim Business account',
+    text: `Hi ${u.firstName || 'there'},\n\nThere were 5 failed attempts to log in to your Trim Business account in the last 15 minutes. If this wasn't you, change your password now.\n\nTrim`,
+  })
+}
+
 /**
  * A business-app login. Successful ones carry the branch from the login; for
  * failed ones the person's home shop is looked up (their own, or where they work).
@@ -176,6 +196,7 @@ async function recordLogin(userId, { ok, ip, newDevice, salonId, brandId, role }
       brandId = own ? own.brandId : undefined
       role = own ? 'owner' : work?.role || null
     }
+    if (!ok) failedLoginAlert(userId).catch(() => {})
     return await record({
       salonDetailId: salonId,
       brandId,

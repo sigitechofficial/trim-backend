@@ -479,6 +479,11 @@ router.post('/approvals/:id/decline', catchAsync(approvalsController.decline))
 router.post('/approvals/:id/cancel', catchAsync(approvalsController.cancel))
 router.get('/approval-rules', catchAsync(approvalsController.getRules))
 router.put('/approval-rules', catchAsync(approvalsController.setRules))
+// Step C: devices and two-step login settings (owner; checked in the handlers).
+const securityController = require('../../controllers/salonControllers/securityController')
+router.get('/security', catchAsync(securityController.overview))
+router.put('/security', catchAsync(securityController.update))
+router.post('/security/devices/:id/sign-out', catchAsync(securityController.signOut))
 
 router.patch(
   '/change-category-status/:id',

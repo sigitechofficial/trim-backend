@@ -556,6 +556,16 @@ exports.verifyOTP = async (req, res, next) => {
             4. Login
     ________________________________________
 */
+// Step C: two-step login code (helper/twoStep.js).
+exports.twoStepVerify = async (req, res) => {
+  const out = await require('../../helper/twoStep').verify(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+exports.twoStepResend = async (req, res) => {
+  const out = await require('../../helper/twoStep').resend(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+
 exports.login = async (req, res, next) => {
   const { email, password, dvToken } = req.body;
 
@@ -629,6 +639,10 @@ exports.login = async (req, res, next) => {
       new appError('Incorrect email or password. Please try again.', 200),
     );
   }
+
+  // Step C: two-step login on a device this person hasn't confirmed yet.
+  const twoStepAsk = await require('../../helper/twoStep').check(req, User)
+  if (twoStepAsk) return res.json(twoStepAsk)
 
   // Device Token check
   const found = User.deviceTokens.find(

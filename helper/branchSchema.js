@@ -26,6 +26,12 @@ async function ensureBranchSchema(db) {
   await db.activityLog.sync() // Step C
   await db.approvalRequest.sync()
   await db.approvalRule.sync()
+  await db.trustedDevice.sync()
+  await db.loginChallenge.sync()
+  // The owner's choice: managers also need two-step login.
+  await addMissingColumns(qi, 'users', {
+    twoStepForManagers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  })
   await addMissingColumns(qi, 'salonDetails', {
     brandId: { type: DataTypes.INTEGER, allowNull: true },
     planSource: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'own' },
