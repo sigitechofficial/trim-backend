@@ -636,12 +636,7 @@ exports.salonBookings = async (req, res, next) => {
       status: {
         [Op.or]: ['book', 'pending', 'requested'],
       },
-      [Op.and]: literal(`EXISTS (
-      SELECT 1
-      FROM salonDetails
-      WHERE salonDetails.id = booking.salonDetailId
-      AND salonDetails.userId = ${userId}
-    )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       clientRemoved: false,
     },
     attributes: [
@@ -714,12 +709,7 @@ exports.salonBookings = async (req, res, next) => {
 
   const salonEmployee = await employee.findAll({
     where: {
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       isExternalEmployee: false,
       status: true,
     },
@@ -4136,7 +4126,7 @@ exports.salonServices = async (req, res, next) => {
     include: [
       {
         model: salonDetail,
-        where: { userId },
+        where: { id: await actingSalonId(req) },
         attributes: [],
       },
     ],
@@ -4292,12 +4282,7 @@ exports.serviceData = async (req, res, next) => {
       status: true,
       isExternalEmployee: false,
       // Add your conditions here
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
     },
     attributes: [
       ['id', 'employeeId'],
