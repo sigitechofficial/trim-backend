@@ -87,6 +87,12 @@ router.use(
   needLevel('services', 'high'),
 )
 router.use('/feedback-reply', needLevel('feedback', 'high'))
+// Step B: the rest of the staff-reachable writes.
+router.use('/add-multiple-categories', needLevel('services', 'high'))
+router.use(['/announcement', '/cancel-announcement', '/update-cover-image'], needLevel('updateProfile', 'high'))
+router.use(['/rent-chair-advertisement', '/staff-advertisement'], ownerOnly)
+router.use('/create-connection-token', needLevel('bookAppointments', 'low'))
+router.use(['/saleDetails', '/getSalonHistory', '/salonWallet'], needLevel('takings', 'low'))
 router.use(['/add-coupon', '/update-coupon', '/delete-coupon'], needLevel('manageDeals', 'high'))
 router.use('/send-custom-notifications', needLevel('sendNotification', 'low'))
 router.use(
@@ -204,7 +210,7 @@ router.patch(
   '/updateSalonTimings',
   catchAsync(salonController.updateSalonTimings),
 )
-router.post('/breaks', catchAsync(salonController.saveBreaks))
+router.post('/breaks', require('../../middlewares/shopRole').profileOrTeamEdit, catchAsync(salonController.saveBreaks))
 router.get(
   '/breaks/salon/:salonDetailId',
   catchAsync(salonController.getSalonBreaks),

@@ -9,6 +9,8 @@ const catchAsync = require('../../middlewares/catchAync')
 router.use(validateToken)
 // Step A: the branch this request acts on (x-salon-id), checked once here.
 router.use(require('../../middlewares/branchScope'))
+// Step B: reports show the shop's takings.
+router.use(require('../../middlewares/shopRole').needLevel('takings', 'low'))
 // Dashboard
 router.get('/section-one', catchAsync(Controller.performanceDashboadSectionOne))
 router.get('/section-two', catchAsync(Controller.performanceDashboadSectionTwo))

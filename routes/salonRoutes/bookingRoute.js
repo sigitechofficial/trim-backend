@@ -25,6 +25,14 @@ router.use(['/editService', '/jobStatus', '/serviceData'], ownAppointments)
 router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
 router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
 router.use('/importClients', needLevel('client', 'low'))
+// Step B: checkout and moves on bookings (low: their own bookings only).
+router.use(
+  ['/checkoutBooking', '/finalize-tap-to-pay', '/checkoutCash', '/checkoutMinimalPayment', '/saveUnpaid',
+    '/solo-employee-appointment-reschedule', '/multiple-employee-appointment-reschedule'],
+  needLevel('appointments', 'low', { own: true }),
+)
+router.use('/removeClient', needLevel('appointments', 'high'))
+router.use('/updateOnlibePayment', require('../../middlewares/shopRole').ownerOnly)
 //! Bookings
 // get All Bookings
 router.get('/salonBookings', catchAsync(bookingsController.salonBookings))

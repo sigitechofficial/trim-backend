@@ -26,7 +26,10 @@ router.param('salonDetailId', (req, res, next) => sameShop(req, res, next))
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
 router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)
 router.use(['/AddEmployee', '/addEmployeeService'], needLevel('teamMember', 'high'))
-router.use(['/updateEmployee', '/updateEmployeTimings'], profileOrTeamEdit)
+router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'], profileOrTeamEdit)
+// Step B: chair market, renter moves and shop work mode belong to the shop's
+// owner (a chair renter is the owner of their own shop, so they pass).
+router.use(['/chair-market', '/renter-moves', '/add-external-employee-default-service', '/mobile-visits/work-mode'], ownerOnly)
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -192,7 +195,7 @@ router.get('/mobile-visits/me', catchAsync(mobileBarberController.getMine))
 router.put('/mobile-visits/me', catchAsync(mobileBarberController.saveMine))
 router.put('/mobile-visits/work-mode', catchAsync(mobileBarberController.setWorkMode))
 router.get('/mobile-visits/team', catchAsync(mobileBarberController.team))
-router.put('/mobile-visits/team/:employee', catchAsync(mobileBarberController.setStaffAllowed))
+router.put('/mobile-visits/team/:employee', teamEditGuard, catchAsync(mobileBarberController.setStaffAllowed))
 router.post('/mobile-visits/bookings/:booking/on-the-way', catchAsync(mobileBarberController.onTheWay))
 router.post('/mobile-visits/bookings/:booking/arrived', catchAsync(mobileBarberController.arrived))
 
