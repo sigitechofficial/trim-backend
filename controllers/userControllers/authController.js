@@ -600,6 +600,20 @@ exports.login = async (req, res, next) => {
     if (User.signedFrom !== loginBy) {
       return sendProviderMismatch(res, User.signedFrom)
     }
+    // Security fix: the Firebase ID token must prove the sign-in; the email
+    // alone used to be enough.
+    const identity = await resolveVerifiedSocialIdentity({
+      email: User.email,
+      loginBy,
+      idToken: req.body?.idToken,
+    })
+    if (!identity.ok) {
+      return sendAuthOutcome(res, {
+        status: '0',
+        authStatus: identity.authStatus || AUTH_STATUS.INVALID_CREDENTIALS,
+        message: identity.message,
+      })
+    }
     await maybeBackfillVerifiedAt(user, User)
     await ensureDeviceToken(deviceToken, User, dvToken)
     return createSendToken(User, dvToken, 200, res, AUTH_STATUS.LOGIN_SUCCESS)

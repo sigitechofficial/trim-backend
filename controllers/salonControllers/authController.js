@@ -227,6 +227,22 @@ exports.signup = async (req, res, next) => {
     ],
   })
 
+  // Google / Apple / Facebook: the Firebase ID token must prove the email,
+  // both to create an account and to sign in to an existing one here.
+  {
+    const provider = userExist && ['google', 'apple', 'facebook'].includes(userExist.signedFrom)
+      ? userExist.signedFrom
+      : !userExist ? signedBy : null
+    if (provider) {
+      const social = await require('../../helper/socialSignIn').verifySocialSignIn({
+        idToken: req.body?.idToken,
+        provider,
+        email: userExist ? userExist.email : email,
+      })
+      if (!social.ok) return next(new appError(social.message, 200))
+    }
+  }
+
   if (!userExist && ['google', 'apple', 'facebook'].includes(signedBy)) {
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
@@ -619,14 +635,24 @@ exports.login = async (req, res, next) => {
     );
   }
 
+  // Any account that is not Google / Apple / Facebook needs its password
+  // (not only 'email': an unexpected sign-in method must not skip the check).
   if (
-    User.signedFrom == 'email' &&
-    !(await bcrypt.compare(password, User.password))
+    !['google', 'apple', 'facebook'].includes(User.signedFrom) &&
+    !(password && User.password && (await bcrypt.compare(password, User.password)))
   ) {
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
     );
   }
+
+  // Google / Apple / Facebook: the Firebase ID token must prove it.
+  const social = await require('../../helper/socialSignIn').verifySocialSignIn({
+    idToken: req.body?.idToken,
+    provider: User.signedFrom,
+    email: User.email,
+  });
+  if (!social.ok) return next(new appError(social.message, 200));
 
   // Device Token check
   const found = User.deviceTokens.find(

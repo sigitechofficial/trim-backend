@@ -169,6 +169,17 @@ async function resolveVerifiedSocialIdentity({
 }) {
   const requestEmail = normalizeEmail(email)
 
+  // Security fix: without a token anyone could sign in as any social account
+  // by sending its email. Required unless SOCIAL_LOGIN_TOKEN=optional.
+  const tokenRequired = process.env.SOCIAL_LOGIN_TOKEN !== 'optional'
+  if (!idToken && tokenRequired) {
+    return {
+      ok: false,
+      authStatus: AUTH_STATUS.INVALID_CREDENTIALS,
+      message: 'Please update the app to sign in with Google or Apple.',
+    }
+  }
+
   if (idToken) {
     const verification = await verifyCustomerIdToken(idToken)
     if (verification.ok) {
@@ -201,12 +212,16 @@ async function resolveVerifiedSocialIdentity({
       }
     }
 
-    // FIREBASE_NOT_CONFIGURED or NO_TOKEN — fall through to request email
+    // FIREBASE_NOT_CONFIGURED: the token can't be checked (see below).
     if (verification.reason === 'FIREBASE_NOT_CONFIGURED') {
-      console.warn(
-        '[customerAuth] Proceeding without server-side token verification. ' +
-          'Place firebase.json at project root to enable verifyIdToken.',
-      )
+      console.error('[customerAuth] firebase.json missing: social sign-in cannot be checked')
+      if (tokenRequired) {
+        return {
+          ok: false,
+          authStatus: AUTH_STATUS.ERROR,
+          message: 'Sign-in is not available right now. Please try again later.',
+        }
+      }
     }
   }
 
