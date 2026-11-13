@@ -155,6 +155,50 @@ async function ensureBrand(ownerUserId) {
   })
 }
 
+// Bookings still to happen in a branch (closing it would strand them).
+async function upcomingBookings(salonId) {
+  const today = new Date().toISOString().slice(0, 10)
+  return db.booking.count({
+    where: { salonDetailId: salonId, status: { [Op.in]: ['book', 'pending', 'requested', 'assign'] }, on: { [Op.gte]: today } },
+  })
+}
+
+async function ownBranch(ownerUserId, salonId) {
+  const shop = await salonDetail.findOne({ where: { ...ownShopsWhere(ownerUserId), id: Number(salonId) } })
+  if (!shop) throw new AppError('This branch is not yours.', 200)
+  return shop
+}
+
+/** Close a branch: hidden from clients, data kept, can be reopened. */
+async function closeBranch(ownerUserId, salonId) {
+  const shop = await ownBranch(ownerUserId, salonId)
+  if (shop.closedAt) return { salonId: shop.id, state: 'closed' }
+  const open = await salonDetail.count({ where: { ...ownShopsWhere(ownerUserId), closedAt: null } })
+  if (open <= 1) throw new AppError("You can't close your only open branch.", 200)
+  const upcoming = await upcomingBookings(shop.id)
+  if (upcoming) {
+    throw new AppError(`${shop.salonName} has ${upcoming} upcoming ${upcoming === 1 ? 'booking' : 'bookings'}. Complete, move or cancel them before closing the branch.`, 200)
+  }
+  await shop.update({ closedAt: new Date() })
+  return { salonId: shop.id, state: 'closed' }
+}
+
+/** Reopen a closed branch, if the brand plan covers one more open branch. */
+async function reopenBranch(ownerUserId, salonId) {
+  const shop = await ownBranch(ownerUserId, salonId)
+  if (!shop.closedAt) return { salonId: shop.id, state: 'open' }
+  const b = shop.brandId ? await brand.findByPk(shop.brandId) : null
+  const open = await salonDetail.count({ where: { ...ownShopsWhere(ownerUserId), closedAt: null, pausedReason: null } })
+  const limit = b ? b.branchLimit : 1
+  if (open + 1 > limit) {
+    const err = new AppError(`Your plan covers ${limit} ${limit === 1 ? 'branch' : 'branches'}. Choose a branch plan to reopen this one.`, 200)
+    err.data = { code: 'PLAN_LIMIT', branchLimit: limit, openBranches: open, rcAppUserId: b?.rcAppUserId || null }
+    throw err
+  }
+  await shop.update({ closedAt: null })
+  return { salonId: shop.id, state: 'open' }
+}
+
 async function renameBrand(ownerUserId, name) {
   const clean = String(name || '').trim().slice(0, 255)
   if (!clean) throw new AppError('Please give your business a name.', 200)
@@ -164,4 +208,4 @@ async function renameBrand(ownerUserId, name) {
   return { id: b.id, name: b.name }
 }
 
-module.exports = { addBranch, myBranches, renameBrand, ensureBrand }
+module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch }

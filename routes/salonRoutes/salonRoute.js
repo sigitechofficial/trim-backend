@@ -453,6 +453,8 @@ router.post('/account-delete', catchAsync(salonController.accountDelete))
 router.get('/branches', catchAsync(salonController.myBranches))
 router.post('/branches', catchAsync(salonController.addBranch))
 router.patch('/branches/brand', catchAsync(salonController.renameBrand))
+router.post('/branches/:salonId/close', catchAsync(salonController.closeBranch))
+router.post('/branches/:salonId/reopen', catchAsync(salonController.reopenBranch))
 
 router.patch(
   '/change-category-status/:id',

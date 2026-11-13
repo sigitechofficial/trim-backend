@@ -15,6 +15,9 @@ async function mirrorBrandPlan(brandId, transaction) {
       subscriptionLatestPaymentStatus: b.planStatus || null,
       subscriptionPlan: b.planProductId || null,
       teamSize: UNLIMITED_TEAM,
+      // As when a shop buys its own plan (webhook): a paid plan makes the
+      // branch listable in Home and search.
+      ...(b.planProductId ? { approvedByAdmin: true } : {}),
     },
     { where: { brandId, planSource: 'brand' }, transaction },
   )

@@ -11,6 +11,8 @@
  * registrationExpiryDate to the end of that grace period.
  * A chair renter pays for their own plan, so the host shop's subscription no
  * longer decides whether the renter can be found and booked.
+ * Step A: a closed branch (closedAt) or a paused one (pausedReason, e.g. the
+ * brand plan covers fewer branches) is not active either.
  *
  * `dateSql` is a SQL date expression: a quoted 'YYYY-MM-DD' literal or a
  * named replacement such as ':dateOnly'.
@@ -28,6 +30,8 @@ const quoteDate = (dateOnly) => `'${String(dateOnly).replace(/[^0-9-]/g, '')}'`
 const activeSalonWhere = (dateOnly) => ({
   registrationExpiryDate: { [Op.gte]: dateOnly },
   subscriptionLatestPaymentStatus: { [Op.notIn]: BLOCKED_STATUSES },
+  closedAt: null,
+  pausedReason: null,
 })
 
 // SQL CASE that is 1 when the salon row under `alias` is active, else 0.
@@ -36,6 +40,8 @@ const activeSalonCaseSql = (alias, dateSql) => `(CASE
   WHEN ${alias}.registrationExpiryDate >= ${dateSql}
     AND ${alias}.subscriptionLatestPaymentStatus IS NOT NULL
     AND ${alias}.subscriptionLatestPaymentStatus NOT IN ${BLOCKED_STATUSES_SQL}
+    AND ${alias}.closedAt IS NULL
+    AND ${alias}.pausedReason IS NULL
   THEN 1 ELSE 0 END)`
 
 // The same rule for a salonDetails row already loaded in JS (needs
@@ -43,7 +49,8 @@ const activeSalonCaseSql = (alias, dateSql) => `(CASE
 const isSalonRowActive = (row, dateOnly) => {
   const expiry = row?.registrationExpiryDate ? String(row.registrationExpiryDate).slice(0, 10) : null
   const status = row?.subscriptionLatestPaymentStatus
-  return !!expiry && expiry >= dateOnly && !!status && !BLOCKED_STATUSES.includes(status)
+  const open = !row?.closedAt && !row?.pausedReason // fields not loaded = open
+  return !!expiry && expiry >= dateOnly && !!status && !BLOCKED_STATUSES.includes(status) && open
 }
 
 // Home and search list only barbers a client can book now: a chair renter who

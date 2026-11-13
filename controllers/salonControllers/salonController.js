@@ -4691,6 +4691,43 @@ exports.accountDelete = async (req, res, next) => {
 
   if (!data || !salon) throw new appError('resource not found', 200)
 
+  // Step A: an owner with branches deletes the whole business. Every branch
+  // must be free of upcoming work, and a brand plan bought in the app store
+  // keeps charging until it is cancelled there (Apple requires saying so).
+  const branchRows = await salonDetail.findAll({
+    where: { userId: id, isExternalEmployee: { [Op.or]: [false, null] } },
+    attributes: ['id', 'brandId'],
+  })
+  const branchIds = branchRows.length ? branchRows.map((b) => b.id) : [salon.id]
+  const brandId = branchRows.find((b) => b.brandId)?.brandId
+  if (brandId) {
+    const b = await require('../../models').brand.findByPk(brandId)
+    const planLive = b?.planProductId && b?.planExpiry && new Date(b.planExpiry) > new Date() && !['cancelled', 'canceled', 'expired'].includes(String(b.planStatus || '').toLowerCase())
+    if (planLive) {
+      return res.json(
+        returnFunction(
+          '2',
+          'Your branch plan was bought through the app store. Please cancel it in the store first; otherwise you will keep being charged after your account is deleted.',
+          {},
+          '',
+        ),
+      )
+    }
+    const upcoming = await booking.count({
+      where: { salonDetailId: branchIds, status: { [Op.in]: ['assign', 'pending', 'book', 'requested'] } },
+    })
+    if (upcoming > 0) {
+      return res.json(
+        returnFunction(
+          '2',
+          `Your branches have ${upcoming} active or upcoming appointment(s). Please complete or cancel all bookings before deleting your account.`,
+          { activeBookingsCount: upcoming },
+          '',
+        ),
+      )
+    }
+  }
+
   // ─── CHECK 1: Block if an active RevenueCat subscription exists ──────────
   // RevenueCat subscriptions are managed by the App Store / Play Store.
   // We cannot cancel them server-side — the user must cancel from their device.
@@ -4814,12 +4851,17 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
-  await subscriptions.destroy({ where: { salonDetailId: salon.id } })
-  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon.id } })
+  // Every branch goes (one row for a single shop).
+  await subscriptions.destroy({ where: { salonDetailId: branchIds } })
+  await salonDetail.update(
+    { approvedByAdmin: false, ...(brandId ? { closedAt: new Date() } : {}) },
+    { where: { id: branchIds } },
+  )
+  if (brandId) await require('../../models').brand.update({ status: false }, { where: { id: brandId } })
 
   //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
-  deleteEmployeesAll(salon.id)
+  for (const branchId of branchIds) deleteEmployeesAll(branchId)
   return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
@@ -5146,6 +5188,18 @@ exports.addBranch = async (req, res) => {
     return res.json(returnFunction('1', 'Branch added.', branch, ''))
   } catch (err) {
     // Over the plan's branch limit: the app opens the branch-plan paywall.
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+exports.closeBranch = async (req, res) =>
+  res.json(returnFunction('1', 'Branch closed. Clients no longer see it.', await branchesHelper().closeBranch(req.user.id, req.params.salonId), ''))
+
+exports.reopenBranch = async (req, res) => {
+  try {
+    return res.json(returnFunction('1', 'Branch reopened.', await branchesHelper().reopenBranch(req.user.id, req.params.salonId), ''))
+  } catch (err) {
     if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
     throw err
   }
