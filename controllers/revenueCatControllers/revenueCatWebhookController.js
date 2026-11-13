@@ -874,6 +874,10 @@ exports.revenueCatWebhookHandler = async (req, res) => {
     // This prevents RevenueCat from waiting for database operations
     setImmediate(async () => {
       try {
+        // Step A: a brand's branch plan (app user id brand_<id>) is kept on
+        // the brand and copied to its branches; the shop handlers don't run.
+        if (await require('../../helper/brandPlan').handleBrandEvent(event)) return;
+
         // Handle different event types
         switch (event.type) {
           case 'INITIAL_PURCHASE':
