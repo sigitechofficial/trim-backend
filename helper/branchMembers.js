@@ -8,6 +8,11 @@
 const { Op } = require('sequelize')
 const db = require('../models')
 const AppError = require('../utils/appError')
+const { DateTime } = require('luxon')
+
+const UK = 'Europe/London'
+// A time as a UK calendar day, for the app to show (YYYY-MM-DD).
+const ukDay = (t) => (t ? DateTime.fromJSDate(new Date(t)).setZone(UK).toISODate() : null)
 
 const { sequelize, salonDetail, employee, employeeAccess, employeeService, employeeWagesMethod, time, service } = db
 
@@ -87,10 +92,16 @@ async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role,
  */
 function accessPeriod(from, until) {
   if (!from && !until) return null
+  // A date is a whole day in the shop's time (UK), BST or not.
   const day = (v, endOfDay) => {
     if (!v) return null
     const s = String(v)
-    const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T${endOfDay ? '23:59:59' : '00:00:00'}Z`) : new Date(s)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const d = DateTime.fromISO(s, { zone: UK })
+      if (!d.isValid) return null
+      return (endOfDay ? d.endOf('day') : d.startOf('day')).toJSDate()
+    }
+    const d = new Date(s)
     return Number.isNaN(d.getTime()) ? null : d
   }
   const now = new Date()
@@ -120,6 +131,7 @@ async function memberBranches(ownerUserId, employeeId) {
   return rows.map((r) => ({
     employeeId: r.id, salonId: r.salonDetailId, name: r.salonDetail.salonName, role: r.role, active: r.status, allBranches: r.allBranches,
     accessFrom: r.accessFrom, accessUntil: r.accessUntil, accessState: r.accessState,
+    firstDay: ukDay(r.accessFrom), lastDay: ukDay(r.accessUntil),
   }))
 }
 
