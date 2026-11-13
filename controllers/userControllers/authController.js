@@ -633,11 +633,9 @@ exports.login = async (req, res, next) => {
     )
   }
 
-  if (
-    User.signedFrom === 'email' &&
-    password &&
-    !(await bcrypt.compare(password, User?.password || '1'))
-  ) {
+  // Security fix: an email or walk-in login needs the right password. A
+  // missing password used to skip the check and log straight in.
+  if (!password || !User.password || !(await bcrypt.compare(password, User.password))) {
     return sendAuthOutcome(res, {
       status: '0',
       authStatus: AUTH_STATUS.INVALID_CREDENTIALS,
