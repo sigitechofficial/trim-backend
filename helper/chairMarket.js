@@ -35,6 +35,7 @@ const Throw = require('../utils/throwNotification')
 const AppError = require('../utils/appError')
 const { activeSalonWhere, isSalonRowActive } = require('./salonSubscriptionRule')
 const renterMove = require('./renterMove')
+const { shopWhere } = require('./branchScope')
 
 const OFFER_DAYS = 7 // an offer expires this long after its latest round
 const MAX_ROUNDS = 10
@@ -205,7 +206,7 @@ function cycleOf(v) {
 // The signed-in shop owner's shop, which must be subscribed to use the market.
 async function subscribedShopOf(userId) {
   const shop = await salonDetail.findOne({
-    where: { userId, deleted: false },
+    where: { ...(await shopWhere(userId)), deleted: false },
     attributes: ['id', 'userId', 'salonName', 'teamSize', 'addressDBId', 'isExternalEmployee'],
     include: [{ model: addressDBS, attributes: ['lat', 'lng', 'city', 'type'] }],
   })
@@ -635,7 +636,7 @@ const ADVERT_ATTRS = [
 
 async function ownShopOf(userId) {
   const shop = await salonDetail.findOne({
-    where: { userId, deleted: false },
+    where: { ...(await shopWhere(userId)), deleted: false },
     attributes: ['id', 'isExternalEmployee', ...ADVERT_ATTRS],
   })
   if (!shop || shop.isExternalEmployee) throw new AppError('Only a shop owner can do this.', 200)
@@ -660,7 +661,7 @@ async function publicChairListing(salonDetailId) {
 // listing is the shop's one chair advert, so it takes the same values.
 async function syncListingFromAdvert(userId, { status, chairs, rentType, rentAmount }) {
   const shop = await salonDetail.findOne({
-    where: { userId, deleted: false },
+    where: { ...(await shopWhere(userId)), deleted: false },
     attributes: ['id', 'isExternalEmployee'],
   })
   if (!shop || shop.isExternalEmployee) return

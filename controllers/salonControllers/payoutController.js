@@ -43,6 +43,7 @@ const {
 const CustomDate = require('../../utils/currentDay')
 const { response } = require('../../utils/response')
 const { calculateDueRents } = require('../../utils/dueRents')
+const { actingSalonId } = require('../../helper/branchScope')
 
 //! Functions to calculate payouts in app ------------------------
 
@@ -131,7 +132,7 @@ exports.calculatePayoutsOnBooking = async (
 //* Payout 1. Get Commission Employes ------------------------------------------------
 exports.commissionEmployees = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -206,7 +207,7 @@ exports.commissionEmployees = async (req, res, next) => {
 
 exports.rentalChairEmployees = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -282,7 +283,7 @@ exports.rentalChairEmployees = async (req, res, next) => {
 //* Payout 3. Get Salary Employees ---------------------------------------------------
 exports.salaryEmployees = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -637,7 +638,7 @@ exports.amountTransferRentAChair = async (req, res, next) => {
 
 exports.commissionTransactionHistory = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'salonName'],
   })
 
@@ -657,7 +658,7 @@ exports.commissionTransactionHistory = async (req, res, next) => {
 
 exports.rentChairTransactionHistory = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'salonName'],
   })
 
@@ -677,7 +678,7 @@ exports.rentChairTransactionHistory = async (req, res, next) => {
 
 exports.salaryTransactionHistory = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'salonName'],
   })
 
@@ -904,7 +905,7 @@ exports.externalEmployeeSummary = async (req, res, next) => {
 
 exports.collectRent = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 

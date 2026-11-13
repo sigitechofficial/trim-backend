@@ -44,13 +44,14 @@ const {
 } = require('../../utils/reportsFormator/numberofMonths')
 
 const CustomDate = require('../../utils/currentDay')
+const { actingSalonId } = require('../../helper/branchScope')
 
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
 exports.busiestVsQuietest = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
   const salon = await salonDetail.findOne({
-    where: { userId: userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -100,7 +101,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   const userId = req.params?.salon ?? req.user?.id
   console.log('🚀 ~ exports.servicesByStaffPerWeek= ~ userId:', userId)
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -176,7 +177,7 @@ exports.totalBookings = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -234,7 +235,7 @@ exports.mostPopularServices = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -285,7 +286,7 @@ exports.bookingPerformance = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -383,7 +384,7 @@ exports.IncomeReportYear = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -512,7 +513,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -745,7 +746,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -913,7 +914,7 @@ exports.averageJobsReport = async (req, res, next) => {
   let startDate, endDate
 
   const salonData = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id', 'createdAt'],
     raw: true,
   })
@@ -1000,7 +1001,7 @@ exports.averageJobsReport = async (req, res, next) => {
 exports.subscriptionHistory = async (req, res, next) => {
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     include: [{ model: user, attributes: ['stripeCustomerId'] }],
   });
 
@@ -1107,7 +1108,7 @@ async function resolveRentChairReportEmployee(req) {
         staffWhere.salonDetailId = salonDetailIdParam
       } else {
         const ownerSalon = await salonDetail.findOne({
-          where: { userId: req.user.id },
+          where: { id: await actingSalonId(req) },
           attributes: ['id'],
         })
         if (ownerSalon) staffWhere.salonDetailId = ownerSalon.id
@@ -1558,7 +1559,7 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
   const thisYear = parseInt(year, 10)
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('Shop not found', 200)
@@ -1633,7 +1634,7 @@ exports.incomeWithRentDaily = async (req, res, next) => {
     throw new AppError('startDate and endDate are required', 400)
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('Shop not found', 200)

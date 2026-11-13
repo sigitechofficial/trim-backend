@@ -183,6 +183,26 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 'shop',
     },
+    // Branches (Step A). brandId null = a single shop. planSource 'brand' =
+    // the brand's plan covers this branch. Pause/close don't reuse status
+    // (status is the admin block).
+    brandId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    planSource: {
+      type: DataTypes.STRING(8),
+      allowNull: false,
+      defaultValue: 'own',
+    },
+    pausedReason: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
+    closedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     deleted: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
@@ -319,6 +339,7 @@ module.exports = (sequelize, DataTypes) => {
   salonDetail.associate = (models) => {
     models.user.hasMany(salonDetail)
     salonDetail.belongsTo(models.user)
+    salonDetail.belongsTo(models.brand, { foreignKey: 'brandId' })
 
     salonDetail.hasMany(models.employee)
     models.employee.belongsTo(salonDetail)

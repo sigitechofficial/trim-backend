@@ -48,10 +48,13 @@ router.get(
 )
 
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Owner-only: account, subscription, billing and bank. Staff are refused.
 router.use(
   [
     '/account-delete',
+    '/branches',
     '/registration',
     '/salonTiming',
     '/AddCard',
@@ -84,6 +87,12 @@ router.use(
   needLevel('services', 'high'),
 )
 router.use('/feedback-reply', needLevel('feedback', 'high'))
+// Step B: the rest of the staff-reachable writes.
+router.use('/add-multiple-categories', needLevel('services', 'high'))
+router.use(['/announcement', '/cancel-announcement', '/update-cover-image'], needLevel('updateProfile', 'high'))
+router.use(['/rent-chair-advertisement', '/staff-advertisement'], ownerOnly)
+router.use('/create-connection-token', needLevel('bookAppointments', 'low'))
+router.use(['/saleDetails', '/getSalonHistory', '/salonWallet'], needLevel('takings', 'low'))
 router.use(['/add-coupon', '/update-coupon', '/delete-coupon'], needLevel('manageDeals', 'high'))
 router.use('/send-custom-notifications', needLevel('sendNotification', 'low'))
 router.use(
@@ -95,6 +104,12 @@ router.use(
   ],
   needLevel('updateProfile', 'high'),
 )
+// Step C: some team changes wait for the owner's approval (after the guards).
+// Step C: exporting the client list (can need the owner's approval, below).
+router.use('/clients/export', needLevel('exportClients', 'high'))
+// Step C: settings shared across branches (locked ones are the owner's only).
+router.use(require('../../middlewares/sharedSettingsGate'))
+router.use(require('../../middlewares/approvalGate'))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -201,7 +216,7 @@ router.patch(
   '/updateSalonTimings',
   catchAsync(salonController.updateSalonTimings),
 )
-router.post('/breaks', catchAsync(salonController.saveBreaks))
+router.post('/breaks', require('../../middlewares/shopRole').profileOrTeamEdit, catchAsync(salonController.saveBreaks))
 router.get(
   '/breaks/salon/:salonDetailId',
   catchAsync(salonController.getSalonBreaks),
@@ -446,6 +461,48 @@ router.patch(
 )
 
 router.post('/account-delete', catchAsync(salonController.accountDelete))
+// Branches (Step A), owner only.
+router.get('/branches/summary', catchAsync(salonController.branchesSummary))
+router.get('/branches/day', catchAsync(salonController.branchesDay))
+router.get('/branches', catchAsync(salonController.myBranches))
+router.post('/branches', catchAsync(salonController.addBranch))
+router.patch('/branches/brand', catchAsync(salonController.renameBrand))
+router.post('/branches/:salonId/close', catchAsync(salonController.closeBranch))
+router.get('/branches/members/:employeeId', catchAsync(salonController.memberBranches))
+router.post('/branches/:salonId/members', catchAsync(salonController.addMemberToBranch))
+router.patch('/branches/members/:employeeId/all-branches', catchAsync(salonController.setMemberAllBranches))
+router.post('/branches/:salonId/reopen', catchAsync(salonController.reopenBranch))
+// Step C: the activity log (read-only; access checked in the handler).
+router.get('/activity', catchAsync(require('../../controllers/salonControllers/activityController').list))
+// Step C: approvals (access checked in the handlers).
+const approvalsController = require('../../controllers/salonControllers/approvalsController')
+router.get('/approvals', catchAsync(approvalsController.list))
+router.get('/approvals/count', catchAsync(approvalsController.count))
+router.post('/approvals/:id/approve', catchAsync(approvalsController.approve))
+router.post('/approvals/:id/decline', catchAsync(approvalsController.decline))
+router.post('/approvals/:id/cancel', catchAsync(approvalsController.cancel))
+router.get('/approval-rules', catchAsync(approvalsController.getRules))
+router.put('/approval-rules', catchAsync(approvalsController.setRules))
+// Step C: devices and two-step login settings (owner; checked in the handlers).
+const securityController = require('../../controllers/salonControllers/securityController')
+router.get('/security', catchAsync(securityController.overview))
+router.put('/security', catchAsync(securityController.update))
+router.post('/security/devices/:id/sign-out', catchAsync(securityController.signOut))
+// Step C: custom roles. Owners make, change, delete and give them.
+const rolesController = require('../../controllers/salonControllers/rolesController')
+router.get('/roles', catchAsync(rolesController.list))
+router.post('/roles', ownerOnly, catchAsync(rolesController.create))
+router.put('/roles/:id', ownerOnly, catchAsync(rolesController.update))
+router.delete('/roles/:id', ownerOnly, catchAsync(rolesController.remove))
+router.put('/roles-assign', ownerOnly, catchAsync(rolesController.assign))
+// Step C: client data tools.
+const clientDataController = require('../../controllers/salonControllers/clientDataController')
+// Step C: shared settings (owner).
+const sharedSettingsController = require('../../controllers/salonControllers/sharedSettingsController')
+router.get('/shared-settings', ownerOnly, catchAsync(sharedSettingsController.list))
+router.put('/shared-settings/:key', ownerOnly, catchAsync(sharedSettingsController.set))
+router.post('/clients/export', catchAsync(clientDataController.exportList))
+router.post('/clients/:customerId/data-copy', needLevel('client', 'high'), catchAsync(clientDataController.dataCopy))
 
 router.patch(
   '/change-category-status/:id',

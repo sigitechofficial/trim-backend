@@ -74,6 +74,7 @@ const { expireOverdueRequestsSafely } = require('../../helper/expireBookingReque
 const loyalty = require('../../helper/loyalty')
 const mobileBarber = require('../../helper/mobileBarber')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
+const { actingSalonId } = require('../../helper/branchScope')
 const {
   resolveRequestActor,
   ownRequestBookingIds,
@@ -339,7 +340,7 @@ let returnFunction = (status, message, data, error) => {
 
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req?.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'parentSalonId', 'isExternalEmployee', 'renterGraceUntil', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate', 'subscriptionLatestPaymentStatus'],
   })
   // Expire overdue requests first so the calendar and the requests count are current.
@@ -635,12 +636,7 @@ exports.salonBookings = async (req, res, next) => {
       status: {
         [Op.or]: ['book', 'pending', 'requested'],
       },
-      [Op.and]: literal(`EXISTS (
-      SELECT 1
-      FROM salonDetails
-      WHERE salonDetails.id = booking.salonDetailId
-      AND salonDetails.userId = ${userId}
-    )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       clientRemoved: false,
     },
     attributes: [
@@ -713,12 +709,7 @@ exports.salonBookings = async (req, res, next) => {
 
   const salonEmployee = await employee.findAll({
     where: {
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       isExternalEmployee: false,
       status: true,
     },
@@ -917,7 +908,7 @@ exports.getbookingByFilter = async (req, res, next) => {
 
 exports.bookingDetails = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'connectAccountId'], // ✅ include account ID
   });
 
@@ -1977,7 +1968,7 @@ exports.getServicesofCategories = async (req, res, next) => {
 exports.employeesWithAllServices = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { services } = req.body
   console.log('ðŸš€ ~ exports.employeesWithAllServices= ~ services:', services)
@@ -2071,7 +2062,7 @@ exports.employeeAvailability = async (req, res, next) => {
   const { jobDate, duration, employeeId } = req.body
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -2406,7 +2397,7 @@ exports.getSalonCustomer = async (req, res, next) => {
 
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2481,7 +2472,7 @@ exports.bulkImportClients = async (req, res, next) => {
   const notify = req.body.notify === true || req.body.notify === 'true'
   const rawClients = Array.isArray(req.body.clients) ? req.body.clients : []
 
-  const SalonDetail = await salonDetail.findOne({ where: { userId } })
+  const SalonDetail = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   if (!SalonDetail) {
     return res.json(returnFunction('0', 'Salon not found.', {}, ''))
   }
@@ -2656,7 +2647,7 @@ exports.addWalkinCustomer = async (req, res, next) => {
   const { email, countryCode, phoneNum, firstName, lastName } = req.body
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2726,7 +2717,7 @@ exports.addWalkinBooking = async (req, res, next) => {
   } = req.body
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   startTime = Convert.convertTo24HourFormat(startTime)
@@ -2972,7 +2963,7 @@ exports.clientHistory = async (req, res, next) => {
     req.user,
   )
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { customerId } = req.body
@@ -3146,7 +3137,7 @@ exports.finalizeTapToPay = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'connectAccountId'],
   });
 
@@ -4135,7 +4126,7 @@ exports.salonServices = async (req, res, next) => {
     include: [
       {
         model: salonDetail,
-        where: { userId },
+        where: { id: await actingSalonId(req) },
         attributes: [],
       },
     ],
@@ -4291,12 +4282,7 @@ exports.serviceData = async (req, res, next) => {
       status: true,
       isExternalEmployee: false,
       // Add your conditions here
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
     },
     attributes: [
       ['id', 'employeeId'],

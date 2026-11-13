@@ -195,6 +195,9 @@ router.put(
   catchAsync(adminController.updateSalonDetails),
 )
 router.get('/salon-view', protect, catchAsync(adminController.fecthSalons))
+// Step A: a brand, its branches and its team.
+router.get('/brands/by-salon/:salonId', protect, catchAsync(adminController.brandDetail))
+router.get('/brands/:id', protect, catchAsync(adminController.brandDetail))
 router.get(
   '/salon-without/:sticker',
   protect,
@@ -222,6 +225,7 @@ router.put(
   protect,
   catchAsync(adminController.changeSalonStatus),
 )
+router.put('/branch-change-status/:salonId', protect, catchAsync(adminController.changeBranchStatus))
 router.get(
   '/salon-subscription/:id',
   protect,

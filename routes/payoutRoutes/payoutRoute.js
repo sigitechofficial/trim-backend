@@ -6,6 +6,8 @@ const { ownerOnly, sameShop, needLevel } = require('../../middlewares/shopRole')
 
 const catchAsync = require('../../middlewares/catchAync')
 router.use(protect)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Team member and shop ids must be this shop's.
 router.use(sameShop)
 router.param('employee', (req, res, next) => sameShop(req, res, next))

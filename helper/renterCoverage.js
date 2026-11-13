@@ -17,6 +17,7 @@ const { salonDetail, employee, user, deviceToken, pushNotification, chairOffer }
 const AppError = require('../utils/appError')
 const Throw = require('../utils/throwNotification')
 const { isSalonRowActive } = require('./salonSubscriptionRule')
+const { shopWhere } = require('./branchScope')
 
 // Boss, 2026-11-05: free days to start their own plan when coverage ends:
 // 7 the first time, 3 every time after. Buying in those days starts the plan
@@ -141,7 +142,7 @@ async function coverFailed(hostId, renterSalonId, reason) {
 
 // The owner switches coverage for one of their renters on or off.
 async function setCover(ownerUserId, renterSalonId, cover) {
-  const host = await salonDetail.findOne({ where: { userId: ownerUserId, isExternalEmployee: false, deleted: false }, attributes: ['id'] })
+  const host = await salonDetail.findOne({ where: { ...(await shopWhere(ownerUserId)), isExternalEmployee: false, deleted: false }, attributes: ['id'] })
   if (!host) throw new AppError('Only a shop owner can do this.', 200)
   const renter = await salonDetail.findOne({ where: { id: Number(renterSalonId), parentSalonId: host.id, isExternalEmployee: true, deleted: false } })
   if (!renter) throw new AppError('This chair renter is not at your shop.', 200)
@@ -257,7 +258,7 @@ async function syncCoverage() {
 
 // The renter behind one of the owner's team rows (Rent-a-chair staff).
 async function renterOfTeamRow(ownerUserId, employeeId) {
-  const host = await salonDetail.findOne({ where: { userId: ownerUserId, isExternalEmployee: false, deleted: false }, attributes: ['id', 'teamSize'] })
+  const host = await salonDetail.findOne({ where: { ...(await shopWhere(ownerUserId)), isExternalEmployee: false, deleted: false }, attributes: ['id', 'teamSize'] })
   if (!host) throw new AppError('Only a shop owner can do this.', 200)
   const row = await employee.findOne({ where: { id: Number(employeeId), salonDetailId: host.id, isExternalEmployee: true, deleted: false } })
   const renter = row && await salonDetail.findOne({ where: { userId: row.userId, isExternalEmployee: true, deleted: false, parentSalonId: host.id } })

@@ -17,6 +17,10 @@ const path = require('path')
 
 // !Module:1 Auth
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
+// Step B: reports show the shop's takings.
+router.use(require('../../middlewares/shopRole').needLevel('takings', 'low'))
 
 router.get('/peak-times-report', catchAsync(Controller.peakTimesReport))
 router.get('/financial-report', catchAsync(Controller.financialReport))

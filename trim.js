@@ -61,6 +61,8 @@ app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cors())
+// Lets helpers that only get a user id find the request's acting branch.
+app.use(require('./helper/requestContext').requestContext)
 app.use(morgan('dev')) // Added for logging
 
 // Swagger Documentation
@@ -157,6 +159,11 @@ if (syncDb) {
 
 // Global sync is disabled above, so ensure ONLY the advert columns/tables exist
 // (idempotent, targeted — does not touch the rest of the schema).
+const { ensureBranchSchema } = require('./helper/branchSchema')
+ensureBranchSchema(db)
+  .then(() => console.log('[branchSchema] ensured'))
+  .catch((err) => console.error('[branchSchema] failed:', err.message))
+
 const { ensureAdvertSchema } = require('./helper/advertSchema')
 ensureAdvertSchema(db)
   .then(() => console.log('[advertSchema] ensured'))
@@ -275,5 +282,8 @@ require('./jobs/bookingRequestCron')
 // ─── Renter Move Cron (chair renters moving shop on their move date) ─────────
 require('./jobs/renterMoveCron')
 require('./jobs/mobileVisitCron')
+require('./jobs/brandPlanCron')
+require('./jobs/approvalsCron')
+require('./jobs/accessPeriodCron')
 
 // hello

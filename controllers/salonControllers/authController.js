@@ -56,8 +56,8 @@ const generateOTP = () =>
 //! Function to create JWT Tocken
 const { requestsLevelFrom } = require('../../helper/bookingRequestAccess')
 
-const signTocken = (id, dvToken) => {
-  return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
+const signTocken = (id, dvToken, extra = {}) => {
+  return jwt.sign({ id, dvToken, ...extra }, process.env.JWT_ACCESS_SECRET)
 }
 
 const defaultAccess = [
@@ -572,6 +572,16 @@ exports.verifyOTP = async (req, res, next) => {
             4. Login
     ________________________________________
 */
+// Step C: two-step login code (helper/twoStep.js).
+exports.twoStepVerify = async (req, res) => {
+  const out = await require('../../helper/twoStep').verify(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+exports.twoStepResend = async (req, res) => {
+  const out = await require('../../helper/twoStep').resend(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+
 exports.login = async (req, res, next) => {
   const { email, password, dvToken } = req.body;
 
@@ -641,6 +651,8 @@ exports.login = async (req, res, next) => {
     !['google', 'apple', 'facebook'].includes(User.signedFrom) &&
     !(password && User.password && (await bcrypt.compare(password, User.password)))
   ) {
+    // Step C: failed logins go in the activity log (security).
+    require('../../helper/activityLog').recordLogin(User.id, { ok: false, ip: req.ip, dvToken })
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
     );
@@ -653,6 +665,10 @@ exports.login = async (req, res, next) => {
     email: User.email,
   });
   if (!social.ok) return next(new appError(social.message, 200));
+
+  // Step C: two-step login on a device this person hasn't confirmed yet.
+  const twoStepAsk = await require('../../helper/twoStep').check(req, User)
+  if (twoStepAsk) return res.json(twoStepAsk)
 
   // Device Token check
   const found = User.deviceTokens.find(
@@ -880,7 +896,9 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    token = signTocken(salon.userId, dvToken);
+    // Staff sessions keep the owner's id (every shop lookup uses it) and now
+    // also say who the staff member is (Step A, 0.1).
+    token = signTocken(salon.userId, dvToken, { staffUserId: User.id });
     result.bookingRequests = requestsLevelFrom(result);
     response.data.accessLevels = result;
 
@@ -897,10 +915,13 @@ exports.login = async (req, res, next) => {
         hasWagesMethod: false,
       };
     } else {
+      // Step A: a manager/receptionist who doesn't take bookings needs no
+      // services, hours or pay method before they can start.
       const isAllDataAvailable =
-        employeeDetails.employeeServices.length !== 0 &&
-        employeeDetails.times.length !== 0 &&
-        employeeDetails.employeeWagesMethod;
+        employeeDetails.bookable === false ||
+        (employeeDetails.employeeServices.length !== 0 &&
+          employeeDetails.times.length !== 0 &&
+          employeeDetails.employeeWagesMethod);
 
       response.status = isAllDataAvailable ? '4' : '5';
       response.message = 'Login successful';
@@ -919,6 +940,37 @@ exports.login = async (req, res, next) => {
   response.data.isExternalEmployee = User.isExternalEmployee;
   if (response && response.data && response.data.isExternalEmployee) {
     response.data.profileCompletion.hasSubscription = true;
+  }
+
+  // Step A: every branch this login can open (the app's branch switcher).
+  // [{ salonId, name, role }], home branch first. New field; old apps ignore it.
+  if (response.data.accessToken) {
+    try {
+      const claims = jwt.verify(response.data.accessToken, process.env.JWT_ACCESS_SECRET)
+      const list = await require('../../helper/branchScope').branchesFor({ user: claims })
+      const names = await salonDetail.findAll({
+        where: { id: list.map((b) => b.salonId) },
+        attributes: ['id', 'salonName'],
+      })
+      const nameOf = new Map(names.map((n) => [n.id, n.salonName]))
+      response.data.branches = list.map((b) => ({ salonId: b.salonId, name: nameOf.get(b.salonId) || '', role: b.role }))
+      // Step C: the login in the activity log of the home branch.
+      require('../../helper/activityLog').recordLogin(User.id, {
+        ok: true, ip: req.ip, newDevice: !found, salonId: list[0]?.salonId, brandId: list[0]?.brandId, role: list[0]?.role,
+      })
+      // The brand, for the owner's branch-plan purchases (RevenueCat id).
+      const brandRow = !claims.staffUserId && list.some((b) => b.brandId)
+        ? await require('../../models').brand.findOne({ where: { ownerUserId: claims.id } })
+        : null
+      if (brandRow) {
+        response.data.brand = {
+          id: brandRow.id, name: brandRow.name, rcAppUserId: brandRow.rcAppUserId,
+          branchLimit: brandRow.branchLimit, planProductId: brandRow.planProductId, planStatus: brandRow.planStatus,
+        }
+      }
+    } catch (err) {
+      console.warn('[login] branch list failed:', err.message)
+    }
   }
 
   return res.json(
@@ -1339,9 +1391,14 @@ exports.employeeSession = async (req, res, next) => {
   if (!User) {
     throw new appError('Inavlid user', 400)
   }
-  // If user is an employee
+  // If user is an employee. Step B: someone in several branches gets the row
+  // (and permissions) of the branch the app is in (x-salon-id).
+  const askedSalon = parseInt(req.get('x-salon-id'), 10)
+  const inAsked = askedSalon > 0
+    ? await employee.findOne({ where: { userId, salonDetailId: askedSalon, deleted: false }, attributes: ['id'] })
+    : null
   const employeeDetails = await employee.findOne({
-    where: {
+    where: inAsked ? { id: inAsked.id } : {
       userId: userId,
     },
     include: [

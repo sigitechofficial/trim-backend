@@ -14,6 +14,8 @@ const isRequest = async (req) =>
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
 // Booking, job, team member and shop ids sent by the app must be this shop's.
 router.use(sameShop)
 router.param('bookingId', (req, res, next) => sameShop(req, res, next))
@@ -23,6 +25,14 @@ router.use(['/editService', '/jobStatus', '/serviceData'], ownAppointments)
 router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
 router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
 router.use('/importClients', needLevel('client', 'low'))
+// Step B: checkout and moves on bookings (low: their own bookings only).
+router.use(
+  ['/checkoutBooking', '/finalize-tap-to-pay', '/checkoutCash', '/checkoutMinimalPayment', '/saveUnpaid',
+    '/solo-employee-appointment-reschedule', '/multiple-employee-appointment-reschedule'],
+  needLevel('appointments', 'low', { own: true }),
+)
+router.use('/removeClient', needLevel('appointments', 'high'))
+router.use('/updateOnlibePayment', require('../../middlewares/shopRole').ownerOnly)
 //! Bookings
 // get All Bookings
 router.get('/salonBookings', catchAsync(bookingsController.salonBookings))

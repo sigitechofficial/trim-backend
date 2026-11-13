@@ -25,6 +25,7 @@ const {
   jobs,
 } = require('../models')
 const AppError = require('../utils/appError')
+const { shopWhere } = require('./branchScope')
 
 const WORK_MODES = ['shop', 'mobile', 'both']
 const FEE_TYPES = ['fixed', 'per_mile']
@@ -144,7 +145,7 @@ function plainSetting(row, emp) {
 // renter owns a salonDetails row; a staff member has an employee row in one.
 async function callerOf(userId) {
   const shop = await salonDetail.findOne({
-    where: { userId, deleted: false },
+    where: { ...(await shopWhere(userId)), deleted: false },
     attributes: ['id', 'salonName', 'workMode', 'isExternalEmployee', 'parentSalonId'],
   })
   if (shop) {

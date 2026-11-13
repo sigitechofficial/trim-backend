@@ -20,12 +20,17 @@ const deny = (res, message) => res.json({ status: '0', message, data: {}, error:
 const LEVELS = ['none', 'low', 'high']
 
 // A staff member's level for one permission key ('none' if unset).
+// Keys added later fall back to the key that used to cover them, so nobody
+// loses access when the key appears (as bookingRequests did with appointments).
+const FALLBACK = { takings: 'client' }
+
 async function staffLevel(employeeId, salonDetailId, key) {
   let row = await employeeAccess.findOne({ where: { employeeId, key }, attributes: ['level'] })
   if (!row) {
     const own = await employeeAccess.count({ where: { employeeId } })
     if (!own) row = await employeeAccessDefault.findOne({ where: { salonDetailId, key }, attributes: ['level'] })
   }
+  if (!row && FALLBACK[key]) return staffLevel(employeeId, salonDetailId, FALLBACK[key])
   return LEVELS.includes(row?.level) ? row.level : 'none'
 }
 

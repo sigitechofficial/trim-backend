@@ -39,6 +39,7 @@ const inviteEmployeeEmail = require('../../helper/inviteEmployee')
 const { salonDetails } = require('../userControllers/customerController')
 const { sortAndCompleteTimes } = require('../../utils/timesFormator')
 const { blockEmployees } = require('../eventDrivenCommunication/blockEmployees')
+const { actingSalonId } = require('../../helper/branchScope')
 
 const {
   processAllAppointments,
@@ -85,7 +86,7 @@ exports.fetchEmployees = async (req, res, next) => {
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'teamSize'],
   })
@@ -184,10 +185,24 @@ exports.AddEmployee = async (req, res, next) => {
     rentAmount,
   } = req.body
 
+  // Step A: role in this branch. Only the owner may add a manager.
+  const { roleFrom, presetRows } = require('../../helper/roles')
+  // Step C: an owner's custom role sets the role, bookable and every level.
+  // Staff sessions carry the owner's id, so req.user.id is the owner here.
+  const customRole = await require('../../helper/customRoles').forNewMember(req.user.id, req.body?.customRoleId)
+  if (req.body?.customRoleId && !customRole) return next(new appError('Role not found.', 200))
+  const role = customRole ? customRole.baseRole : roleFrom(req.body?.role)
+  const bookable = customRole
+    ? !!customRole.bookable
+    : req.body?.bookable === undefined ? true : !['false', '0', false, 0].includes(req.body.bookable)
+  if (role === 'manager' && !(await require('../../helper/branchScope').actorFor(req)).isOwner) {
+    return next(new appError('Only the shop owner can add a manager.', 200))
+  }
+
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: {
       model: time,
@@ -307,7 +322,19 @@ exports.AddEmployee = async (req, res, next) => {
       userId: newEntry.id,
       salonDetailId,
       isExternalEmployee: isExternalEmployeeCondition,
+      role: isExternalEmployeeCondition ? 'barber' : role,
+      bookable: isExternalEmployeeCondition ? true : bookable,
     })
+    // Managers and receptionists start with their role's levels (the app's
+    // permission screen may change them right after).
+    if (!isExternalEmployeeCondition) {
+      if (customRole) {
+        await require('../../helper/customRoles').applyToEmployee(customRole, employeeData.id)
+      } else {
+        const rows = presetRows(role, employeeData.id)
+        if (rows.length) await employeeAccess.bulkCreate(rows)
+      }
+    }
 
     let workerId = employeeData.id
     let externalEmployeeSalonId = null
@@ -469,7 +496,7 @@ exports.getEmployeeTiming = async (req, res, next) => {
 exports.getServices = async (req, res, next) => {
   const userId = req.user.id
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'isExternalEmployee',
       'id',
@@ -503,7 +530,7 @@ exports.getServices = async (req, res, next) => {
 exports.addEmployeeService = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { serviceIds, employeeId, salonDetailId } = req.body
   // ittirating the array and add the srevices of employee
@@ -862,7 +889,7 @@ exports.updateEmployeTimings = async (req, res, next) => {
 exports.updateEmployeeService = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { serviceIds, employeeId } = req.body
   const associatedServices = [...new Set(serviceIds)]
@@ -1045,7 +1072,7 @@ exports.addOrUpdateDefaultAccessleves = async (req, res, next) => {
 // The caller's shop: the owner's own shop, or the shop a staff member works at.
 async function callerShop(req) {
   const own = await salonDetail.findOne({
-    where: { userId: req?.user?.id, deleted: false },
+    where: { id: await actingSalonId(req), deleted: false },
     attributes: ['id', 'teamSize', 'isExternalEmployee'],
   })
   if (own && !own.isExternalEmployee) return own

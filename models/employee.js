@@ -42,6 +42,31 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true,
     },
+    // Role in this branch (Step A): owner | manager | receptionist | barber.
+    // Null on rows from before Step A: isOwner decides (see helper/branchScope).
+    role: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+    },
+    // 0 = a manager or receptionist who doesn't cut hair (not bookable by clients).
+    bookable: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    // Step B: a manager over every branch of the brand; new branches get a
+    // row for them too.
+    allBranches: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    // Step C: the owner's custom role this person holds here (its levels are
+    // copied to employeeAccess), and access to this branch for a period only.
+    customRoleId: { type: DataTypes.INTEGER, allowNull: true },
+    accessFrom: { type: DataTypes.DATE, allowNull: true },
+    accessUntil: { type: DataTypes.DATE, allowNull: true },
+    accessState: { type: DataTypes.STRING(16), allowNull: true }, // scheduled | active | ended
   })
 
   employee.associate = (models) => {

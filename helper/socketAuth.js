@@ -18,7 +18,7 @@ async function socketRooms(token) {
   } catch {
     return null
   }
-  const { id, dvToken } = claims || {}
+  const { id, dvToken, staffUserId } = claims || {}
   if (!id || !dvToken) return null
 
   const device = await deviceToken.findOne({
@@ -28,24 +28,31 @@ async function socketRooms(token) {
   })
   if (!device) return null
 
-  const shop = await salonDetail.findOne({ where: { userId: id }, attributes: ['id'] })
-  if (!shop) return { rooms: new Set([`${id}`]), kind: 'client' }
+  // Every branch of this owner (one shop for most).
+  const shops = await salonDetail.findAll({ where: { userId: id, closedAt: null }, attributes: ['id'] })
+  if (!shops.length) return { rooms: new Set([`${id}`]), kind: 'client' }
+  const shopIds = shops.map((s) => s.id)
 
   // Staff devices: the same token also sits on the staff member's own user.
-  const staffDevice = await deviceToken.findOne({
-    where: { tokenId: dvToken },
-    attributes: ['userId'],
-    include: { model: user, where: { userTypeId: 3, status: true }, attributes: [], required: true },
-  })
-  if (!staffDevice) return { rooms: new Set([`${shop.id}S`]), kind: 'owner' }
+  // Tokens from Step A name the staff member; older ones are found by device.
+  const staffDevice = staffUserId
+    ? await user
+        .findOne({ where: { id: staffUserId, userTypeId: 3, status: true }, attributes: ['id'] })
+        .then((u) => (u ? { userId: u.id } : null))
+    : await deviceToken.findOne({
+        where: { tokenId: dvToken },
+        attributes: ['userId'],
+        include: { model: user, where: { userTypeId: 3, status: true }, attributes: [], required: true },
+      })
+  if (!staffDevice) return { rooms: new Set(shopIds.map((sid) => `${sid}S`)), kind: 'owner' }
 
-  const staff = await employee.findOne({
-    where: { userId: staffDevice.userId, salonDetailId: shop.id, deleted: false, status: true },
+  const rows = await employee.findAll({
+    where: { userId: staffDevice.userId, salonDetailId: shopIds, deleted: false, status: true },
     attributes: ['id'],
   })
-  if (!staff) return null
-  // Events go to `<employeeId>E`; older staff apps asked for `<userId>E`.
-  return { rooms: new Set([`${staff.id}E`, `${staffDevice.userId}E`]), kind: 'staff' }
+  if (!rows.length) return null
+  // Events go to `<employeeId>E` (one per branch); older staff apps asked for `<userId>E`.
+  return { rooms: new Set([...rows.map((r) => `${r.id}E`), `${staffDevice.userId}E`]), kind: 'staff' }
 }
 
 // A token sent in the handshake: socket.io `auth`, query or header.

@@ -75,6 +75,7 @@ const ThrowSalonPermotionalNotification = require('../../utils/throwNotification
 const { findZones } = require('../../utils/zoneFind');
 
 const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
+const { actingSalonId } = require('../../helper/branchScope')
 const {
   processAllAppointments,
   processAppointment,
@@ -293,7 +294,7 @@ exports.choosePlan = async (req, res, next) => {
 
     // Get salon data
     let salonData = await salonDetail.findOne({
-      where: { userId },
+      where: { id: await actingSalonId(req) },
       include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
     })
 
@@ -636,7 +637,7 @@ exports.choosePlan = async (req, res, next) => {
 exports.createOnboardingLink = async (req, res, next) => {
   const userId = req.user.id
   let salonData = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
   })
   let account = salonData.connectAccountId
@@ -669,7 +670,7 @@ exports.accountAdded = async (req, res, next) => {
   const userId = req.user.id
 
   let salonData = await salonDetail.findOne({
-    where: { userId: userId },
+    where: { id: await actingSalonId(req) },
     attributes: ['connectAccountId', 'id'],
   })
 
@@ -870,7 +871,7 @@ exports.addSocialLinks = async (req, res, next) => {
 //* UPDATE SocialLinks
 exports.updateSocialLinks = async (req, res, next) => {
   const { links } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   const finalInput = links.map((ele) => ({ ...ele, salonDetailId: salon.id }))
   socialLink.destroy({ where: { salonDetailId: salon.id } })
   await socialLink.bulkCreate(finalInput)
@@ -942,7 +943,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   } = req.body
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -1005,7 +1006,7 @@ exports.salonProfile = async (req, res, next) => {
 
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: [
       {
@@ -1202,7 +1203,7 @@ exports.getGalleryImages = async (req, res, next) => {
   const userId = req.user.id
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   const galleryImages = await salonImage.findAll({
@@ -1573,7 +1574,7 @@ exports.defaultCategories = async (req, res, next) => {
 //* Add multiple categories
 exports.addMultipleCategories = async (req, res, next) => {
   const { categories } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req?.user?.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   console.log('------------', req?.user)
   const Input = categories.filter((cat) => cat.isSelected === true)
   let finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
@@ -1679,7 +1680,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
     ________________________________________
 */
 // exports.fecthCoupons = async (req, res, next) => {
-//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
 //   if (!salon) {
 //     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
 //   }
@@ -1705,7 +1706,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
 // }
 
 exports.fetchCoupons = async (req, res, next) => {
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon) {
     return res
       .status(200)
@@ -1775,7 +1776,7 @@ exports.fetchCoupons = async (req, res, next) => {
 */
 // exports.addCoupons = async (req, res, next) => {
 //   const input = req.body
-//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
 //   if (!salon) {
 //     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
 //   }
@@ -1798,7 +1799,7 @@ exports.fetchCoupons = async (req, res, next) => {
 exports.addCoupons = async (req, res, next) => {
   const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon)
   {
     return res.status(200).json({
@@ -1887,7 +1888,7 @@ exports.updateCoupon = async (req, res, next) => {
   const { couponId } = req.params;
   const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon)
     return res
       .status(200)
@@ -1973,7 +1974,7 @@ exports.updateCoupon = async (req, res, next) => {
 exports.deleteCoupon = async (req, res, next) => {
   const { couponId } = req.params;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon) {
     return res
       .status(200)
@@ -2014,7 +2015,7 @@ exports.customerSubscription = async (req, res, next) => {
     
     // Get salon data with subscription info
     const salonData = await salonDetail.findOne({
-      where: { userId },
+      where: { id: await actingSalonId(req) },
       attributes: [
         'id',
         'subscriptionPlan',
@@ -2420,7 +2421,7 @@ exports.cancelActiveSubscription = async (req, res, next) => {
   const userId = req.user.id
   let salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   const cancelSubscription = await Stripe.cancelSubscription(
@@ -2494,7 +2495,7 @@ exports.updateSubscription = async (req, res, next) => {
   } = req.body
   let salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: {
       model: user,
@@ -2703,7 +2704,7 @@ exports.updateSubscription = async (req, res, next) => {
     ________________________________________
 */
 exports.billingDetail = async (req, res, next) => {
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   if (!salon) {
     return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
   }
@@ -2732,7 +2733,7 @@ exports.getCancellationPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2805,7 +2806,7 @@ exports.updateCancellationPolicies = async (req, res) => {
   const { cancelationPolicies } = req.body
   const salon = await salonDetail.findOne({
     where: {
-      userId: req.user.id,
+      id: await actingSalonId(req),
     },
     attributes: ['id'],
   })
@@ -2852,7 +2853,7 @@ exports.getDepositPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2909,7 +2910,7 @@ exports.depositPolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2949,7 +2950,7 @@ exports.getNoShowPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2989,7 +2990,7 @@ exports.noShowPolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3058,7 +3059,7 @@ exports.getreschedulePolicy = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3092,7 +3093,7 @@ exports.reschedulePolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3159,7 +3160,7 @@ exports.updatereschedulePolicy = async (req, res) => {
 exports.salonHistory = async (req, res) => {
   const userId = req.user.id
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { startDate, endDate, filter } = req.body
@@ -3387,7 +3388,7 @@ exports.salonWallet = async (req, res, next) => {
   const userId = req.user.id
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'vatType'],
   })
@@ -3486,7 +3487,7 @@ exports.savingTimeHistory = async (req, res, next) => {
   const userId = req.user.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       [
@@ -3552,7 +3553,7 @@ exports.addCategory = async (req, res, next) => {
 
 exports.addServices = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   let { serviceData, employees } = req.body
@@ -3600,7 +3601,7 @@ exports.addServices = async (req, res, next) => {
 exports.activeBlockCustomer = async (req, res, next) => {
   const { userId, status } = req.body
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3621,7 +3622,7 @@ exports.salonOnlineOffline = async (req, res, next) => {
   const status = isOnline ? 'Online' : 'Offline'
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3638,7 +3639,7 @@ exports.salonOnlineOffline = async (req, res, next) => {
 
 exports.salonLiveStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'isOnline',
       'coverImage',
@@ -3667,7 +3668,7 @@ exports.salonLiveStatus = async (req, res, next) => {
 
 exports.getRentChairAdvertisementStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'rentChairAdvertisementChairCount',
       'rentChairAdvertisementStatus',
@@ -3802,7 +3803,7 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3851,7 +3852,7 @@ exports.updateAnnouncement = async (req, res, next) => {
 
 exports.fetchAnnouncements = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3956,7 +3957,7 @@ exports.fetchNotifications = async (req, res, next) => {
 
 exports.getStaffAdvertisementStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'staffAdvertisementCount',
       'staffAdvertisementStatus',
@@ -4106,7 +4107,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -4342,7 +4343,7 @@ exports.reviewReply = async (req, res, next) => {
 
 exports.customPermotionalNotificaiton = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req?.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'coverImage', 'salonName'],
   })
   console.log(
@@ -4478,7 +4479,7 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
 
 exports.addAllergies = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'userId'],
   })
   if (!salon) {
@@ -4495,7 +4496,7 @@ exports.addAllergies = async (req, res, next) => {
 
 exports.fetchAllergies = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'userId'],
   })
   if (!salon) {
@@ -4525,7 +4526,7 @@ exports.removeAllergies = async (req, res, next) => {
 
 exports.addUpdateClientNote = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { customerNote } = req.body
@@ -4559,7 +4560,7 @@ exports.onlinePayments = async (req, res, next) => {
   const { onlinePayments } = req.body
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'onlinePayments'],
   })
@@ -4578,7 +4579,7 @@ exports.bookingApprovalSettings = async (req, res, next) => {
     return res.json(returnFunction('0', 'Only the shop owner can change booking settings.', {}, ''))
   }
   const salonData = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'autoAcceptBookings', 'approvalScope'],
   })
   if (!salonData) return res.json(returnFunction('0', 'Shop not found', {}, ''))
@@ -4689,6 +4690,43 @@ exports.accountDelete = async (req, res, next) => {
   ])
 
   if (!data || !salon) throw new appError('resource not found', 200)
+
+  // Step A: an owner with branches deletes the whole business. Every branch
+  // must be free of upcoming work, and a brand plan bought in the app store
+  // keeps charging until it is cancelled there (Apple requires saying so).
+  const branchRows = await salonDetail.findAll({
+    where: { userId: id, isExternalEmployee: { [Op.or]: [false, null] } },
+    attributes: ['id', 'brandId'],
+  })
+  const branchIds = branchRows.length ? branchRows.map((b) => b.id) : [salon.id]
+  const brandId = branchRows.find((b) => b.brandId)?.brandId
+  if (brandId) {
+    const b = await require('../../models').brand.findByPk(brandId)
+    const planLive = b?.planProductId && b?.planExpiry && new Date(b.planExpiry) > new Date() && !['cancelled', 'canceled', 'expired'].includes(String(b.planStatus || '').toLowerCase())
+    if (planLive) {
+      return res.json(
+        returnFunction(
+          '2',
+          'Your branch plan was bought through the app store. Please cancel it in the store first; otherwise you will keep being charged after your account is deleted.',
+          {},
+          '',
+        ),
+      )
+    }
+    const upcoming = await booking.count({
+      where: { salonDetailId: branchIds, status: { [Op.in]: ['assign', 'pending', 'book', 'requested'] } },
+    })
+    if (upcoming > 0) {
+      return res.json(
+        returnFunction(
+          '2',
+          `Your branches have ${upcoming} active or upcoming appointment(s). Please complete or cancel all bookings before deleting your account.`,
+          { activeBookingsCount: upcoming },
+          '',
+        ),
+      )
+    }
+  }
 
   // ─── CHECK 1: Block if an active RevenueCat subscription exists ──────────
   // RevenueCat subscriptions are managed by the App Store / Play Store.
@@ -4813,12 +4851,17 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
-  await subscriptions.destroy({ where: { salonDetailId: salon.id } })
-  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon.id } })
+  // Every branch goes (one row for a single shop).
+  await subscriptions.destroy({ where: { salonDetailId: branchIds } })
+  await salonDetail.update(
+    { approvedByAdmin: false, ...(brandId ? { closedAt: new Date() } : {}) },
+    { where: { id: branchIds } },
+  )
+  if (brandId) await require('../../models').brand.update({ status: false }, { where: { id: brandId } })
 
   //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
-  deleteEmployeesAll(salon.id)
+  for (const branchId of branchIds) deleteEmployeesAll(branchId)
   return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
@@ -5026,7 +5069,7 @@ exports.createConnectionToken = async (req, res, next) => {
   }
 
   const salonData = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     include: [{ model: addressDBS }],
   });
 
@@ -5129,3 +5172,66 @@ exports.createConnectionToken = async (req, res, next) => {
     }, ''),
   );
 };
+
+/*
+    Branches (Step A)
+    ________________________________________
+*/
+const branchesHelper = () => require('../../helper/branches')
+
+exports.myBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', await branchesHelper().myBranches(req.user.id), ''))
+
+exports.addBranch = async (req, res) => {
+  try {
+    const branch = await branchesHelper().addBranch(req.user.id, req.body)
+    return res.json(returnFunction('1', 'Branch added.', branch, ''))
+  } catch (err) {
+    // Over the plan's branch limit: the app opens the branch-plan paywall.
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+exports.closeBranch = async (req, res) =>
+  res.json(returnFunction('1', 'Branch closed. Clients no longer see it.', await branchesHelper().closeBranch(req.user.id, req.params.salonId), ''))
+
+exports.reopenBranch = async (req, res) => {
+  try {
+    return res.json(returnFunction('1', 'Branch reopened.', await branchesHelper().reopenBranch(req.user.id, req.params.salonId), ''))
+  } catch (err) {
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+// Step B: one person in several branches.
+const membersHelper = () => require('../../helper/branchMembers')
+
+exports.memberBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', { branches: await membersHelper().memberBranches(req.user.id, req.params.employeeId) }, ''))
+
+exports.addMemberToBranch = async (req, res) => {
+  const r = await membersHelper().addToBranch(req.user.id, req.body?.employeeId, req.params.salonId, {
+    role: req.body?.role,
+    from: req.body?.from, // Step C: optional period
+    until: req.body?.until,
+  })
+  const msg = r.created ? 'Added to the branch.' : req.body?.until ? 'Access period saved.' : 'Already works in this branch.'
+  return res.json(returnFunction('1', msg, { employeeId: r.row.id, salonId: r.row.salonDetailId, accessUntil: r.row.accessUntil || null }, ''))
+}
+
+exports.setMemberAllBranches = async (req, res) => {
+  const on = req.body?.allBranches === true || req.body?.allBranches === 'true'
+  const r = await membersHelper().setAllBranches(req.user.id, req.params.employeeId, on)
+  return res.json(returnFunction('1', on ? 'Now a manager over all branches.' : 'Manager of their current branches only.', r, ''))
+}
+
+exports.branchesSummary = async (req, res) =>
+  res.json(returnFunction('1', 'All branches', await branchesHelper().branchesSummary(req.user.id, req.query || {}), ''))
+
+exports.branchesDay = async (req, res) =>
+  res.json(returnFunction('1', 'All branches day', await branchesHelper().branchesDay(req.user.id, req.query?.date), ''))
+
+exports.renameBrand = async (req, res) =>
+  res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))
