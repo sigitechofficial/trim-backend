@@ -912,6 +912,16 @@ exports.login = async (req, res, next) => {
       })
       const nameOf = new Map(names.map((n) => [n.id, n.salonName]))
       response.data.branches = list.map((b) => ({ salonId: b.salonId, name: nameOf.get(b.salonId) || '', role: b.role }))
+      // The brand, for the owner's branch-plan purchases (RevenueCat id).
+      const brandRow = !claims.staffUserId && list.some((b) => b.brandId)
+        ? await require('../../models').brand.findOne({ where: { ownerUserId: claims.id } })
+        : null
+      if (brandRow) {
+        response.data.brand = {
+          id: brandRow.id, name: brandRow.name, rcAppUserId: brandRow.rcAppUserId,
+          branchLimit: brandRow.branchLimit, planProductId: brandRow.planProductId, planStatus: brandRow.planStatus,
+        }
+      }
     } catch (err) {
       console.warn('[login] branch list failed:', err.message)
     }
