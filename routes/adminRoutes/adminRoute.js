@@ -225,6 +225,7 @@ router.put(
   protect,
   catchAsync(adminController.changeSalonStatus),
 )
+router.put('/branch-change-status/:salonId', protect, catchAsync(adminController.changeBranchStatus))
 router.get(
   '/salon-subscription/:id',
   protect,

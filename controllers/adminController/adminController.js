@@ -2959,6 +2959,16 @@ exports.changeSalonStatus = async (req, res, next) => {
   )
 }
 
+// Step A: block or unblock one branch only. Clients stop seeing it and its
+// staff are signed out; the owner and other branches are not touched.
+exports.changeBranchStatus = async (req, res) => {
+  const branch = await salonDetail.findByPk(Number(req.params.salonId), { attributes: ['id', 'status', 'brandId'] })
+  if (!branch) throw new AppError('No branch found with that ID', 200)
+  const newStatus = branch.status ? 0 : 1
+  await require('../eventDrivenCommunication/salonBlock').branchBlock(branch.id, newStatus)
+  res.status(200).json(response({ message: newStatus ? 'Branch unblocked' : 'Branch blocked', data: { salonId: branch.id, newStatus } }))
+}
+
 //*1 Client Status Change
 exports.changeCustomerStatus = async (req, res, next) => {
   const id = req.params.id
@@ -4140,7 +4150,7 @@ exports.brandDetail = async (req, res) => {
   if (!b) return res.json(returnFunction('0', 'Brand not found.', {}, ''))
   const branches = await shop.findAll({
     where: { brandId: b.id },
-    attributes: ['id', 'salonName', 'planSource', 'pausedReason', 'closedAt', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'teamSize', 'createdAt'],
+    attributes: ['id', 'salonName', 'planSource', 'pausedReason', 'closedAt', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'teamSize', 'createdAt', 'status'],
     order: [['id', 'ASC']],
   })
   const members = await staff.findAll({
@@ -4158,6 +4168,7 @@ exports.brandDetail = async (req, res) => {
       branches: branches.map((x) => ({
         id: x.id, name: x.salonName, planSource: x.planSource, createdAt: x.createdAt,
         state: x.closedAt ? 'closed' : x.pausedReason ? `paused (${x.pausedReason})` : 'open',
+        blocked: x.status === false || x.status === 0,
         registrationExpiryDate: x.registrationExpiryDate, paymentStatus: x.subscriptionLatestPaymentStatus,
       })),
       members: members.map((m) => ({

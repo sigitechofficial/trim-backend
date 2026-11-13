@@ -2,10 +2,43 @@ const { employee, salonDetail, user, deviceToken } = require('../../models')
 
 const { sendEvent } = require('../../socket_io')
 
+// Step A: block/unblock one branch only (admin): its staff rows and their
+// logins; the owner and the other branches carry on.
+exports.branchBlock = async (salonId, newStatus) => {
+  try {
+    const staff = await employee.findAll({
+      where: { salonDetailId: salonId, isOwner: false, isExternalEmployee: false },
+      attributes: ['id', 'userId'],
+    })
+    await salonDetail.update({ status: newStatus }, { where: { id: salonId } })
+    if (staff.length) {
+      await employee.update({ status: newStatus }, { where: { id: staff.map((e) => e.id) } })
+      // Their logins too, as a whole-shop block does (a staff member works in
+      // one branch for now).
+      await user.update({ status: newStatus }, { where: { id: staff.map((e) => e.userId) } })
+      if (!newStatus) {
+        await deviceToken.destroy({ where: { userId: staff.map((e) => e.userId) } })
+        staff.forEach((e) => sendEvent(`${e.id}E`, { event: 'account-block', data: { type: 'logout' }, bookingId: null }))
+      }
+    }
+    return true
+  } catch (error) {
+    console.log('🚀 ~ branchBlock error:', error)
+  }
+}
+
 exports.salonBlock = async (userId, newStatus) => {
   try {
+    // Every branch of this owner (one shop for most).
+    const branches = await salonDetail.findAll({
+      where: { userId: userId, isExternalEmployee: { [require('sequelize').Op.or]: [false, null] } },
+      attributes: ['id'],
+    })
+    if (branches.length > 1) {
+      await Promise.all(branches.slice(1).map((b) => exports.branchBlock(b.id, newStatus)))
+    }
     const salon = await salonDetail.findOne({
-      where: { userId: userId },
+      where: { id: branches.length ? branches[0].id : -1 },
       attributes: ['id', 'userId'],
       include: [
         {
