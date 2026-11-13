@@ -5222,5 +5222,8 @@ exports.setMemberAllBranches = async (req, res) => {
   return res.json(returnFunction('1', on ? 'Now a manager over all branches.' : 'Manager of their current branches only.', r, ''))
 }
 
+exports.branchesSummary = async (req, res) =>
+  res.json(returnFunction('1', 'All branches', await branchesHelper().branchesSummary(req.user.id, req.query || {}), ''))
+
 exports.renameBrand = async (req, res) =>
   res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))

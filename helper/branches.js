@@ -202,6 +202,53 @@ async function reopenBranch(ownerUserId, salonId) {
   return { salonId: shop.id, state: 'open' }
 }
 
+/**
+ * Step B: every branch side by side for the owner. from/to are 'YYYY-MM-DD'
+ * (default: this month so far, UK). Revenue = completed bookings' total, as
+ * the reports count it. Today's bookings use the UK date.
+ */
+async function branchesSummary(ownerUserId, { from, to } = {}) {
+  const { DateTime } = require('luxon')
+  const today = DateTime.now().setZone('Europe/London')
+  const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))
+  const start = isDate(from) ? from : today.startOf('month').toISODate()
+  const end = isDate(to) ? to : today.toISODate()
+  const shops = await salonDetail.findAll({
+    where: ownShopsWhere(ownerUserId),
+    attributes: ['id', 'salonName', 'closedAt', 'pausedReason'],
+    order: [['id', 'ASC']],
+  })
+  if (!shops.length) return { from: start, to: end, branches: [], totals: {} }
+  const ids = shops.map((x) => x.id)
+  const [rows] = await sequelize.query(
+    `SELECT salonDetailId,
+            SUM(status = 'complete' AND \`on\` BETWEEN :start AND :end) AS completed,
+            ROUND(SUM(CASE WHEN status = 'complete' AND \`on\` BETWEEN :start AND :end THEN total ELSE 0 END), 2) AS revenue,
+            SUM(status = 'cancel' AND \`on\` BETWEEN :start AND :end) AS cancelled,
+            SUM(status = 'no-show' AND \`on\` BETWEEN :start AND :end) AS noShows,
+            SUM(\`on\` = :today AND status IN ('book', 'pending', 'complete')) AS today,
+            SUM(\`on\` > :today AND status IN ('book', 'pending', 'requested')) AS upcoming,
+            SUM(status = 'requested') AS requests
+       FROM bookings WHERE salonDetailId IN (:ids) GROUP BY salonDetailId`,
+    { replacements: { ids, start, end, today: today.toISODate() } },
+  )
+  const byShop = new Map(rows.map((r) => [Number(r.salonDetailId), r]))
+  const num = (v) => Number(v || 0)
+  const branches = shops.map((x) => {
+    const r = byShop.get(x.id) || {}
+    return {
+      salonId: x.id,
+      name: x.salonName,
+      state: x.closedAt ? 'closed' : x.pausedReason ? 'paused' : 'open',
+      today: num(r.today), upcoming: num(r.upcoming), requests: num(r.requests),
+      completed: num(r.completed), revenue: num(r.revenue), cancelled: num(r.cancelled), noShows: num(r.noShows),
+    }
+  })
+  const totals = ['today', 'upcoming', 'requests', 'completed', 'revenue', 'cancelled', 'noShows']
+    .reduce((t, k) => ({ ...t, [k]: Math.round(branches.reduce((n, b) => n + b[k], 0) * 100) / 100 }), {})
+  return { from: start, to: end, branches, totals }
+}
+
 async function renameBrand(ownerUserId, name) {
   const clean = String(name || '').trim().slice(0, 255)
   if (!clean) throw new AppError('Please give your business a name.', 200)
@@ -211,4 +258,4 @@ async function renameBrand(ownerUserId, name) {
   return { id: b.id, name: b.name }
 }
 
-module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch }
+module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch, branchesSummary }
