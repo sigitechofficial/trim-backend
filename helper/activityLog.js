@@ -80,8 +80,12 @@ const LABEL_OF = {
   ...Object.fromEntries(ACTIONS.map(([, , , action, label]) => [action, label])),
   'login.ok': 'Logged in',
   'login.failed': 'Failed login (wrong password)',
+  'approval.requested': 'Asked for approval',
+  'approval.approved': 'Approved a request',
+  'approval.declined': 'Declined a request',
+  'approval.failed': 'Approved a request (it could not be made)',
 }
-const CATEGORIES = ['people', 'money', 'settings', 'data', 'security']
+const CATEGORIES = ['people', 'money', 'settings', 'data', 'security', 'approvals']
 
 // '/a/:id/b' → { re: /^\/a\/([^/]+)\/b$/, names: ['id'] }
 const compiled = ACTIONS.map(([method, pattern, category, action]) => {
@@ -191,7 +195,7 @@ async function recordLogin(userId, { ok, ip, newDevice, salonId, brandId, role }
 }
 
 // The answers the permission guards give (middlewares/shopRole, branchScope).
-const DENIED = /don't have access|only the shop owner|not in your shop|belongs to another|only change your own|can't change your own/i
+const DENIED = /don't have access|only the shop owner|not in your shop|belongs to another|only change your own|can't change your own|approval is not valid/i
 
 const ipOf = (req) => String(req.headers?.['x-forwarded-for'] || req.ip || '').split(',')[0].trim() || null
 
@@ -214,6 +218,9 @@ function watch(req, res) {
   const branch = req.branch || {}
   const details = { ...hit.params, ...(req.body && typeof req.body === 'object' ? req.body : {}) }
   res.on('finish', () => {
+    // Held for approval: approvals.createRequest has logged it already.
+    if (body?.data?.code === 'APPROVAL_SENT') return
+    if (req.approvalRequestId) details.approvalRequest = req.approvalRequestId
     const ok = res.statusCode < 400 && body && String(body.status) === '1'
     const denied = !ok && body && DENIED.test(String(body.message || ''))
     record({

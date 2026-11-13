@@ -30,6 +30,8 @@ router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'
 // Step B: chair market, renter moves and shop work mode belong to the shop's
 // owner (a chair renter is the owner of their own shop, so they pass).
 router.use(['/chair-market', '/renter-moves', '/add-external-employee-default-service', '/mobile-visits/work-mode'], ownerOnly)
+// Step C: some team changes wait for the owner's approval (after the guards).
+router.use(require('../../middlewares/approvalGate'))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {

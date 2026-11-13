@@ -104,6 +104,8 @@ router.use(
   ],
   needLevel('updateProfile', 'high'),
 )
+// Step C: some team changes wait for the owner's approval (after the guards).
+router.use(require('../../middlewares/approvalGate'))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -468,6 +470,15 @@ router.patch('/branches/members/:employeeId/all-branches', catchAsync(salonContr
 router.post('/branches/:salonId/reopen', catchAsync(salonController.reopenBranch))
 // Step C: the activity log (read-only; access checked in the handler).
 router.get('/activity', catchAsync(require('../../controllers/salonControllers/activityController').list))
+// Step C: approvals (access checked in the handlers).
+const approvalsController = require('../../controllers/salonControllers/approvalsController')
+router.get('/approvals', catchAsync(approvalsController.list))
+router.get('/approvals/count', catchAsync(approvalsController.count))
+router.post('/approvals/:id/approve', catchAsync(approvalsController.approve))
+router.post('/approvals/:id/decline', catchAsync(approvalsController.decline))
+router.post('/approvals/:id/cancel', catchAsync(approvalsController.cancel))
+router.get('/approval-rules', catchAsync(approvalsController.getRules))
+router.put('/approval-rules', catchAsync(approvalsController.setRules))
 
 router.patch(
   '/change-category-status/:id',

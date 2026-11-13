@@ -283,5 +283,6 @@ require('./jobs/bookingRequestCron')
 require('./jobs/renterMoveCron')
 require('./jobs/mobileVisitCron')
 require('./jobs/brandPlanCron')
+require('./jobs/approvalsCron')
 
 // hello
