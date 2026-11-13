@@ -151,4 +151,53 @@ async function handleBrandEvent(event = {}) {
   return true
 }
 
-module.exports = { mirrorBrandPlan, enforceBranchLimit, handleBrandEvent, branchLimitForProduct, brandFromEvent, UNLIMITED_TEAM, PLAN_LIMIT }
+/**
+ * Nightly check: every brand with a branch plan. A branch that no longer
+ * matches the brand (dates, status, plan, staff limit, listing) is re-copied;
+ * a plan past its expiry with no webhook seen is marked expired; the branch
+ * limit is applied again. Returns a summary and logs what it changed.
+ */
+async function checkBrandPlans(now = new Date()) {
+  const summary = { brands: 0, remirrored: 0, expired: 0, paused: 0, unpaused: 0 }
+  const brands = await brand.findAll({ where: { planProductId: { [Op.ne]: null } } })
+  for (const b of brands) {
+    summary.brands++
+    await db.sequelize.transaction(async (transaction) => {
+      const row = await brand.findByPk(b.id, { lock: transaction.LOCK.UPDATE, transaction })
+      const expired = row.planExpiry && new Date(row.planExpiry) < now && row.planStatus !== 'expired'
+      if (expired) {
+        await row.update({ planStatus: 'expired' }, { transaction })
+        summary.expired++
+        console.warn(`[brandPlan] brand ${row.id}: plan past its expiry with no webhook; marked expired`)
+      }
+      const want = {
+        registrationExpiryDate: row.planExpiry ? new Date(row.planExpiry).toISOString().slice(0, 10) : null,
+        subscriptionLatestPaymentStatus: row.planStatus || null,
+        subscriptionPlan: row.planProductId || null,
+        teamSize: UNLIMITED_TEAM,
+      }
+      const branches = await salonDetail.findAll({
+        where: { brandId: row.id, planSource: 'brand' },
+        attributes: ['id', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'subscriptionPlan', 'teamSize', 'approvedByAdmin'],
+        transaction,
+      })
+      const drift = branches.filter((x) =>
+        String(x.registrationExpiryDate || '') !== String(want.registrationExpiryDate || '') ||
+        (x.subscriptionLatestPaymentStatus || null) !== want.subscriptionLatestPaymentStatus ||
+        (x.subscriptionPlan || null) !== want.subscriptionPlan ||
+        Number(x.teamSize) !== UNLIMITED_TEAM ||
+        !x.approvedByAdmin)
+      if (drift.length || expired) {
+        await mirrorBrandPlan(row.id, transaction)
+        summary.remirrored += drift.length
+        if (drift.length) console.warn(`[brandPlan] brand ${row.id}: re-copied the plan to branches ${drift.map((x) => x.id).join(', ')}`)
+      }
+      const { paused, unpaused } = await enforceBranchLimit(row.id, transaction)
+      summary.paused += paused.length
+      summary.unpaused += unpaused.length
+    })
+  }
+  return summary
+}
+
+module.exports = { mirrorBrandPlan, enforceBranchLimit, handleBrandEvent, checkBrandPlans, branchLimitForProduct, brandFromEvent, UNLIMITED_TEAM, PLAN_LIMIT }

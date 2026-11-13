@@ -282,5 +282,6 @@ require('./jobs/bookingRequestCron')
 // ─── Renter Move Cron (chair renters moving shop on their move date) ─────────
 require('./jobs/renterMoveCron')
 require('./jobs/mobileVisitCron')
+require('./jobs/brandPlanCron')
 
 // hello
