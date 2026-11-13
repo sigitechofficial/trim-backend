@@ -14,7 +14,8 @@ const AppError = require('../utils/appError')
 const csvCell = (v) => {
   const s = v == null ? '' : String(v)
   // Spreadsheet formula injection: a leading = + - @ is made plain text.
-  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s
+  // Phone numbers like +44 7700 900123 are only digits, so they stay as they are.
+  const safe = /^[=+\-@]/.test(s) && !/^\+[\d\s()-]+$/.test(s) ? `'${s}` : s
   return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 const csv = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\n')

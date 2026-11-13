@@ -10,8 +10,8 @@ const { csv } = require('../helper/clientData')
 const shared = require('../helper/sharedSettings')
 
 test('CSV quotes commas and quotes, and defuses spreadsheet formulas', () => {
-  const out = csv([['Sam, Jr', 'say "hi"', '=HYPERLINK("x")', '+44 7700', 3]])
-  assert.equal(out, `"Sam, Jr","say ""hi""","'=HYPERLINK(""x"")",'+44 7700,3`)
+  const out = csv([['Sam, Jr', 'say "hi"', '=HYPERLINK("x")', '+44 7700 900123', '+cmd|x', 3]])
+  assert.equal(out, `"Sam, Jr","say ""hi""","'=HYPERLINK(""x"")",+44 7700 900123,'+cmd|x,3`)
 })
 
 test('shared settings: routes map to their setting on the salon router only', () => {
