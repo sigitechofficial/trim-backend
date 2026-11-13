@@ -1080,8 +1080,6 @@ exports.home = async (req, res, next) => {
       where: {
         customerId: req.user.id,
         status: { [Op.or]: ['pending', 'book', 'requested'] },
-        // Upcoming only: a past booking the shop never closed is not "next".
-        on: { [Op.gte]: require('luxon').DateTime.now().setZone('Europe/London').toISODate() },
       },
       attributes: [
         'id',
