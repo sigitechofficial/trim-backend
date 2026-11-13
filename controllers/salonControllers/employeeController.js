@@ -185,6 +185,14 @@ exports.AddEmployee = async (req, res, next) => {
     rentAmount,
   } = req.body
 
+  // Step A: role in this branch. Only the owner may add a manager.
+  const { roleFrom, presetRows } = require('../../helper/roles')
+  const role = roleFrom(req.body?.role)
+  const bookable = req.body?.bookable === undefined ? true : !['false', '0', false, 0].includes(req.body.bookable)
+  if (role === 'manager' && !(await require('../../helper/branchScope').actorFor(req)).isOwner) {
+    return next(new appError('Only the shop owner can add a manager.', 200))
+  }
+
   // check if user with same eamil and phoneNum exists
   const salonDetails = await salonDetail.findOne({
     where: {
@@ -308,7 +316,15 @@ exports.AddEmployee = async (req, res, next) => {
       userId: newEntry.id,
       salonDetailId,
       isExternalEmployee: isExternalEmployeeCondition,
+      role: isExternalEmployeeCondition ? 'barber' : role,
+      bookable: isExternalEmployeeCondition ? true : bookable,
     })
+    // Managers and receptionists start with their role's levels (the app's
+    // permission screen may change them right after).
+    if (!isExternalEmployeeCondition) {
+      const rows = presetRows(role, employeeData.id)
+      if (rows.length) await employeeAccess.bulkCreate(rows)
+    }
 
     let workerId = employeeData.id
     let externalEmployeeSalonId = null

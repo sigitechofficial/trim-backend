@@ -873,10 +873,13 @@ exports.login = async (req, res, next) => {
         hasWagesMethod: false,
       };
     } else {
+      // Step A: a manager/receptionist who doesn't take bookings needs no
+      // services, hours or pay method before they can start.
       const isAllDataAvailable =
-        employeeDetails.employeeServices.length !== 0 &&
-        employeeDetails.times.length !== 0 &&
-        employeeDetails.employeeWagesMethod;
+        employeeDetails.bookable === false ||
+        (employeeDetails.employeeServices.length !== 0 &&
+          employeeDetails.times.length !== 0 &&
+          employeeDetails.employeeWagesMethod);
 
       response.status = isAllDataAvailable ? '4' : '5';
       response.message = 'Login successful';

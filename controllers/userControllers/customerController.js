@@ -1860,7 +1860,8 @@ exports.salonDetails = async (req, res, next) => {
       },
       {
         model: employee,
-        where: { isExternalEmployee: false },
+        // Step A: managers/receptionists who don't cut hair are not shown.
+        where: { isExternalEmployee: false, bookable: true },
         attributes: [
           'id',
           'position',
@@ -2139,7 +2140,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
     attributes: ['employeeId'],
     include: {
       model: employee,
-      where: { deleted: false, status: true, isExternalEmployee: false },
+      where: { deleted: false, status: true, isExternalEmployee: false, bookable: true },
     },
     group: ['employeeId'],
     having: literal(`COUNT(DISTINCT serviceId) = ${services.length}`),
@@ -2330,6 +2331,7 @@ exports.salonAvailability = async (req, res, next) => {
       salonDetailId: salon.id,
       deleted: false,
       isExternalEmployee: false,
+      bookable: true,
     },
     attributes: ['id'],
     include: [
@@ -2588,6 +2590,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
       deleted: false,
       status: true,
       isExternalEmployee: false,
+      bookable: true,
     },
     attributes: ['id'],
     include: [
@@ -3313,6 +3316,7 @@ exports.bookAppointment = async (req, res, next) => {
         deleted: false,
         status: true,
         isExternalEmployee: false,
+        bookable: true,
       },
       attributes: ['id'],
       include: [
