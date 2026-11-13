@@ -7,6 +7,12 @@ const { LABEL_OF, CATEGORIES } = require('../../helper/activityLog')
 const { branchesFor } = require('../../helper/branchScope')
 const { staffLevel } = require('../../middlewares/shopRole')
 
+// MariaDB keeps JSON as text: hand the app an object.
+function parseDetails(v) {
+  if (v == null || typeof v === 'object') return v ?? null
+  try { return JSON.parse(v) } catch (_) { return null }
+}
+
 const reply = (res, status, message, data = {}) => res.json({ status, message, data, error: '' })
 
 // Branch ids this caller may read the log of.
@@ -56,7 +62,7 @@ exports.list = async (req, res) => {
       label: LABEL_OF[r.action] || r.action,
       result: r.result,
       message: r.message,
-      details: r.details,
+      details: parseDetails(r.details),
     })),
     nextBefore: rows.length > limit ? Number(page[page.length - 1].id) : null,
     branches: allowed.map((id) => ({ salonId: id })),

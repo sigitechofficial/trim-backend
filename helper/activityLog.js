@@ -52,7 +52,6 @@ const ACTIONS = [
 
   // Settings
   ['PATCH', '/salon/v1/updateSalonTimings', 'settings', 'settings.hours', 'Changed opening hours'],
-  ['POST', '/salon/v1/save-working-hour', 'settings', 'settings.hours', 'Changed opening hours'],
   ['PATCH', '/salon/v1/updateSalonDetail', 'settings', 'settings.profile', 'Changed the shop profile'],
   ['PATCH', '/salon/v1/updateSalonAddress', 'settings', 'settings.address', 'Changed the address'],
   ['POST', '/salon/v1/updateCancellationPolicies', 'settings', 'policy.cancellation', 'Changed the cancellation policy'],
