@@ -249,6 +249,51 @@ async function branchesSummary(ownerUserId, { from, to } = {}) {
   return { from: start, to: end, branches, totals }
 }
 
+/**
+ * Step B: one day across every branch (owner), in time order. Each booking:
+ * branch, time, client, services with their barber, status, total.
+ */
+async function branchesDay(ownerUserId, date) {
+  const { DateTime } = require('luxon')
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : DateTime.now().setZone('Europe/London').toISODate()
+  const shops = await salonDetail.findAll({ where: { ...ownShopsWhere(ownerUserId), closedAt: null }, attributes: ['id', 'salonName'], order: [['id', 'ASC']] })
+  if (!shops.length) return { date: day, branches: [], bookings: [] }
+  const [rows] = await sequelize.query(
+    `SELECT b.id, b.salonDetailId, b.startTime, b.endTime, b.status, b.total,
+            COALESCE(NULLIF(TRIM(CONCAT(IFNULL(cu.firstName, ''), ' ', IFNULL(cu.lastName, ''))), ''),
+                     NULLIF(TRIM(CONCAT(IFNULL(b.clientFirstName, ''), ' ', IFNULL(b.clientLastName, ''))), ''), 'Walk-in') AS client,
+            s.serviceName, j.startTime AS jobStart,
+            NULLIF(TRIM(CONCAT(IFNULL(eu.firstName, ''), ' ', IFNULL(eu.lastName, ''))), '') AS barber
+       FROM bookings b
+       LEFT JOIN users cu ON cu.id = b.customerId
+       LEFT JOIN jobs j ON j.bookingId = b.id AND j.deletedAt IS NULL
+       LEFT JOIN services s ON s.id = j.serviceId
+       LEFT JOIN employees e ON e.id = j.employeeId
+       LEFT JOIN users eu ON eu.id = e.userId
+      WHERE b.salonDetailId IN (:ids) AND b.\`on\` = :day
+      ORDER BY b.startTime, b.id, j.startTime`,
+    { replacements: { ids: shops.map((x) => x.id), day } },
+  )
+  const nameOf = new Map(shops.map((x) => [x.id, x.salonName]))
+  const byId = new Map()
+  for (const r of rows) {
+    if (!byId.has(r.id)) {
+      byId.set(r.id, {
+        bookingId: r.id, salonId: r.salonDetailId, branch: nameOf.get(r.salonDetailId),
+        startTime: String(r.startTime || '').slice(0, 5), endTime: String(r.endTime || '').slice(0, 5),
+        status: r.status, total: Number(r.total || 0), client: r.client, services: [],
+      })
+    }
+    if (r.serviceName) byId.get(r.id).services.push({ name: r.serviceName, barber: r.barber || '' })
+  }
+  const bookings = [...byId.values()]
+  const branches = shops.map((x) => ({
+    salonId: x.id, name: x.salonName,
+    count: bookings.filter((b) => b.salonId === x.id && !['cancel'].includes(b.status)).length,
+  }))
+  return { date: day, branches, bookings }
+}
+
 async function renameBrand(ownerUserId, name) {
   const clean = String(name || '').trim().slice(0, 255)
   if (!clean) throw new AppError('Please give your business a name.', 200)
@@ -258,4 +303,4 @@ async function renameBrand(ownerUserId, name) {
   return { id: b.id, name: b.name }
 }
 
-module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch, branchesSummary }
+module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch, branchesSummary, branchesDay }

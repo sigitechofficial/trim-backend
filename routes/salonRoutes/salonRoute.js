@@ -451,6 +451,7 @@ router.patch(
 router.post('/account-delete', catchAsync(salonController.accountDelete))
 // Branches (Step A), owner only.
 router.get('/branches/summary', catchAsync(salonController.branchesSummary))
+router.get('/branches/day', catchAsync(salonController.branchesDay))
 router.get('/branches', catchAsync(salonController.myBranches))
 router.post('/branches', catchAsync(salonController.addBranch))
 router.patch('/branches/brand', catchAsync(salonController.renameBrand))

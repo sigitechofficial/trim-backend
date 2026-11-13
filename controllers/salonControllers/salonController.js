@@ -5225,5 +5225,8 @@ exports.setMemberAllBranches = async (req, res) => {
 exports.branchesSummary = async (req, res) =>
   res.json(returnFunction('1', 'All branches', await branchesHelper().branchesSummary(req.user.id, req.query || {}), ''))
 
+exports.branchesDay = async (req, res) =>
+  res.json(returnFunction('1', 'All branches day', await branchesHelper().branchesDay(req.user.id, req.query?.date), ''))
+
 exports.renameBrand = async (req, res) =>
   res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))
