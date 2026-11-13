@@ -5212,8 +5212,13 @@ exports.memberBranches = async (req, res) =>
   res.json(returnFunction('1', 'Branches', { branches: await membersHelper().memberBranches(req.user.id, req.params.employeeId) }, ''))
 
 exports.addMemberToBranch = async (req, res) => {
-  const r = await membersHelper().addToBranch(req.user.id, req.body?.employeeId, req.params.salonId, { role: req.body?.role })
-  return res.json(returnFunction('1', r.created ? 'Added to the branch.' : 'Already works in this branch.', { employeeId: r.row.id, salonId: r.row.salonDetailId }, ''))
+  const r = await membersHelper().addToBranch(req.user.id, req.body?.employeeId, req.params.salonId, {
+    role: req.body?.role,
+    from: req.body?.from, // Step C: optional period
+    until: req.body?.until,
+  })
+  const msg = r.created ? 'Added to the branch.' : req.body?.until ? 'Access period saved.' : 'Already works in this branch.'
+  return res.json(returnFunction('1', msg, { employeeId: r.row.id, salonId: r.row.salonDetailId, accessUntil: r.row.accessUntil || null }, ''))
 }
 
 exports.setMemberAllBranches = async (req, res) => {

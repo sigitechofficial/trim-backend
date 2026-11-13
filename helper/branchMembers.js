@@ -22,7 +22,8 @@ const ownBranchesWhere = (ownerUserId) => ({ userId: ownerUserId, isExternalEmpl
  * branch `targetSalonId`, copying role, permissions, hours, matching
  * services (by name) and pay. Returns the new row, or the existing one.
  */
-async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role, transaction } = {}) {
+async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role, from, until, transaction } = {}) {
+  const period = accessPeriod(from, until)
   const run = async (t) => {
     const target = await salonDetail.findOne({ where: { ...ownBranchesWhere(ownerUserId), id: Number(targetSalonId) }, transaction: t })
     if (!target) throw new AppError('This branch is not yours.', 200)
@@ -33,7 +34,16 @@ async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role,
     })
     if (!source) throw new AppError('This team member is not in your business.', 200)
     const existing = await employee.findOne({ where: { userId: source.userId, salonDetailId: target.id, deleted: false }, transaction: t })
-    if (existing) return { row: existing, created: false }
+    if (existing) {
+      // Step C: a period on a branch they already have only extends or sets
+      // a period that was there; it never cuts permanent access short.
+      if (period && existing.accessState && existing.accessState !== 'ended') {
+        await existing.update({ accessUntil: period.until }, { transaction: t })
+      } else if (period && existing.accessState === 'ended') {
+        await existing.update({ ...period.fields, status: period.fields.status }, { transaction: t })
+      }
+      return { row: existing, created: false }
+    }
 
     const row = await employee.create(
       {
@@ -45,7 +55,9 @@ async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role,
         status: true,
         role: role || source.role || 'barber',
         bookable: source.bookable,
-        allBranches: source.allBranches,
+        allBranches: period ? false : source.allBranches,
+        customRoleId: source.customRoleId || null,
+        ...(period ? period.fields : {}),
       },
       { transaction: t },
     )
@@ -67,17 +79,48 @@ async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role,
   return transaction ? run(transaction) : sequelize.transaction(run)
 }
 
+/**
+ * Step C: access for a period ("York, 1–14 December"). from/until are dates
+ * (YYYY-MM-DD, UK time) or ISO times; until is the last day included. Returns
+ * null for permanent access, or { until, fields } for the employee row: a
+ * period that has not started yet is created switched off ('scheduled').
+ */
+function accessPeriod(from, until) {
+  if (!from && !until) return null
+  const day = (v, endOfDay) => {
+    if (!v) return null
+    const s = String(v)
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T${endOfDay ? '23:59:59' : '00:00:00'}Z`) : new Date(s)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const now = new Date()
+  const start = day(from, false) || now
+  const end = day(until, true)
+  if (!end) throw new AppError('Please choose the last day of access.', 200)
+  if (end <= start) throw new AppError('The last day must be after the first day.', 200)
+  if (end <= now) throw new AppError('The last day has already passed.', 200)
+  if (end - start > 366 * 24 * 60 * 60 * 1000) throw new AppError('Access for a period can be at most a year.', 200)
+  const started = start <= now
+  return {
+    until: end,
+    fields: { accessFrom: start, accessUntil: end, accessState: started ? 'active' : 'scheduled', status: started },
+  }
+}
+
 /** Every branch the person works in (their rows in the owner's branches). */
 async function memberBranches(ownerUserId, employeeId) {
   const source = await employee.findByPk(Number(employeeId), { attributes: ['userId'] })
   if (!source) return []
   const rows = await employee.findAll({
     where: { userId: source.userId, deleted: false },
-    attributes: ['id', 'salonDetailId', 'role', 'status', 'allBranches'],
+    attributes: ['id', 'salonDetailId', 'role', 'status', 'allBranches', 'accessFrom', 'accessUntil', 'accessState'],
     include: { model: salonDetail, where: ownBranchesWhere(ownerUserId), attributes: ['id', 'salonName', 'closedAt'], required: true },
     order: [['salonDetailId', 'ASC']],
   })
-  return rows.map((r) => ({ employeeId: r.id, salonId: r.salonDetailId, name: r.salonDetail.salonName, role: r.role, active: r.status, allBranches: r.allBranches }))
+  return rows.map((r) => ({
+    employeeId: r.id, salonId: r.salonDetailId, name: r.salonDetail.salonName, role: r.role, active: r.status, allBranches: r.allBranches,
+    accessFrom: r.accessFrom, accessUntil: r.accessUntil, accessState: r.accessState,
+  }))
 }
 
 /**

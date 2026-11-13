@@ -25,6 +25,17 @@ router.param('salonDetailId', (req, res, next) => sameShop(req, res, next))
 // Owner-only team admin; access-level and pay edits are checked per member.
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
 router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)
+// Step C: changing one person's access by hand takes them off their custom
+// role (otherwise the next change to the role would undo it).
+router.use(['/access-levels/create', '/access-levels/update'], (req, res, next) => {
+  res.on('finish', () => {
+    const id = parseInt(req.body?.employeeId, 10)
+    if (res.statusCode < 400 && id > 0) {
+      require('../../models').employee.update({ customRoleId: null }, { where: { id } }).catch(() => {})
+    }
+  })
+  next()
+})
 router.use(['/AddEmployee', '/addEmployeeService'], needLevel('teamMember', 'high'))
 router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'], profileOrTeamEdit)
 // Step B: chair market, renter moves and shop work mode belong to the shop's

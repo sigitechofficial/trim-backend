@@ -484,6 +484,13 @@ const securityController = require('../../controllers/salonControllers/securityC
 router.get('/security', catchAsync(securityController.overview))
 router.put('/security', catchAsync(securityController.update))
 router.post('/security/devices/:id/sign-out', catchAsync(securityController.signOut))
+// Step C: custom roles. Owners make, change, delete and give them.
+const rolesController = require('../../controllers/salonControllers/rolesController')
+router.get('/roles', catchAsync(rolesController.list))
+router.post('/roles', ownerOnly, catchAsync(rolesController.create))
+router.put('/roles/:id', ownerOnly, catchAsync(rolesController.update))
+router.delete('/roles/:id', ownerOnly, catchAsync(rolesController.remove))
+router.put('/roles-assign', ownerOnly, catchAsync(rolesController.assign))
 
 router.patch(
   '/change-category-status/:id',

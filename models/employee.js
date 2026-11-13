@@ -61,6 +61,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: false,
     },
+    // Step C: the owner's custom role this person holds here (its levels are
+    // copied to employeeAccess), and access to this branch for a period only.
+    customRoleId: { type: DataTypes.INTEGER, allowNull: true },
+    accessFrom: { type: DataTypes.DATE, allowNull: true },
+    accessUntil: { type: DataTypes.DATE, allowNull: true },
+    accessState: { type: DataTypes.STRING(16), allowNull: true }, // scheduled | active | ended
   })
 
   employee.associate = (models) => {

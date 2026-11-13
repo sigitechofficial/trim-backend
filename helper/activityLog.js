@@ -22,6 +22,10 @@ const ACTIONS = [
   ['PATCH', '/salon/v1/employee/updateWagesMethod', 'people', 'team.pay', "Changed a team member's pay"],
   ['POST', '/salon/v1/branches/:salonId/members', 'people', 'team.add_to_branch', 'Added a team member to a branch'],
   ['PATCH', '/salon/v1/branches/members/:employeeId/all-branches', 'people', 'team.all_branches', 'Changed all-branches access'],
+  ['POST', '/salon/v1/roles', 'people', 'role.create', 'Made a role'],
+  ['PUT', '/salon/v1/roles/:id', 'people', 'role.update', 'Changed a role'],
+  ['DELETE', '/salon/v1/roles/:id', 'people', 'role.delete', 'Deleted a role'],
+  ['PUT', '/salon/v1/roles-assign', 'people', 'role.assign', 'Gave someone a role'],
   ['PATCH', '/salon/v1/employee/chair-market/offers/:offer/accept', 'people', 'chair.offer_accept', 'Accepted a chair offer'],
   ['POST', '/salon/v1/employee/chair-market/offers/:offer/start', 'people', 'chair.start', 'Confirmed a start day'],
   ['POST', '/salon/v1/employee/renter-moves/invite', 'people', 'renter.invite', 'Invited a chair renter'],
@@ -83,6 +87,12 @@ const LABEL_OF = {
   'login.new_device': 'Confirmed a new device',
   'device.signed_out': 'Signed a device out',
   'security.managers_two_step': 'Changed two-step login for managers',
+  'team.access_started': 'Branch access started (for a period)',
+  'team.access_ended': 'Branch access ended (period over)',
+  'role.create': 'Made a role',
+  'role.update': 'Changed a role',
+  'role.delete': 'Deleted a role',
+  'role.assign': 'Gave someone a role',
   'approval.requested': 'Asked for approval',
   'approval.approved': 'Approved a request',
   'approval.declined': 'Declined a request',
@@ -111,6 +121,7 @@ function matchAction(method, path) {
 const SECRET = /pass|token|secret|otp|card|cvc|cvv|iban|sort.?code|account.?number|stripe|signature|image|photo|file|base64/i
 function cleanDetails(value, depth = 0) {
   if (value == null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString()
   if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 200)}…` : value
   if (depth >= 3) return undefined
   if (Array.isArray(value)) {

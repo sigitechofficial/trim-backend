@@ -28,6 +28,7 @@ async function ensureBranchSchema(db) {
   await db.approvalRule.sync()
   await db.trustedDevice.sync()
   await db.loginChallenge.sync()
+  await db.customRole.sync()
   // The owner's choice: managers also need two-step login.
   await addMissingColumns(qi, 'users', {
     twoStepForManagers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
@@ -43,6 +44,11 @@ async function ensureBranchSchema(db) {
     role: { type: DataTypes.STRING(16), allowNull: true },
     bookable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     allBranches: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Step C: an owner's custom role, and access to a branch for a period.
+    customRoleId: { type: DataTypes.INTEGER, allowNull: true },
+    accessFrom: { type: DataTypes.DATE, allowNull: true },
+    accessUntil: { type: DataTypes.DATE, allowNull: true },
+    accessState: { type: DataTypes.STRING(16), allowNull: true }, // scheduled | active | ended
   })
   // Rows from before Step A: the owner row is 'owner', everyone else 'barber'.
   await db.sequelize.query(

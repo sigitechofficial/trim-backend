@@ -187,8 +187,14 @@ exports.AddEmployee = async (req, res, next) => {
 
   // Step A: role in this branch. Only the owner may add a manager.
   const { roleFrom, presetRows } = require('../../helper/roles')
-  const role = roleFrom(req.body?.role)
-  const bookable = req.body?.bookable === undefined ? true : !['false', '0', false, 0].includes(req.body.bookable)
+  // Step C: an owner's custom role sets the role, bookable and every level.
+  // Staff sessions carry the owner's id, so req.user.id is the owner here.
+  const customRole = await require('../../helper/customRoles').forNewMember(req.user.id, req.body?.customRoleId)
+  if (req.body?.customRoleId && !customRole) return next(new appError('Role not found.', 200))
+  const role = customRole ? customRole.baseRole : roleFrom(req.body?.role)
+  const bookable = customRole
+    ? !!customRole.bookable
+    : req.body?.bookable === undefined ? true : !['false', '0', false, 0].includes(req.body.bookable)
   if (role === 'manager' && !(await require('../../helper/branchScope').actorFor(req)).isOwner) {
     return next(new appError('Only the shop owner can add a manager.', 200))
   }
@@ -322,8 +328,12 @@ exports.AddEmployee = async (req, res, next) => {
     // Managers and receptionists start with their role's levels (the app's
     // permission screen may change them right after).
     if (!isExternalEmployeeCondition) {
-      const rows = presetRows(role, employeeData.id)
-      if (rows.length) await employeeAccess.bulkCreate(rows)
+      if (customRole) {
+        await require('../../helper/customRoles').applyToEmployee(customRole, employeeData.id)
+      } else {
+        const rows = presetRows(role, employeeData.id)
+        if (rows.length) await employeeAccess.bulkCreate(rows)
+      }
     }
 
     let workerId = employeeData.id

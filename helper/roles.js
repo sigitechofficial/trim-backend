@@ -52,4 +52,4 @@ function presetRows(role, employeeId) {
   return Object.entries(preset).map(([key, level]) => ({ employeeId, key, level, access: LABELS[key], status: true }))
 }
 
-module.exports = { ROLES, PRESETS, roleFrom, presetRows }
+module.exports = { ROLES, LABELS, PRESETS, roleFrom, presetRows }

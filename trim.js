@@ -284,5 +284,6 @@ require('./jobs/renterMoveCron')
 require('./jobs/mobileVisitCron')
 require('./jobs/brandPlanCron')
 require('./jobs/approvalsCron')
+require('./jobs/accessPeriodCron')
 
 // hello
