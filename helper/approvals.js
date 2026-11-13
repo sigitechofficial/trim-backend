@@ -64,6 +64,12 @@ const RULES = {
     default: false,
     routes: [['POST', '/salon/v1/employee', '/AddEmployee']],
   },
+  exportClients: {
+    label: 'Exporting the client list',
+    hint: 'A team member downloading all clients with their details',
+    default: true,
+    routes: [['POST', '/salon/v1', '/clients/export']],
+  },
   teamAccess: {
     label: "Changing someone's access",
     hint: 'Changing what a team member can see and do',
@@ -152,6 +158,10 @@ async function describe(rule, req, salonDetailId) {
     const e = b.employeeId ? await db.employee.findByPk(b.employeeId, { include: { model: db.user, attributes: ['firstName', 'lastName'] } }) : null
     const name = e?.user ? `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim() : 'a team member'
     return { summary: `Change ${name}'s access`, before: null }
+  }
+  if (rule === 'exportClients') {
+    const s = await db.salonDetail.findByPk(salonDetailId, { attributes: ['salonName'] })
+    return { summary: `Export the client list of ${s?.salonName || 'the branch'}`, before: null }
   }
   if (rule === 'policies') {
     const which = req.path.match(/update(\w+?)Polic/i)?.[1] || ''

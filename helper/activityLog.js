@@ -65,6 +65,7 @@ const ACTIONS = [
   ['POST', '/salon/v1/online-offline', 'settings', 'settings.online', 'Took the shop online or offline'],
   ['PATCH', '/salon/v1/booking-approval', 'settings', 'settings.booking_approval', 'Changed booking approval'],
   ['PUT', '/salon/v1/loyalty', 'settings', 'settings.loyalty', 'Changed the loyalty offer'],
+  ['PUT', '/salon/v1/shared-settings/:key', 'settings', 'settings.shared', 'Changed where a setting applies'],
   ['POST', '/salon/v1/breaks', 'settings', 'settings.break', 'Added a break'],
   ['DELETE', '/salon/v1/breaks/:id', 'settings', 'settings.break_remove', 'Removed a break'],
   ['POST', '/salon/v1/branches', 'settings', 'branch.add', 'Added a branch'],
@@ -74,6 +75,8 @@ const ACTIONS = [
 
   // Data
   ['POST', '/salon/v1/bookings/importClients', 'data', 'clients.import', 'Imported clients'],
+  ['POST', '/salon/v1/clients/export', 'data', 'clients.export', 'Exported the client list'],
+  ['POST', '/salon/v1/clients/:customerId/data-copy', 'data', 'clients.data_copy', "Sent a client a copy of their data"],
   ['POST', '/salon/v1/bookings/removeClient', 'data', 'clients.remove', 'Removed a client'],
   ['POST', '/salon/v1/active-block-customer', 'data', 'clients.block', 'Blocked or unblocked a client'],
   ['POST', '/salon/v1/send-custom-notifications/:audienceType', 'data', 'clients.message', 'Sent a message to clients'],

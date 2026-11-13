@@ -140,6 +140,8 @@ async function addBranch(ownerUserId, body = {}) {
     if (b.planProductId) await require('./brandPlan').mirrorBrandPlan(b.id, transaction)
     return { salonId: branch.id, name: branch.salonName, brandId: b.id, copiedFrom: from.id, services: services.size, categories: categories.size }
   })
+  // Step C: settings shared across all branches come from where they were set.
+  await require('./sharedSettings').applyToNewBranch(ownerUserId, result.salonId)
   return result
 }
 

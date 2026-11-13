@@ -29,6 +29,7 @@ async function ensureBranchSchema(db) {
   await db.trustedDevice.sync()
   await db.loginChallenge.sync()
   await db.customRole.sync()
+  await db.sharedSetting.sync()
   // The owner's choice: managers also need two-step login.
   await addMissingColumns(qi, 'users', {
     twoStepForManagers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

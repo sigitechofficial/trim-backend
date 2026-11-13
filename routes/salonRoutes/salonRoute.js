@@ -105,6 +105,10 @@ router.use(
   needLevel('updateProfile', 'high'),
 )
 // Step C: some team changes wait for the owner's approval (after the guards).
+// Step C: exporting the client list (can need the owner's approval, below).
+router.use('/clients/export', needLevel('exportClients', 'high'))
+// Step C: settings shared across branches (locked ones are the owner's only).
+router.use(require('../../middlewares/sharedSettingsGate'))
 router.use(require('../../middlewares/approvalGate'))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
@@ -491,6 +495,14 @@ router.post('/roles', ownerOnly, catchAsync(rolesController.create))
 router.put('/roles/:id', ownerOnly, catchAsync(rolesController.update))
 router.delete('/roles/:id', ownerOnly, catchAsync(rolesController.remove))
 router.put('/roles-assign', ownerOnly, catchAsync(rolesController.assign))
+// Step C: client data tools.
+const clientDataController = require('../../controllers/salonControllers/clientDataController')
+// Step C: shared settings (owner).
+const sharedSettingsController = require('../../controllers/salonControllers/sharedSettingsController')
+router.get('/shared-settings', ownerOnly, catchAsync(sharedSettingsController.list))
+router.put('/shared-settings/:key', ownerOnly, catchAsync(sharedSettingsController.set))
+router.post('/clients/export', catchAsync(clientDataController.exportList))
+router.post('/clients/:customerId/data-copy', needLevel('client', 'high'), catchAsync(clientDataController.dataCopy))
 
 router.patch(
   '/change-category-status/:id',
