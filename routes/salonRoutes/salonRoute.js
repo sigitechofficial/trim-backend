@@ -466,6 +466,8 @@ router.get('/branches/members/:employeeId', catchAsync(salonController.memberBra
 router.post('/branches/:salonId/members', catchAsync(salonController.addMemberToBranch))
 router.patch('/branches/members/:employeeId/all-branches', catchAsync(salonController.setMemberAllBranches))
 router.post('/branches/:salonId/reopen', catchAsync(salonController.reopenBranch))
+// Step C: the activity log (read-only; access checked in the handler).
+router.get('/activity', catchAsync(require('../../controllers/salonControllers/activityController').list))
 
 router.patch(
   '/change-category-status/:id',

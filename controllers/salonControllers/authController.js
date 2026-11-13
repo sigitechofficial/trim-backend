@@ -623,6 +623,8 @@ exports.login = async (req, res, next) => {
     User.signedFrom == 'email' &&
     !(await bcrypt.compare(password, User.password))
   ) {
+    // Step C: failed logins go in the activity log (security).
+    require('../../helper/activityLog').recordLogin(User.id, { ok: false, ip: req.ip, dvToken })
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
     );
@@ -912,6 +914,10 @@ exports.login = async (req, res, next) => {
       })
       const nameOf = new Map(names.map((n) => [n.id, n.salonName]))
       response.data.branches = list.map((b) => ({ salonId: b.salonId, name: nameOf.get(b.salonId) || '', role: b.role }))
+      // Step C: the login in the activity log of the home branch.
+      require('../../helper/activityLog').recordLogin(User.id, {
+        ok: true, ip: req.ip, newDevice: !found, salonId: list[0]?.salonId, brandId: list[0]?.brandId, role: list[0]?.role,
+      })
       // The brand, for the owner's branch-plan purchases (RevenueCat id).
       const brandRow = !claims.staffUserId && list.some((b) => b.brandId)
         ? await require('../../models').brand.findOne({ where: { ownerUserId: claims.id } })

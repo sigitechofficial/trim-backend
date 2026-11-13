@@ -17,13 +17,14 @@ const LABELS = {
   respondToEnquiries: 'Respond to\nEnquiries',
   bookingRequests: 'Booking requests',
   takings: 'Takings & reports',
+  activityLog: 'Activity log',
 }
 
 // Starting levels by role (barbers start from the shop's defaults instead).
 const PRESETS = {
   // Managers: everything in their branches except takings, which the owner
   // can switch on per person (design §5.4).
-  manager: { ...Object.fromEntries(Object.keys(LABELS).map((k) => [k, 'high'])), takings: 'none' },
+  manager: { ...Object.fromEntries(Object.keys(LABELS).map((k) => [k, 'high'])), takings: 'none', activityLog: 'low' },
   receptionist: {
     appointments: 'high',
     teamMember: 'none',
@@ -38,6 +39,7 @@ const PRESETS = {
     respondToEnquiries: 'high',
     bookingRequests: 'high',
     takings: 'none',
+    activityLog: 'none',
   },
 }
 

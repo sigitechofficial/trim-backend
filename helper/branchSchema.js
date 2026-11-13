@@ -23,6 +23,7 @@ async function ensureBranchSchema(db) {
   const qi = db.sequelize.getQueryInterface()
   const { DataTypes } = db.Sequelize
   await db.brand.sync()
+  await db.activityLog.sync() // Step C
   await addMissingColumns(qi, 'salonDetails', {
     brandId: { type: DataTypes.INTEGER, allowNull: true },
     planSource: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'own' },

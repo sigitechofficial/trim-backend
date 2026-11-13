@@ -31,9 +31,9 @@ async function staffUserIdFor(req) {
 const roleOf = (row) => row.role || (row.isOwner ? 'owner' : 'barber')
 
 // Every branch the caller may open, home branch first.
-async function branchesFor(req) {
+async function branchesFor(req, knownStaffUserId) {
   const ownerId = req.user?.id
-  const staffUserId = await staffUserIdFor(req)
+  const staffUserId = knownStaffUserId !== undefined ? knownStaffUserId : await staffUserIdFor(req)
 
   if (staffUserId) {
     // Staff: their active rows, only in shops of the owner whose session this is.
@@ -67,7 +67,8 @@ async function branchesFor(req) {
 // The acting branch for this request (worked out once per request).
 async function actorFor(req) {
   if (req.branch) return req.branch
-  const branches = await branchesFor(req)
+  const staffUserId = await staffUserIdFor(req)
+  const branches = await branchesFor(req, staffUserId)
   const asked = parseInt(req.get?.('x-salon-id') ?? req.headers?.['x-salon-id'], 10)
   let pick = null
   if (asked > 0) {
@@ -88,6 +89,7 @@ async function actorFor(req) {
     role: pick ? pick.role : null,
     employeeId: pick ? pick.employeeId : null,
     allowedSalonIds: branches.map((b) => b.salonId),
+    staffUserId: staffUserId || null, // the person acting, when it is a staff session
   }
   return req.branch
 }
@@ -96,6 +98,8 @@ async function actorFor(req) {
 async function branchScope(req, res, next) {
   try {
     await actorFor(req)
+    // Step C: record this request in the activity log if it is one we keep.
+    require('./activityLog').watch(req, res)
     return next()
   } catch (err) {
     if (err.branchDenied) return deny(res, err.message)
@@ -120,4 +124,4 @@ async function shopWhere(userId) {
   return { userId }
 }
 
-module.exports = { branchScope, actorFor, actingSalonId, branchesFor, shopWhere }
+module.exports = { branchScope, actorFor, actingSalonId, branchesFor, shopWhere, staffUserIdFor }
