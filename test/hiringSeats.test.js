@@ -82,10 +82,8 @@ test('Owner Only has no seat for staff or covered renters', async () => {
   assert.equal(await coverage.hiringSeatsLeft(bigger), 0)
 })
 
-test('the applicant never sees the owner\'s plan message', async () => {
+test('the owner gets the plan message', async () => {
   const { coverage } = load()
-  const msg = coverage.applicantNoSeat('3pm Shop')
-  assert.match(msg, /^3pm Shop can't take on someone new right now/)
-  assert.doesNotMatch(msg, /plan|seat|upgrade/i)
+  assert.equal(coverage.applicantNoSeat, undefined)
   assert.match(coverage.OWNER_NO_SEAT, /Upgrade your plan/)
 })

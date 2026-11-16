@@ -77,6 +77,7 @@ function payLine(o) {
 function statusOf(o) {
   if (o.status === 'open') {
     if (o.expiresAt && new Date(o.expiresAt) < new Date()) return 'closed'
+    if (o.stage === 'agreed') return 'agreed' // they accepted; the owner confirms
     return o.lastBy === 'shop' ? 'waiting' : 'new'
   }
   if (o.status === 'accepted') {
@@ -131,13 +132,20 @@ async function list(userId) {
     limit: 200,
   })
   const items = offers.map(itemOf)
+  // An open staff job or covered chair needs a team seat to confirm.
+  if (items.some((i) => i.status === 'agreed' || i.status === 'new')) {
+    const left = await require('./renterCoverage').hiringSeatsLeft({ id: shop.id })
+    for (const i of items) {
+      if ((i.status === 'agreed' || i.status === 'new') && (i.kind === 'staff' || i.coversPlan)) i.noSeat = left < 1
+    }
+  }
   // What needs the owner first, newest first within each group.
-  const rank = { confirm: 0, new: 1, waiting: 2, starting: 3, hired: 4, closed: 5 }
+  const rank = { agreed: 0, confirm: 0, new: 1, waiting: 2, starting: 3, hired: 4, closed: 5 }
   items.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.at) - new Date(a.at)))
   const listing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
   return {
     items,
-    newCount: items.filter((i) => i.status === 'new' || i.status === 'confirm').length,
+    newCount: items.filter((i) => i.status === 'new' || i.status === 'confirm' || i.status === 'agreed').length,
     adverts: advertsOf(shop, listing),
   }
 }

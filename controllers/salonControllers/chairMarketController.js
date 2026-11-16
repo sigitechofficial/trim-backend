@@ -44,7 +44,8 @@ exports.counter = async (req, res) => {
 }
 
 exports.accept = async (req, res) => {
-  const { offer, move } = await market.accept(req.user.id, req.params.offer)
+  const { offer, move, waitingForShop } = await market.accept(req.user.id, req.params.offer)
+  if (waitingForShop) return ok(res, 'You accepted. The shop will confirm.', { offer, move: null, waitingForShop: true })
   return ok(res, move ? 'Offer accepted. The move is set up.' : `Offer accepted. Start date: ${market.prettyDate(offer.startDate)}.`, { offer, move })
 }
 

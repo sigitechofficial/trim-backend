@@ -999,6 +999,8 @@ async function counter(userId, offerId, body = {}) {
     await chairOfferRound.create({ offerId: offer.id, by: side, ...t }, { transaction })
     await offer.update({
       lastBy: side,
+      // New terms: any earlier "accepted, waiting for the shop" is gone.
+      stage: null,
       rounds: offer.rounds + 1,
       rentAmount: t.rentAmount,
       rentCycle: t.rentCycle,
@@ -1019,10 +1021,40 @@ async function counter(userId, offerId, body = {}) {
   return offer
 }
 
-// The side answering the latest round accepts it; the renter's move is set up.
+// The person (renter or applicant) accepting only agrees to the terms: the
+// offer waits for the shop to confirm (stage 'agreed'). The client, 2026-11-16:
+// nobody is hired until the shop says so, and the person never hears about
+// the shop's plan or seats.
+async function agree(offer) {
+  if (offer.stage === 'agreed') throw new AppError(`You have already accepted. Waiting for ${await sideName(offer, 'shop')} to confirm.`, 200)
+  const [done] = await chairOffer.update(
+    { stage: 'agreed', lastBy: 'renter', expiresAt: expiry() },
+    { where: { id: offer.id, status: 'open', lastBy: 'shop' } },
+  )
+  if (!done) throw new AppError('This offer has already been answered.', 200)
+  await offer.reload()
+  const shop = await salonDetail.findByPk(offer.shopSalonId, { attributes: ['id', 'userId', 'teamSize'] })
+  const needsSeat = offer.kind === 'staff' || offer.coversPlan
+  const noSeat = needsSeat && shop && (await require('./renterCoverage').hiringSeatsLeft(shop)) < 1
+  const who = await sideName(offer, 'renter')
+  push([shop?.userId], {
+    title: `${offer.kind === 'staff' ? 'Job' : 'Chair'} offer accepted`,
+    body: noSeat
+      ? `${who} accepted your ${offerWord(offer)}. Your plan has no free team seat, so upgrade your plan or free a seat, then confirm.`
+      : `${who} accepted your ${offerWord(offer)}. Confirm to ${offer.kind === 'staff' ? 'hire them' : 'give them the chair'}.`,
+  }, { offerId: offer.id })
+  return { offer, move: null, waitingForShop: true }
+}
+
+// The renter or applicant accepting only agrees (see agree). The shop
+// accepting (their terms, or confirming an agreed offer) makes the deal.
 async function accept(userId, offerId) {
   const { offer, side } = await loadForUser(userId, offerId)
   assertOpen(offer)
+  if (side === 'renter') {
+    if (offer.lastBy === 'renter' && offer.stage !== 'agreed') throw new AppError('Please wait for the other side to answer your last offer.', 200)
+    return agree(offer)
+  }
   if (offer.lastBy === side) throw new AppError('Please wait for the other side to answer your last offer.', 200)
   const shop = await salonDetail.findOne({
     where: { id: offer.shopSalonId, deleted: false, [Op.and]: [activeSalonWhere(today())] },
@@ -1035,17 +1067,12 @@ async function accept(userId, offerId) {
 
   // A covered chair uses one of the shop's team seats.
   if (offer.coversPlan && (await require('./renterCoverage').hiringSeatsLeft(shop)) < 1) {
-    if (side === 'shop') throw new AppError('Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
-    await push([shop.userId], {
-      title: 'No free team seat',
-      body: `${await sideName(offer, 'renter')} wants to accept your chair offer with "Trim plan included", but your plan has no free team seat. Upgrade your plan, or send a new offer without it.`,
-    }, { offerId: offer.id })
-    throw new AppError(require('./renterCoverage').applicantNoSeat(shop.salonName), 200)
+    throw new AppError('Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
   }
 
   // Claim the offer first, so a double tap or both sides at once cannot make two moves.
   const [claimed] = await chairOffer.update(
-    { status: 'accepted', closedAt: new Date() },
+    { status: 'accepted', closedAt: new Date(), stage: null },
     { where: { id: offer.id, status: 'open' } },
   )
   if (!claimed) throw new AppError('This offer has already been answered.', 200)
@@ -1062,7 +1089,7 @@ async function accept(userId, offerId) {
       createdBy: userId,
     })
   } catch (err) {
-    await chairOffer.update({ status: 'open', closedAt: null }, { where: { id: offer.id } })
+    await chairOffer.update({ status: 'open', closedAt: null, stage: offer.stage }, { where: { id: offer.id } })
     throw err
   }
   await offer.update({ status: 'accepted', moveId: move.id })
@@ -1082,11 +1109,9 @@ async function accept(userId, offerId) {
       body: 'The renter has accepted another shop\'s offer.',
     }, { offerId: o.id })
   }
-  push([await otherSideUserId(offer, side)], {
+  push([offer.renterUserId], {
     title: 'Chair offer accepted',
-    body: side === 'renter'
-      ? `${await sideName(offer, 'renter')} accepted your chair offer and joins on ${prettyDate(move.moveDate)}.`
-      : `${shop.salonName} accepted your terms. You join on ${prettyDate(move.moveDate)}.`,
+    body: `${shop.salonName} ${offer.stage === 'agreed' ? 'confirmed your place' : 'accepted your terms'}. You join on ${prettyDate(move.moveDate)}.`,
   }, { offerId: offer.id, moveId: move.id })
   return { offer, move }
 }
@@ -1130,6 +1155,19 @@ async function listOffers(userId) {
     limit: 100,
   })
   const now = new Date()
+  // For the owner: does confirming this offer need a team seat they don't have?
+  const seatCache = new Map()
+  const seatsOf = async (shopSalonId) => {
+    if (!seatCache.has(shopSalonId)) {
+      seatCache.set(shopSalonId, require('./renterCoverage').hiringSeatsLeft({ id: shopSalonId }))
+    }
+    return seatCache.get(shopSalonId)
+  }
+  const noSeatFor = new Map()
+  for (const o of offers) {
+    if (o.status !== 'open' || o.renterUserId === userId || !(o.kind === 'staff' || o.coversPlan)) continue
+    noSeatFor.set(o.id, (await seatsOf(o.shopSalonId)) < 1)
+  }
   return offers.map((o) => {
     const j = o.toJSON()
     const side = j.renterUserId === userId ? 'renter' : 'shop'
@@ -1161,16 +1199,30 @@ async function listOffers(userId) {
       status: expired ? 'expired' : j.status,
       side,
       myTurn: j.status === 'open' && !expired && j.lastBy !== side,
+      // The person accepted; the shop still has to confirm.
+      waitingForShop: j.status === 'open' && !expired && j.stage === 'agreed',
+      // Owner only: no free team seat to take this person on (upgrade first).
+      noSeat: side === 'shop' ? !!noSeatFor.get(j.id) : undefined,
     }
   })
 }
 
 // Called by the 5-minute job: open offers past their expiry close.
 async function expireOffers() {
+  const unconfirmed = await chairOffer.findAll({
+    where: { status: 'open', stage: 'agreed', expiresAt: { [Op.lt]: new Date() } },
+    attributes: ['id', 'renterUserId', 'shopSalonId', 'kind', 'renterSalonId', 'applicantInfo'],
+  })
   const [count] = await chairOffer.update(
     { status: 'expired', closedAt: new Date() },
     { where: { status: 'open', expiresAt: { [Op.lt]: new Date() } } },
   )
+  for (const o of unconfirmed) {
+    push([o.renterUserId], {
+      title: `${o.kind === 'staff' ? 'Job' : 'Chair'} offer closed`,
+      body: `${await sideName(o, 'shop')} didn't go ahead with this ${offerWord(o)}.`,
+    }, { offerId: o.id })
+  }
   return count
 }
 

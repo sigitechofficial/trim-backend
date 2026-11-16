@@ -95,7 +95,6 @@ async function hiringSeatsLeft(host) {
 // The words for "no free seat": the owner is told to upgrade; the person
 // applying is told the shop can't take them yet (and the owner gets a push).
 const OWNER_NO_SEAT = 'Your plan has no free team seat. Upgrade your plan, or free a seat, to take on someone new.'
-const applicantNoSeat = (shopName) => `${shopName || 'This shop'} can't take on someone new right now, so this offer can't be accepted yet. We've let the shop know.`
 
 // Covered renters at a shop (they use team seats too).
 const coveredCount = (hostId) => salonDetail.count({ where: { renterCoveredBy: hostId, parentSalonId: hostId, deleted: false } })
@@ -340,4 +339,4 @@ async function coverageFor(renterSalon) {
   return host ? { shopSalonId: host.id, shopName: host.salonName } : null
 }
 
-module.exports = { staffSeats, hiringSeatsLeft, OWNER_NO_SEAT, applicantNoSeat, graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }
+module.exports = { staffSeats, hiringSeatsLeft, OWNER_NO_SEAT, graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }

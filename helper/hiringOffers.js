@@ -137,6 +137,7 @@ async function applyFromClient(userId, body = {}) {
 // Called from chairMarket.accept for an offer with no renter shop.
 async function acceptApplicant({ offer, side, shop: shopRow, userId }) {
   const kind = offer.kind || 'chair'
+  const agreed = offer.stage === 'agreed'
   const shop = await salonDetail.findByPk(shopRow.id, {
     attributes: ['id', 'userId', 'salonName', 'teamSize', 'staffAdvertisementStatus', 'staffAdvertisementCount',
       'rentChairAdvertisementStatus', 'rentChairAdvertisementChairCount'],
@@ -145,13 +146,9 @@ async function acceptApplicant({ offer, side, shop: shopRow, userId }) {
     throw new AppError(kind === 'staff' ? 'Every position is already filled. Turn your Staff advert back on to take someone new.' : 'Every chair is already taken. Add a chair in Hiring chair renters to take someone new.', 200)
   }
   // Staff and covered chair renters use team seats.
+  // Only the shop gets here (an applicant's Accept waits for the shop to confirm).
   if ((kind === 'staff' || offer.coversPlan) && (await coverage.hiringSeatsLeft(shop)) < 1) {
-    if (side === 'shop') throw new AppError(coverage.OWNER_NO_SEAT, 200)
-    await market.push([shop.userId], {
-      title: 'No free team seat',
-      body: `${market.applicantName(offer)} wants to accept your ${market.offerWord(offer)}, but your plan has no free team seat. Upgrade your plan or free a seat, then ask them to accept again.`,
-    }, { offerId: offer.id })
-    throw new AppError(coverage.applicantNoSeat(shop.salonName), 200)
+    throw new AppError(coverage.OWNER_NO_SEAT, 200)
   }
   const [claimed] = await chairOffer.update(
     { status: 'accepted', closedAt: new Date(), stage: 'starting', startAsks: 0, startAskedOn: null },
@@ -175,11 +172,9 @@ async function acceptApplicant({ offer, side, shop: shopRow, userId }) {
     }, { offerId: o.id })
   }
   const date = market.prettyDate(offer.startDate)
-  await market.push([await market.otherSideUserId(offer, side)], {
+  await market.push([offer.renterUserId], {
     title: `${kind === 'staff' ? 'Job' : 'Chair'} offer accepted`,
-    body: side === 'renter'
-      ? `${market.applicantName(offer)} accepted your ${market.offerWord(offer)} and starts on ${date}.`
-      : `${shop.salonName} accepted your terms. You start on ${date}. Please go to the shop that day.`,
+    body: `${shop.salonName} ${agreed ? 'confirmed your place' : 'accepted your terms'}. You start on ${date}. Please go to the shop that day.`,
   }, { offerId: offer.id })
   return { offer, move: null }
 }
