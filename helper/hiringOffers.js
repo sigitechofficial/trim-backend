@@ -145,14 +145,13 @@ async function acceptApplicant({ offer, side, shop: shopRow, userId }) {
     throw new AppError(kind === 'staff' ? 'Every position is already filled. Turn your Staff advert back on to take someone new.' : 'Every chair is already taken. Add a chair in Hiring chair renters to take someone new.', 200)
   }
   // Staff and covered chair renters use team seats.
-  if (kind === 'staff' || offer.coversPlan) {
-    const fullShop = shop
-    const reservedStaff = await chairOffer.count({
-      where: { shopSalonId: shop.id, status: 'accepted', stage: 'starting', [Op.or]: [{ kind: 'staff' }, { coversPlan: true }] },
-    })
-    if ((await coverage.seatsLeft(fullShop)) - reservedStaff < 1) {
-      throw new AppError('Your plan has no free team seat. Upgrade your plan to take on someone new.', 200)
-    }
+  if ((kind === 'staff' || offer.coversPlan) && (await coverage.hiringSeatsLeft(shop)) < 1) {
+    if (side === 'shop') throw new AppError(coverage.OWNER_NO_SEAT, 200)
+    await market.push([shop.userId], {
+      title: 'No free team seat',
+      body: `${market.applicantName(offer)} wants to accept your ${market.offerWord(offer)}, but your plan has no free team seat. Upgrade your plan or free a seat, then ask them to accept again.`,
+    }, { offerId: offer.id })
+    throw new AppError(coverage.applicantNoSeat(shop.salonName), 200)
   }
   const [claimed] = await chairOffer.update(
     { status: 'accepted', closedAt: new Date(), stage: 'starting', startAsks: 0, startAskedOn: null },

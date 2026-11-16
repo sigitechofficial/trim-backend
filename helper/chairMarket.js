@@ -986,6 +986,15 @@ async function counter(userId, offerId, body = {}) {
   if (offer.rounds >= MAX_ROUNDS) throw new AppError('This offer has had too many rounds. Please accept or decline it.', 200)
   const t = readTerms({ ...body, rentCycle: body.rentCycle || offer.rentCycle, payType: body.payType || offer.payType }, offer.kind)
   checkTrial(t)
+  // The owner learns about a full plan before offering a job or a covered chair.
+  if (side === 'shop' && (offer.kind === 'staff' || t.coversPlan)) {
+    const host = await salonDetail.findByPk(offer.shopSalonId, { attributes: ['id', 'teamSize'] })
+    if ((await require('./renterCoverage').hiringSeatsLeft(host)) < 1) {
+      throw new AppError(offer.kind === 'staff'
+        ? require('./renterCoverage').OWNER_NO_SEAT
+        : 'Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
+    }
+  }
   await sequelize.transaction(async (transaction) => {
     await chairOfferRound.create({ offerId: offer.id, by: side, ...t }, { transaction })
     await offer.update({
@@ -1025,8 +1034,13 @@ async function accept(userId, offerId) {
   if (!offer.renterSalonId) return require('./hiringOffers').acceptApplicant({ offer, side, shop, userId })
 
   // A covered chair uses one of the shop's team seats.
-  if (offer.coversPlan && (await require('./renterCoverage').seatsLeft(shop)) < 1) {
-    throw new AppError('Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
+  if (offer.coversPlan && (await require('./renterCoverage').hiringSeatsLeft(shop)) < 1) {
+    if (side === 'shop') throw new AppError('Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
+    await push([shop.userId], {
+      title: 'No free team seat',
+      body: `${await sideName(offer, 'renter')} wants to accept your chair offer with "Trim plan included", but your plan has no free team seat. Upgrade your plan, or send a new offer without it.`,
+    }, { offerId: offer.id })
+    throw new AppError(require('./renterCoverage').applicantNoSeat(shop.salonName), 200)
   }
 
   // Claim the offer first, so a double tap or both sides at once cannot make two moves.

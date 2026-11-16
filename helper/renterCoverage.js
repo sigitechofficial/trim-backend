@@ -70,6 +70,24 @@ async function seatsLeft(host) {
   return size - staff - covered
 }
 
+// Seats left for hiring: free seats minus people who accepted a staff job or a
+// covered chair and have not started yet (their seat is kept for them).
+async function hiringSeatsLeft(host) {
+  let shop = host
+  if (shop.teamSize === undefined) shop = await salonDetail.findByPk(host.id, { attributes: ['id', 'teamSize'] })
+  const left = await seatsLeft(shop)
+  if (left === Infinity) return Infinity
+  const reserved = await chairOffer.count({
+    where: { shopSalonId: shop.id, status: 'accepted', stage: 'starting', [Op.or]: [{ kind: 'staff' }, { coversPlan: true }] },
+  })
+  return left - reserved
+}
+
+// The words for "no free seat": the owner is told to upgrade; the person
+// applying is told the shop can't take them yet (and the owner gets a push).
+const OWNER_NO_SEAT = 'Your plan has no free team seat. Upgrade your plan, or free a seat, to take on someone new.'
+const applicantNoSeat = (shopName) => `${shopName || 'This shop'} can't take on someone new right now, so this offer can't be accepted yet. We've let the shop know.`
+
 // Covered renters at a shop (they use team seats too).
 const coveredCount = (hostId) => salonDetail.count({ where: { renterCoveredBy: hostId, parentSalonId: hostId, deleted: false } })
 
@@ -313,4 +331,4 @@ async function coverageFor(renterSalon) {
   return host ? { shopSalonId: host.id, shopName: host.salonName } : null
 }
 
-module.exports = { graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }
+module.exports = { hiringSeatsLeft, OWNER_NO_SEAT, applicantNoSeat, graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }
