@@ -986,15 +986,8 @@ async function counter(userId, offerId, body = {}) {
   if (offer.rounds >= MAX_ROUNDS) throw new AppError('This offer has had too many rounds. Please accept or decline it.', 200)
   const t = readTerms({ ...body, rentCycle: body.rentCycle || offer.rentCycle, payType: body.payType || offer.payType }, offer.kind)
   checkTrial(t)
-  // The owner learns about a full plan before offering a job or a covered chair.
-  if (side === 'shop' && (offer.kind === 'staff' || t.coversPlan)) {
-    const host = await salonDetail.findByPk(offer.shopSalonId, { attributes: ['id', 'teamSize'] })
-    if ((await require('./renterCoverage').hiringSeatsLeft(host)) < 1) {
-      throw new AppError(offer.kind === 'staff'
-        ? require('./renterCoverage').OWNER_NO_SEAT
-        : 'Your plan has no free team seat for a covered chair renter. Upgrade your plan, or turn off "Trim plan included".', 200)
-    }
-  }
+  // No seat check here: the owner can talk terms any time; a team seat is
+  // only needed to accept or confirm (client, 2026-11-16).
   await sequelize.transaction(async (transaction) => {
     await chairOfferRound.create({ offerId: offer.id, by: side, ...t }, { transaction })
     await offer.update({
