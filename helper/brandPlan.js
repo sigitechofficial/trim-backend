@@ -20,9 +20,10 @@ const PLAN_LIMIT = 'plan_limit'
 /** Branches a product covers: trimbiz_branches_3 → 3; enterprise → 999; else null. */
 function branchLimitForProduct(productId) {
   const id = String(productId || '')
-  const m = id.match(/branches_(\d+)/)
+  // iOS trimbiz_branches_3; Google base plan trimbiz_monthly:trimbiz-branches-3
+  const m = id.match(/branches[-_](\d+)/)
   if (m) return Number(m[1])
-  if (/branches_enterprise/.test(id)) return UNLIMITED_TEAM
+  if (/branches[-_]enterprise/.test(id)) return UNLIMITED_TEAM
   return null
 }
 

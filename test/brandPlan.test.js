@@ -11,6 +11,8 @@ const { branchLimitForProduct } = require('../helper/brandPlan')
 test('branch products give their branch count', () => {
   assert.equal(branchLimitForProduct('trimbiz_branches_2'), 2)
   assert.equal(branchLimitForProduct('trimbiz_branches_10'), 10)
+  assert.equal(branchLimitForProduct('trimbiz_monthly:trimbiz-branches-4'), 4) // Google base plan
+  assert.equal(branchLimitForProduct('trimbiz_monthly:trimbiz-owner-one-staff'), null)
   assert.equal(branchLimitForProduct('trimbiz_monthly:branches_4'), 4)
   assert.equal(branchLimitForProduct('trimbiz_branches_enterprise'), 999)
   assert.equal(branchLimitForProduct('owner_unlimited_staff'), null)
