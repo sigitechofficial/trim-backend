@@ -49,7 +49,7 @@ function load() {
 
 test('a shop row without teamSize is looked up, not counted as zero seats', async () => {
   const { db, coverage } = load()
-  const shop = db.salonDetail.seed({ teamSize: 3, deleted: false })
+  const shop = db.salonDetail.seed({ teamSize: 4, deleted: false }) // owner + 3 staff
   db.employee.seed({ salonDetailId: shop.id, isOwner: false, status: true, deleted: false, isExternalEmployee: false })
   // The shop as acceptApplicant loads it: no teamSize attribute.
   assert.equal(await coverage.hiringSeatsLeft({ id: shop.id }), 2)
@@ -57,7 +57,7 @@ test('a shop row without teamSize is looked up, not counted as zero seats', asyn
 
 test('people who accepted and have not started yet keep their seat', async () => {
   const { db, coverage } = load()
-  const shop = db.salonDetail.seed({ teamSize: 2, deleted: false })
+  const shop = db.salonDetail.seed({ teamSize: 3, deleted: false }) // owner + 2 staff
   db.employee.seed({ salonDetailId: shop.id, isOwner: false, status: true, deleted: false, isExternalEmployee: false })
   assert.equal(await coverage.hiringSeatsLeft(shop), 1)
   db.chairOffer.seed({ shopSalonId: shop.id, status: 'accepted', stage: 'starting', kind: 'staff' })
@@ -65,6 +65,21 @@ test('people who accepted and have not started yet keep their seat', async () =>
   // An uncovered chair renter does not use a seat.
   db.chairOffer.seed({ shopSalonId: shop.id, status: 'accepted', stage: 'starting', kind: 'chair', coversPlan: false })
   assert.equal(await coverage.hiringSeatsLeft(shop), 0)
+})
+
+test('Owner Only has no seat for staff or covered renters', async () => {
+  const { db, coverage } = load()
+  assert.equal(coverage.staffSeats(1), 0) // Owner Only
+  assert.equal(coverage.staffSeats(2), 1) // Owner + 1 staff
+  assert.equal(coverage.staffSeats(0), 0) // chair renter's own plan
+  assert.equal(coverage.staffSeats(999), Infinity)
+  const shop = db.salonDetail.seed({ teamSize: 1, deleted: false })
+  assert.equal(await coverage.hiringSeatsLeft(shop), 0)
+  const bigger = db.salonDetail.seed({ teamSize: 2, deleted: false })
+  assert.equal(await coverage.hiringSeatsLeft(bigger), 1)
+  // A covered chair renter takes that one seat.
+  db.salonDetail.seed({ renterCoveredBy: bigger.id, parentSalonId: bigger.id, deleted: false })
+  assert.equal(await coverage.hiringSeatsLeft(bigger), 0)
 })
 
 test('the applicant never sees the owner\'s plan message', async () => {

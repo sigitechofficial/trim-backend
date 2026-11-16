@@ -44,6 +44,15 @@ async function giveGrace(renter, extra = {}) {
 const COVERED = 'shop_covered'
 const UNLIMITED_TEAM_SIZE = 999
 
+// A plan's teamSize counts the owner (Owner Only = 1, Owner + 1 staff = 2, ...),
+// so the seats for staff and covered renters are one fewer. Client, 2026-11-16:
+// Owner Only has no seat for anyone else.
+function staffSeats(teamSize) {
+  const size = Number(teamSize || 0)
+  if (size >= UNLIMITED_TEAM_SIZE) return Infinity
+  return Math.max(0, size - 1)
+}
+
 const today = () => DateTime.now().setZone('Europe/London').toISODate()
 const pretty = (d) => DateTime.fromISO(String(d).slice(0, 10)).toFormat('d LLL yyyy')
 
@@ -61,13 +70,13 @@ const HOST_ATTRS = ['id', 'userId', 'salonName', 'teamSize', 'status', 'deleted'
 
 // Team seats a shop has left: its plan's team size minus active staff and covered renters.
 async function seatsLeft(host) {
-  const size = Number(host.teamSize || 0)
-  if (size >= UNLIMITED_TEAM_SIZE) return Infinity
+  const seats = staffSeats(host.teamSize)
+  if (seats === Infinity) return Infinity
   const [staff, covered] = await Promise.all([
     employee.count({ where: { salonDetailId: host.id, isOwner: false, status: true, deleted: false, isExternalEmployee: false } }),
     salonDetail.count({ where: { renterCoveredBy: host.id, parentSalonId: host.id, deleted: false } }),
   ])
-  return size - staff - covered
+  return seats - staff - covered
 }
 
 // Seats left for hiring: free seats minus people who accepted a staff job or a
@@ -195,8 +204,8 @@ async function syncCoverage() {
     const host = await salonDetail.findByPk(hostId, { attributes: HOST_ATTRS })
     const hostOk = host && !host.deleted && host.status !== false && isSalonRowActive(host, today())
     // Seats: staff first, then covered renters in the order they were covered.
-    let free = hostOk ? Number(host.teamSize || 0) >= UNLIMITED_TEAM_SIZE ? Infinity
-      : Number(host.teamSize || 0) - await employee.count({ where: { salonDetailId: host.id, isOwner: false, status: true, deleted: false, isExternalEmployee: false } })
+    let free = hostOk ? staffSeats(host.teamSize) === Infinity ? Infinity
+      : staffSeats(host.teamSize) - await employee.count({ where: { salonDetailId: host.id, isOwner: false, status: true, deleted: false, isExternalEmployee: false } })
       : 0
     for (const r of renters.sort((a, b) => a.id - b.id)) {
       try {
@@ -331,4 +340,4 @@ async function coverageFor(renterSalon) {
   return host ? { shopSalonId: host.id, shopName: host.salonName } : null
 }
 
-module.exports = { hiringSeatsLeft, OWNER_NO_SEAT, applicantNoSeat, graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }
+module.exports = { staffSeats, hiringSeatsLeft, OWNER_NO_SEAT, applicantNoSeat, graceDaysFor, FIRST_GRACE_DAYS, NEXT_GRACE_DAYS, coverFailed, teamRowCover, setTeamRowCover, startCover, endCover, setCover, syncCoverage, seatsLeft, coveredCount, coverageFor, GRACE_DAYS, COVERED }

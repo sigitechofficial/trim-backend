@@ -227,8 +227,9 @@ exports.AddEmployee = async (req, res, next) => {
 
   const addingRenter = req.body?.isExternalEmployee == 'true'
   if (!addingRenter && req?.body?.registerEmployeeDuringSalonRegistration != 'fromAuth') {
-    const limit = salonDetails.teamSize;
-    if (limit !== UNLIMITED_TEAM_SIZE && teamCount >= limit) {
+    // teamSize counts the owner, so Owner Only leaves no seat for staff.
+    const limit = require('../../helper/renterCoverage').staffSeats(salonDetails.teamSize);
+    if (teamCount >= limit) {
       return next(
         new appError(
           'Your subscription limit has been reached. Please upgrade your plan to add more employees.',
@@ -1123,9 +1124,9 @@ exports.activeBlockEmployee = async (req, res, next) => {
   })
   console.log('🚀 ~ = ~ activeMembers >= salon?.teamSize:', activeMembers)
   console.log('🚀 ~ = ~ req.body.status:', salon?.teamSize)
-  const teamLimit = salon?.teamSize;
+  const teamLimit = require('../../helper/renterCoverage').staffSeats(salon?.teamSize);
   // A chair renter pays for their own plan, so unblocking one needs no free seat.
-  if (!worker.isExternalEmployee && teamLimit !== UNLIMITED_TEAM_SIZE && activeMembers >= teamLimit && req.body.status) {
+  if (!worker.isExternalEmployee && activeMembers >= teamLimit && req.body.status) {
     return next(
       new appError(
         'Your team size must not exceed the limit of your subscription.',
