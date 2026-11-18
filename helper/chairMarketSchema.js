@@ -45,6 +45,8 @@ async function ensureChairMarketSchema(db) {
   })
   await addMissingColumns(qi, 'shopChairListings', {
     coversPlan: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Days the shop wants someone in the chair ("Monday,Friday"); empty = any.
+    days: { type: DataTypes.STRING(80), allowNull: true },
   })
   await addMissingColumns(qi, 'salonDetails', {
     renterCoveredBy: { type: DataTypes.INTEGER, allowNull: true },
@@ -52,6 +54,8 @@ async function ensureChairMarketSchema(db) {
     renterOwnStatus: { type: DataTypes.STRING(32), allowNull: true },
     renterGraceCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     renterUncoveredBy: { type: DataTypes.INTEGER, allowNull: true },
+    // Days the staff advert needs someone ("Monday,Friday"); empty = any.
+    staffAdvertisementDays: { type: DataTypes.STRING(80), allowNull: true },
   })
 }
 

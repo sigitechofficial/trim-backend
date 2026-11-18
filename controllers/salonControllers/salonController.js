@@ -3964,6 +3964,7 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
     ],
   })
 
@@ -3984,6 +3985,7 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
           ? null
           : Number(salon.staffAdvertisementWagesAmount),
       staffAdvertisementWagesCycle: salon.staffAdvertisementWagesCycle ?? null,
+      staffAdvertisementDays: require('../../helper/chairMarket').daysOf(salon.staffAdvertisementDays),
     }, ''),
   )
 }
@@ -3995,6 +3997,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     staffAdvertisementWagesType,
     staffAdvertisementWagesAmount,
     staffAdvertisementWagesCycle,
+    staffAdvertisementDays,
   } = req.body
 
   if (
@@ -4124,8 +4127,13 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
       staffAdvertisementWagesCycle: normalizedWagesCycle,
+      // Days the shop needs someone; not sent by older apps (left as it was).
+      ...(staffAdvertisementDays !== undefined
+        ? { staffAdvertisementDays: require('../../helper/chairMarket').daysOf(staffAdvertisementDays).join(',') || null }
+        : {}),
     },
-    { where: { userId: req.user.id } },
+    // The shop being edited (a multi-branch owner has more than one).
+    { where: { id: salon.id } },
   )
 
   return res.status(200).json(
@@ -4135,6 +4143,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
       staffAdvertisementWagesCycle: normalizedWagesCycle,
+      staffAdvertisementDays: require('../../helper/chairMarket').daysOf(staffAdvertisementDays),
     }, ''),
   )
 }

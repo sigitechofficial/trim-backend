@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       chairs: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
       // The shop covers the renter's Trim plan (each covered renter uses a team seat).
       coversPlan: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      days: { type: DataTypes.STRING(80), allowNull: true },
       rentAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       rentCycle: { type: DataTypes.STRING(16), allowNull: true },
       availableFrom: { type: DataTypes.DATEONLY, allowNull: true },

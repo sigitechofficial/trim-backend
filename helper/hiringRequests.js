@@ -34,7 +34,7 @@ const today = () => DateTime.now().setZone('Europe/London').toISODate()
 const pretty = (d) => DateTime.fromISO(String(d).slice(0, 10)).toFormat('d LLL yyyy')
 
 const SHOP_ATTRS = ['id', 'userId', 'salonName', 'isExternalEmployee', 'staffAdvertisementCount', 'staffAdvertisementStatus',
-  'rentChairAdvertisementStatus', 'rentChairAdvertisementChairCount']
+  'rentChairAdvertisementStatus', 'rentChairAdvertisementChairCount', 'staffAdvertisementDays']
 
 async function ownShopOf(userId) {
   const shop = await salonDetail.findOne({ where: { ...(await shopWhere(userId)), deleted: false, isExternalEmployee: false }, attributes: SHOP_ATTRS })
@@ -108,6 +108,8 @@ function itemOf(o) {
     email: a.email || '',
     phone: a.phone || '',
     summary: [payLine(o), `starts ${pretty(o.startDate)}`, ...details].join(' · '),
+    // Days the person wants to work (client app applicants).
+    days: o.renterSalonId ? [] : require('./chairMarket').daysOf(a.days),
     note: (o.renterSalonId ? o.renterTerms : a.note) || '',
     at: o.updatedAt || o.createdAt,
     startDate: o.startDate,
@@ -134,6 +136,17 @@ async function list(userId) {
     limit: 200,
   })
   const items = offers.map(itemOf)
+  const listing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
+  // The days the shop asked for in its advert, and the ones the person
+  // chose that aren't among them (client app applicants only).
+  const { daysOf } = require('./chairMarket')
+  const wanted = { staff: daysOf(shop.staffAdvertisementDays), chair: daysOf(listing?.days) }
+  for (const i of items) {
+    const shopDays = wanted[i.kind] || []
+    i.shopDays = shopDays
+    i.otherDays = shopDays.length ? (i.days || []).filter((d) => !shopDays.includes(d)) : []
+    i.missingDays = shopDays.length && (i.days || []).length ? shopDays.filter((d) => !(i.days || []).includes(d)) : []
+  }
   // An open staff job or covered chair needs a team seat to confirm.
   if (items.some((i) => i.status === 'agreed' || i.status === 'new')) {
     const left = await require('./renterCoverage').hiringSeatsLeft({ id: shop.id })
@@ -144,7 +157,6 @@ async function list(userId) {
   // What needs the owner first, newest first within each group.
   const rank = { agreed: 0, confirm: 0, new: 1, waiting: 2, starting: 3, hired: 4, closed: 5 }
   items.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.at) - new Date(a.at)))
-  const listing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
   return {
     items,
     newCount: items.filter((i) => i.status === 'new' || i.status === 'confirm' || i.status === 'agreed').length,

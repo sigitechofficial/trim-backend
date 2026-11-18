@@ -277,6 +277,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: null,
     },
+    staffAdvertisementDays: {
+      type: DataTypes.STRING(80),
+      allowNull: true,
+    },
     stripeOnboardingStatus: {
       type: DataTypes.STRING(32),
       allowNull: true,

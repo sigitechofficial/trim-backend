@@ -95,6 +95,15 @@ const sameSkill = (a, b) => a.toLowerCase() === b.toLowerCase()
 const today = () => DateTime.now().setZone('Europe/London').toISODate()
 
 // "16 Nov 2026" for a date shown in a notification.
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+// Day names in week order from an array or "Monday,Friday"; unknown ones dropped.
+function daysOf(v) {
+  const list = Array.isArray(v) ? v : String(v || '').split(',')
+  const wanted = new Set(list.map((d) => String(d).trim().toLowerCase()))
+  return WEEK_DAYS.filter((d) => wanted.has(d.toLowerCase()))
+}
+
 function prettyDate(v) {
   const d = DateTime.fromISO(String(v || '').slice(0, 10))
   return d.isValid ? d.toFormat('d LLL yyyy') : String(v || '')
@@ -612,6 +621,7 @@ function listingJson(listing, shop) {
       terms: '',
       note: '',
       coversPlan: false,
+      days: [],
     }
   }
   return {
@@ -624,6 +634,7 @@ function listingJson(listing, shop) {
     skills: skillsOf(listing.skills),
     terms: listing.terms || '',
     note: listing.note || '',
+    days: daysOf(listing.days),
   }
 }
 
@@ -701,6 +712,8 @@ async function saveMyListing(userId, body = {}) {
     note: text(body.note, MAX_MESSAGE),
     // "Trim plan included": the shop covers the renter's plan (uses a team seat).
     coversPlan: body.coversPlan === true || body.coversPlan === 'true',
+    // Days the shop wants the chair used; none chosen means any day.
+    ...(body.days !== undefined ? { days: daysOf(body.days).join(',') || null } : {}),
   }
   const existing = await shopChairListing.findOne({ where: { shopSalonId: shop.id } })
   const listing = existing ? await existing.update(values) : await shopChairListing.create(values)
@@ -1373,6 +1386,8 @@ async function adminCloseOffer(offerId) {
 }
 
 module.exports = {
+  daysOf,
+  WEEK_DAYS,
   applicantOf,
   applicantName,
   offerWord,

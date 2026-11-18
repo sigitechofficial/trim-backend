@@ -1515,6 +1515,7 @@ exports.searchSalons = async (req, res, next) => {
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1769,6 +1770,7 @@ exports.salonDetails = async (req, res, next) => {
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
@@ -1978,6 +1980,8 @@ exports.salonDetails = async (req, res, next) => {
   let detail = results
   if (results) {
     detail = results.toJSON()
+    // Days the staff advert needs someone, as a list (empty = any day).
+    detail.staffAdvertisementDays = chairMarket.daysOf(detail.staffAdvertisementDays)
     await mobileBarber.decorateSalons(detail)
     mobile = detail.mobile
   }
