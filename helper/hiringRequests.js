@@ -113,6 +113,8 @@ function itemOf(o) {
     startDate: o.startDate,
     rentAmount: o.rentAmount != null ? Number(o.rentAmount) : null,
     rentCycle: o.rentCycle || null,
+    // Staff pay agreed in the offer, for the "Confirm start" wages step.
+    payType: o.payType || null,
     coversPlan: !!o.coversPlan,
     planWish: o.planWish || null,
     status: statusOf(o),

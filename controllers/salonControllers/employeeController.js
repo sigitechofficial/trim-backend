@@ -250,7 +250,31 @@ exports.AddEmployee = async (req, res, next) => {
       deletedAt: { [Op.is]: null },
     },
   })
-  const userExist = sameContact.find((u) => u.userTypeId !== 1) || null
+  let userExist = sameContact.find((u) => u.userTypeId !== 1) || null
+
+  // Hiring requests → "Confirm start": the applicant may already have a Trim
+  // business login. A staff login with no current shop is used again (they
+  // keep their password); one still in use elsewhere can't join twice.
+  let reuseUser = null
+  const fromHiring = !!req.body?.hiringOfferId && req.body?.isExternalEmployee != 'true'
+  if (fromHiring && userExist) {
+    const who = `${firstName || ''} ${lastName || ''}`.trim() || 'This person'
+    const active = await employee.findOne({
+      where: { userId: userExist.id, deleted: false, status: true },
+      attributes: ['salonDetailId'],
+    })
+    if (active && Number(active.salonDetailId) === Number(salonDetailId)) {
+      throw new appError(`${who} is already in your team.`, 200)
+    }
+    if (active) {
+      throw new appError(`${who} already works at another shop on Trim with this email. They need to leave that shop first, or use a different email for their login here.`, 200)
+    }
+    if (userExist.userTypeId !== 3) {
+      throw new appError(`${who} has a chair renter login on Trim with this email. Use a different email for their staff login.`, 200)
+    }
+    reuseUser = userExist
+    userExist = null
+  }
 
   //   return res.json(req.body)
   if (userExist) {
@@ -315,8 +339,11 @@ exports.AddEmployee = async (req, res, next) => {
       employeeInput.userTypeId = 2
     }
 
-    // if No User Exist with the same email create new user
-    let newEntry = await user.create(employeeInput)
+    // if No User Exist with the same email create new user (or use the
+    // applicant's old staff login again, see above)
+    let newEntry = reuseUser
+      ? await reuseUser.update({ firstName, lastName, status: true, deletedAt: null })
+      : await user.create(employeeInput)
     // save  Employee data in the table by creating new entry
     let employeeData = await employee.create({
       position,
