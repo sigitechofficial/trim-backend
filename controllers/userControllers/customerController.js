@@ -1861,7 +1861,9 @@ exports.salonDetails = async (req, res, next) => {
       {
         model: employee,
         // Step A: managers/receptionists who don't cut hair are not shown.
-        where: { isExternalEmployee: false, bookable: true },
+        // Staff who left or were switched off aren't shown either.
+        where: { isExternalEmployee: false, bookable: true, deleted: false, status: true },
+        required: false,
         attributes: [
           'id',
           'position',
@@ -1875,6 +1877,8 @@ exports.salonDetails = async (req, res, next) => {
         include: [
           {
             model: user,
+            // A removed login has no row here: leave that team member out.
+            required: true,
             attributes: ['id', `firstName`, `lastName`, 'image'],
           },
         ],
