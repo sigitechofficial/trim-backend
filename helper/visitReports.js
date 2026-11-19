@@ -32,6 +32,31 @@ const MONTHLY_LIMIT = 2
 const STRIKE_ALERT = 3
 const OPEN = ['waiting_barber', 'admin_review']
 
+/**
+ * Email Trim's admins when a report waits for their decision (VISIT_REPORT_ALERT_EMAILS,
+ * comma separated, or else every active admin account). Never throws.
+ */
+async function alertAdmins(r, why) {
+  try {
+    const Email = require('../utils/Email')
+    const list = String(process.env.VISIT_REPORT_ALERT_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean)
+    const admins = list.length
+      ? list.map((email) => ({ email, firstName: 'Trim', lastName: 'team' }))
+      : await db.user.findAll({ where: { userTypeId: 4, status: true }, attributes: ['email', 'firstName', 'lastName'] })
+    const shop = await db.salonDetail.findByPk(r.salonDetailId, { attributes: ['salonName'] })
+    const html = `<p>A client's home visit report needs your decision (${why}).</p>
+<p><b>Booking #${r.bookingId}</b> · ${shop?.salonName || 'Shop'}<br/>
+Reason: ${r.reason === 'not_here' ? 'client said the barber was not at the door' : 'barber never checked in'}</p>
+<p>Open the admin panel → Shops → <b>Visit Reports</b> to see the check-in location and decide. The client was told we reply within 24 hours.</p>`
+    for (const a of admins) {
+      if (!a.email) continue
+      await new Email(a).send(html, `Visit report #${r.id} needs a decision (booking #${r.bookingId})`)
+    }
+  } catch (err) {
+    console.error('[visitReports] admin alert failed:', err.message)
+  }
+}
+
 function startOf(b) {
   return appointmentStart(b.on, b.startTime)
 }
@@ -157,6 +182,7 @@ async function report({ customerId, bookingId, now = DateTime.now() }) {
   const recent = await db.visitReport.count({ where: { customerId, createdAt: { [Op.gte]: since } } })
   if (recent > MONTHLY_LIMIT) {
     await row.update({ state: 'admin_review', outcome: 'Our team will look at this and reply within 24 hours.' })
+    await alertAdmins(row, `the client reported more than ${MONTHLY_LIMIT} visits this month`)
     return plain(row)
   }
 
@@ -192,6 +218,7 @@ async function askReview({ customerId, bookingId }) {
   if (!r || r.customerId !== customerId) throw new AppError('Report not found.', 200)
   if (r.state !== 'barber_won') throw new AppError('This report is already being handled.', 200)
   await r.update({ state: 'admin_review', outcome: 'Our team will look at this and reply within 24 hours.', resolvedBy: null, resolvedAt: null })
+  await alertAdmins(r, 'the client asked Trim to review it')
   return plain(r)
 }
 
@@ -317,4 +344,5 @@ module.exports = {
   adminList,
   adminDecide,
   hasOpenReport,
+  alertAdmins,
 }

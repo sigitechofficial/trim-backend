@@ -55,8 +55,10 @@ function load() {
   stub('utils/throwNotification.js', async (tokens, n, data, userId) => pushes.push({ title: n.title, body: n.body, userId }))
   const refunds = []
   stub('controllers/stripe.js', { refundFullPayment: async (intent) => { refunds.push(intent); return { id: `re_${intent}` } } })
+  const mails = []
+  stub('utils/Email.js', class { constructor(u) { this.to = u.email } async send(html, subject) { mails.push({ to: this.to, subject }) } })
   for (const m of ['../helper/mobileVisitStatus', '../helper/mobileBarber', '../helper/bookingApproval', '../helper/visitReports']) delete require.cache[require.resolve(m)]
-  return { db, pushes, refunds, s: require('../helper/mobileVisitStatus'), r: require('../helper/visitReports') }
+  return { db, pushes, refunds, mails, s: require('../helper/mobileVisitStatus'), r: require('../helper/visitReports') }
 }
 
 // About 30 m from the client's pin below.
@@ -263,7 +265,8 @@ test('client says Yes: no report', async () => {
 })
 
 test('client says No after a trusted check-in: the barber wins, the client can ask Trim to review', async () => {
-  const { db, refunds, s, r } = load()
+  const { db, refunds, mails, s, r } = load()
+  db.user.seed({ userTypeId: 4, status: true, email: 'admin@trim.test', firstName: 'Ad', lastName: 'Min' })
   const x = seed(db)
   await s.arrived({ userId: x.staffUser.id, bookingId: x.b.id, ...AT_DOOR })
   const out = await r.report({ customerId: x.client.id, bookingId: x.b.id })
@@ -274,6 +277,10 @@ test('client says No after a trusted check-in: the barber wins, the client can a
   assert.equal(x.b.status, 'book')
   const again = await r.askReview({ customerId: x.client.id, bookingId: x.b.id })
   assert.equal(again.state, 'admin_review')
+  // Trim's admins get an email to decide it.
+  assert.equal(mails.length, 1)
+  assert.equal(mails[0].to, 'admin@trim.test')
+  assert.match(mails[0].subject, /needs a decision/)
 })
 
 test('client says No after a flagged check-in: full refund at once', async () => {
