@@ -23,6 +23,10 @@ const OPEN_HOURS_AFTER = 3 // ...until 3 hours after it ends
 const LATE_GRACE_MINUTES = 10
 const ACTIVE = ['book', 'pending']
 const ARRIVE_RADIUS_M = 100 // "I've arrived" works only this close to the client's pin
+const MAX_ACCURACY_M = 200 // a GPS fix less exact than this is not trusted
+const MAX_SPEED_KMH = 150 // faster than this from On my way to I've arrived is flagged
+const CONFIRM_MINUTES = 10 // no answer to "Is your barber here?" counts as yes
+const MOCK_MESSAGE = 'Turn off any fake location app on your phone, then try again.'
 
 // "330 m" nearby; further away in miles, as the apps show distances ("6.9 mi").
 function howFar(metres) {
@@ -92,6 +96,10 @@ function statusFields(b) {
     arrivedTime: b?.arrivedAt ? DateTime.fromJSDate(new Date(b.arrivedAt)).setZone('Europe/London').toFormat('h:mm a') : null,
     arrivedAt: b?.arrivedAt || null,
     arrivedDistanceM: b?.arrivedDistanceM ?? null,
+    arrivalFlag: b?.arrivalFlag || null,
+    clientConfirm: b?.clientConfirm || null,
+    // Client app: ask "Is your barber here?" until the client answers.
+    askClientHere: !!(b?.arrivedAt && !b?.clientConfirm),
     etaChoices: ETA_CHOICES,
   }
 }
@@ -125,16 +133,34 @@ async function barberOf(b) {
   return { shop, emp: job?.employee || null }
 }
 
-async function onTheWay({ userId, bookingId, etaMinutes }) {
+/** The phone's position sent with On my way / I've arrived, or null. Fake GPS is refused. */
+function phonePoint({ lat, lng, accuracy, mocked }) {
+  if (mocked === true || mocked === 'true' || mocked === 1) return { mocked: true }
+  const here = { lat, lng }
+  if (metresBetween(here, here) === null) return null
+  const acc = Number(accuracy)
+  return { lat: Number(lat), lng: Number(lng), accuracy: Number.isFinite(acc) ? Math.round(acc) : null }
+}
+
+async function onTheWay({ userId, bookingId, etaMinutes, lat, lng, accuracy, mocked }) {
   const eta = parseInt(etaMinutes, 10)
   if (!ETA_CHOICES.includes(eta)) throw new AppError('Please choose how long until you arrive.', 200)
   const b = await ownVisit(userId, bookingId)
+  const point = phonePoint({ lat, lng, accuracy, mocked })
+  if (point?.mocked) {
+    await b.update({ mockAttempts: (b.mockAttempts || 0) + 1 })
+    throw new AppError(MOCK_MESSAGE, 200)
+  }
   if (b.arrivedAt) throw new AppError('You have already arrived.', 200)
   const state = windowState(b)
   if (state === 'early') throw new AppError(`You can tell the client you are on the way from ${OPEN_HOURS_BEFORE} hours before the visit.`, 200)
   if (state === 'over') throw new AppError('This visit time has passed.', 200)
   // Tapping again updates the time (stuck in traffic); the late notice can go again.
-  await b.update({ onTheWayAt: new Date(), etaMinutes: eta, lateNoticeAt: null })
+  // Where they set off from (older apps send no location).
+  await b.update({
+    onTheWayAt: new Date(), etaMinutes: eta, lateNoticeAt: null,
+    onTheWayLat: point ? point.lat : null, onTheWayLng: point ? point.lng : null,
+  })
   const { shop, emp } = await barberOf(b)
   const at = DateTime.now().setZone('Europe/London').plus({ minutes: eta }).toFormat('h:mm a')
   await push([b.customerId], {
@@ -149,26 +175,72 @@ async function onTheWay({ userId, bookingId, etaMinutes }) {
  * client's pin. The distance is kept on the booking (proof for a no-show or a
  * "barber never came" claim). If the visit address has no pin, it is not checked.
  */
-async function arrived({ userId, bookingId, lat, lng }) {
-  const b = await ownVisit(userId, bookingId)
-  if (windowState(b) === 'early') throw new AppError('You can only mark arrived on the day of the visit.', 200)
-  if (b.arrivedAt) return statusFields(b)
-  const here = { lat, lng }
-  if (metresBetween(here, here) === null) {
-    throw new AppError("Please allow location so we can confirm you are at the client's address.", 200)
+/**
+ * Checks the phone is at the client's address: not fake GPS, a usable fix, and
+ * within ARRIVE_RADIUS_M of the pin. Returns { point, distance } or throws.
+ * Used by I've arrived and by the barber's "I'm here" reply to a report.
+ */
+async function checkAtDoor(b, { lat, lng, accuracy, mocked }) {
+  const point = phonePoint({ lat, lng, accuracy, mocked })
+  if (point?.mocked) {
+    await b.update({ mockAttempts: (b.mockAttempts || 0) + 1 })
+    throw new AppError(MOCK_MESSAGE, 200)
+  }
+  if (!point) throw new AppError("Please allow location so we can confirm you are at the client's address.", 200)
+  if (point.accuracy !== null && point.accuracy > MAX_ACCURACY_M) {
+    throw new AppError('Your GPS signal is weak. Step outside or wait a moment, then try again.', 200)
   }
   const pin = b.visitAddressId ? await addressDBS.findByPk(b.visitAddressId, { attributes: ['id', 'lat', 'lng'] }) : null
-  const distance = metresBetween(here, pin)
+  const distance = metresBetween(point, pin)
   if (distance !== null && distance > ARRIVE_RADIUS_M) {
     throw new AppError(`You need to be at the client's address to tap I've arrived. You are about ${howFar(distance)} away.`, 200)
   }
-  await b.update({ arrivedAt: new Date(), onTheWayAt: b.onTheWayAt || new Date(), arrivedDistanceM: distance })
+  return { point, distance }
+}
+
+/** 'suspicious' when the barber got from On my way to the door impossibly fast, 'mock' after fake GPS was seen. */
+function arrivalFlagFor(b, point, now = new Date()) {
+  if (b.mockAttempts > 0) return 'mock'
+  const from = { lat: b.onTheWayLat, lng: b.onTheWayLng }
+  const metres = metresBetween(from, point)
+  if (metres === null || !b.onTheWayAt || metres < 2000) return null
+  const hours = (now - new Date(b.onTheWayAt)) / 3600000
+  const kmh = metres / 1000 / Math.max(hours, 1 / 60)
+  return kmh > MAX_SPEED_KMH ? 'suspicious' : null
+}
+
+async function arrived({ userId, bookingId, lat, lng, accuracy, mocked }) {
+  const b = await ownVisit(userId, bookingId)
+  if (windowState(b) === 'early') throw new AppError('You can only mark arrived on the day of the visit.', 200)
+  if (b.arrivedAt) return statusFields(b)
+  const { point, distance } = await checkAtDoor(b, { lat, lng, accuracy, mocked })
+  const now = new Date()
+  await b.update({
+    arrivedAt: now,
+    onTheWayAt: b.onTheWayAt || now,
+    arrivedDistanceM: distance,
+    arrivedLat: point.lat,
+    arrivedLng: point.lng,
+    arrivedAccuracyM: point.accuracy,
+    arrivalFlag: arrivalFlagFor(b, point, now),
+  })
   const { shop, emp } = await barberOf(b)
   await push([b.customerId], {
     title: 'Your barber has arrived',
-    body: `${barberName(shop, emp)} is at your address.`,
-  }, { bookingId: b.id, visitStatus: 'arrived' })
+    body: `${barberName(shop, emp)} says they're at your door. Are they? Open Trim to answer.`,
+  }, { bookingId: b.id, visitStatus: 'arrived', askClientHere: '1' })
   return statusFields(b)
+}
+
+/** Client's "Is your barber here?": 'yes', or 'no' (opens a report; see helper/visitReports.js). */
+async function answerHere({ customerId, bookingId, answer }) {
+  const b = await booking.findByPk(bookingId)
+  if (!b || !b.isMobileVisit || b.customerId !== customerId) throw new AppError('Home visit not found.', 200)
+  if (!b.arrivedAt) throw new AppError('Your barber has not checked in yet.', 200)
+  if (answer !== 'yes' && answer !== 'no') throw new AppError('Please answer Yes or No.', 200)
+  if (b.clientConfirm && b.clientConfirm !== 'auto_yes') return b
+  await b.update({ clientConfirm: answer, clientConfirmAt: new Date() })
+  return b
 }
 
 /**
@@ -203,7 +275,18 @@ async function runVisitNotices(now = DateTime.now()) {
       lateNotices += 1
     }
   }
-  return { barberReminders, lateNotices }
+  // No answer to "Is your barber here?" in CONFIRM_MINUTES counts as yes.
+  const unanswered = await booking.findAll({
+    where: { isMobileVisit: true, clientConfirm: null, arrivedAt: { [Op.ne]: null } },
+    attributes: ['id', 'arrivedAt', 'clientConfirm'],
+  })
+  let autoYes = 0
+  for (const b of unanswered) {
+    if (!b.arrivedAt || now.toJSDate() - new Date(b.arrivedAt) < CONFIRM_MINUTES * 60000) continue
+    await b.update({ clientConfirm: 'auto_yes', clientConfirmAt: new Date() })
+    autoYes += 1
+  }
+  return { barberReminders, lateNotices, autoYes }
 }
 
 /**
@@ -258,6 +341,16 @@ module.exports = {
   statusFields,
   onTheWay,
   arrived,
+  answerHere,
+  checkAtDoor,
+  arrivalFlagFor,
+  ownVisit,
+  barberOf,
+  barberName,
+  push,
+  howFar,
+  CONFIRM_MINUTES,
+  MAX_SPEED_KMH,
   metresBetween,
   ARRIVE_RADIUS_M,
   runVisitNotices,

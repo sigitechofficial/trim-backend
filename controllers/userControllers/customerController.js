@@ -60,6 +60,7 @@ const chairMarket = require('../../helper/chairMarket')
 const mobileBarber = require('../../helper/mobileBarber')
 const { barberClash } = require('../../helper/bookingClash')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
+const visitReports = require('../../helper/visitReports')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -3750,6 +3751,9 @@ exports.fetchAppointments = async (req, res, next) => {
       'onTheWayAt',
       'etaMinutes',
       'arrivedAt',
+      'arrivedDistanceM',
+      'arrivalFlag',
+      'clientConfirm',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -3844,6 +3848,9 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'onTheWayAt',
       'etaMinutes',
       'arrivedAt',
+      'arrivedDistanceM',
+      'arrivalFlag',
+      'clientConfirm',
       'loyaltyDiscount',
       'loyaltyPercentage',
       [
@@ -3971,8 +3978,8 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
   if (output.isMobileVisit) {
     const visit = await addressDBS.findByPk(output.visitAddressId)
     output.visitAddress = visit ? { ...visit.toJSON(), note: visit.title || '' } : null
-    // "Your barber is on the way / has arrived" banner.
-    Object.assign(output, mobileVisitStatus.statusFields(output))
+    // "Your barber is on the way / has arrived" banner, "Is your barber here?" and reports.
+    Object.assign(output, mobileVisitStatus.statusFields(output), await visitReports.reportFields(output))
   }
   output.freeCancelAfterMove = await renterMove.freeCancelAfterMove(output.id)
   // "Your barber has moved" card: only for bookings on or after the move.

@@ -15,6 +15,7 @@
  */
 
 const { Op } = require('sequelize')
+const { DateTime } = require('luxon')
 const {
   salonDetail,
   employee,
@@ -183,6 +184,42 @@ async function getMySettings(userId) {
   }
 }
 
+/**
+ * Home visits still coming up (today on, booked or waiting) for these barbers,
+ * or for the whole business when employeeIds is null: { count, next } where
+ * next is "Thu 20 Nov, 10:00 AM" (shop clock).
+ */
+async function upcomingVisits({ salonDetailId, employeeIds = null }, now = DateTime.now()) {
+  const today = now.setZone('Europe/London').toISODate()
+  const where = { salonDetailId, isMobileVisit: true, status: ['book', 'pending', 'requested'], on: { [Op.gte]: today } }
+  let rows = await booking.findAll({ where, attributes: ['id', 'on', 'startTime'], order: [['on', 'ASC'], ['startTime', 'ASC']] })
+  if (employeeIds) {
+    const mine = await jobs.findAll({ where: { bookingId: rows.map((b) => b.id), employeeId: employeeIds }, attributes: ['bookingId'] })
+    const ids = new Set(mine.map((j) => j.bookingId))
+    rows = rows.filter((b) => ids.has(b.id))
+  }
+  rows = rows.filter((b) => String(b.on).slice(0, 10) >= today)
+  if (!rows.length) return { count: 0, next: null }
+  const first = rows[0]
+  const at = DateTime.fromISO(`${String(first.on).slice(0, 10)}T${String(first.startTime).slice(0, 8)}`, { zone: 'Europe/London' })
+  return { count: rows.length, next: at.toFormat('ccc d LLL, h:mm a') }
+}
+
+/**
+ * Turning home visits off leaves booked visits in place. Unless confirmed,
+ * returns { needsConfirm, count, next, message } instead of saving.
+ */
+function confirmTurnOff(upcoming, who) {
+  if (!upcoming.count) return null
+  const n = upcoming.count === 1 ? '1 home visit' : `${upcoming.count} home visits`
+  return {
+    needsConfirm: true,
+    count: upcoming.count,
+    next: upcoming.next,
+    message: `${who} ${n} booked (next: ${upcoming.next}). They stay booked: go to them, or cancel or move them from the calendar. New clients won't be able to book home visits.`,
+  }
+}
+
 /** Save the caller's own settings. Staff can only save once the owner allowed it. */
 async function saveMySettings(userId, body = {}) {
   const { emp, shop, role } = await callerOf(userId)
@@ -213,6 +250,10 @@ async function saveMySettings(userId, body = {}) {
   if (patch.enabled && patch.feeType === 'per_mile' && !patch.perMileFee && !patch.minFee) {
     throw new AppError('Please enter a fee per mile.', 200)
   }
+  if (row?.enabled && !patch.enabled && !(body.confirm === true || body.confirm === 'true')) {
+    const ask = confirmTurnOff(await upcomingVisits({ salonDetailId: emp.salonDetailId, employeeIds: [emp.id] }), 'You still have')
+    if (ask) return ask
+  }
   if (row) await row.update(patch)
   else {
     row = await mobileSetting.create({
@@ -231,10 +272,14 @@ async function saveMySettings(userId, body = {}) {
 }
 
 /** Owner or renter picks how the business works: 'shop', 'mobile' or 'both'. */
-async function setWorkMode(userId, mode) {
+async function setWorkMode(userId, mode, confirm = false) {
   if (!WORK_MODES.includes(mode)) throw new AppError('Please choose how you work.', 200)
   const { shop, role } = await callerOf(userId)
   if (role === 'staff') throw new AppError('Only the shop owner can change this.', 200)
+  if (mode === 'shop' && shop.workMode !== 'shop' && !confirm) {
+    const ask = confirmTurnOff(await upcomingVisits({ salonDetailId: shop.id }), 'Your business still has')
+    if (ask) return ask
+  }
   await salonDetail.update({ workMode: mode }, { where: { id: shop.id } })
   return getMySettings(userId)
 }
@@ -262,7 +307,7 @@ async function teamSettings(ownerUserId) {
 }
 
 /** Owner allows (or stops) mobile visits for one staff member. */
-async function setStaffAllowed(ownerUserId, employeeId, allowed) {
+async function setStaffAllowed(ownerUserId, employeeId, allowed, confirm = false) {
   const { shop, role } = await callerOf(ownerUserId)
   if (role === 'staff') throw new AppError('Only the shop owner can change this.', 200)
   const staff = await employee.findOne({
@@ -271,6 +316,10 @@ async function setStaffAllowed(ownerUserId, employeeId, allowed) {
   })
   if (!staff) throw new AppError('Team member not found.', 200)
   const row = await mobileSetting.findOne({ where: { employeeId: staff.id } })
+  if (!allowed && row?.allowedByOwner && !confirm) {
+    const ask = confirmTurnOff(await upcomingVisits({ salonDetailId: shop.id, employeeIds: [staff.id] }), 'This team member still has')
+    if (ask) return ask
+  }
   // Stopping it also turns their mobile visits off.
   const patch = allowed ? { allowedByOwner: true } : { allowedByOwner: false, enabled: false }
   if (row) await row.update(patch)
@@ -440,7 +489,7 @@ async function pickMobileBarber({ salonDetailId, ...visit }) {
   if (!active.length) return { available: false, reason: 'This business does not offer home visits right now.' }
   let first = null
   for (const { row } of active) {
-    const q = await quote({ salonDetailId, employeeId: row.employeeId, ...visit })
+    const q = await quote({ ...visit, salonDetailId, employeeId: row.employeeId })
     if (q.available) return q
     first = first || q
   }
@@ -596,12 +645,30 @@ function noShowCharge({ total, travelFee, percent }) {
   return cancellationCharge({ total, travelFee, percent, barberSetOff: true })
 }
 
+// After a home visit the barber keeps only the area of the client's address.
+const KEEP_ADDRESS_DAYS = 7
+
+/**
+ * Why the barber sees only the area: 'request' (not accepted yet),
+ * 'cancelled', 'visit_over' (KEEP_ADDRESS_DAYS after the visit day), or null.
+ */
+function addressHiddenReason(b, now = DateTime.now()) {
+  if (b.status === 'requested') return 'request'
+  if (b.status === 'cancel') return 'cancelled'
+  if (b.on) {
+    const last = DateTime.fromISO(String(b.on).slice(0, 10), { zone: 'Europe/London' }).plus({ days: KEEP_ADDRESS_DAYS })
+    if (now.setZone('Europe/London').startOf('day') > last) return 'visit_over'
+  }
+  return null
+}
+
 /**
  * Business app booking views: put the client's address on mobile bookings
  * (booking.visitAddress), masked to the postcode district until the booking is
- * accepted. Works on plain objects or model rows.
+ * accepted, once it is cancelled, and KEEP_ADDRESS_DAYS after the visit.
+ * Works on plain objects or model rows.
  */
-async function attachVisitAddress(bookings) {
+async function attachVisitAddress(bookings, now = DateTime.now()) {
   const list = (Array.isArray(bookings) ? bookings : [bookings]).filter((b) => b?.isMobileVisit && b.visitAddressId)
   if (!list.length) return
   try {
@@ -610,7 +677,8 @@ async function attachVisitAddress(bookings) {
     for (const b of list) {
       const addr = byId.get(b.visitAddressId)
       if (!addr) continue
-      const value = b.status === 'requested' ? maskAddress(addr) : { ...addr, note: addr.title || '' }
+      const hidden = addressHiddenReason(b, now)
+      const value = hidden ? { ...maskAddress(addr), hiddenReason: hidden } : { ...addr, note: addr.title || '' }
       if (b.dataValues) b.dataValues.visitAddress = value
       else b.visitAddress = value
     }
@@ -740,6 +808,9 @@ module.exports = {
   totalWithTravelFee,
   noShowCharge,
   attachVisitAddress,
+  upcomingVisits,
+  addressHiddenReason,
+  KEEP_ADDRESS_DAYS,
   addressLine,
   cancellationCharge,
   adminOverview,

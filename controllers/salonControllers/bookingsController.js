@@ -74,6 +74,7 @@ const { expireOverdueRequestsSafely } = require('../../helper/expireBookingReque
 const loyalty = require('../../helper/loyalty')
 const mobileBarber = require('../../helper/mobileBarber')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
+const visitReports = require('../../helper/visitReports')
 const { actingSalonId } = require('../../helper/branchScope')
 const {
   resolveRequestActor,
@@ -408,6 +409,11 @@ exports.calendarAppointments = async (req, res, next) => {
     [
       literal(`(SELECT bookings.requestOutcome FROM bookings WHERE bookings.id = jobs.bookingId)`),
       'requestOutcome',
+    ],
+    // Home visit: the calendar tile shows a "Home visit" tag.
+    [
+      literal(`(SELECT bookings.isMobileVisit FROM bookings WHERE bookings.id = jobs.bookingId)`),
+      'isMobileVisit',
     ],
   ]
 
@@ -1100,12 +1106,14 @@ exports.bookingDetails = async (req, res, next) => {
     travelMiles: bookingData.travelMiles,
   };
   if (bookingData.isMobileVisit) {
-    const holder = { isMobileVisit: true, visitAddressId: bookingData.visitAddressId, status: bookingData.status }
+    const holder = { isMobileVisit: true, visitAddressId: bookingData.visitAddressId, status: bookingData.status, on: bookingData.on }
     await mobileBarber.attachVisitAddress(holder)
     bookingDetail.visitAddress = holder.visitAddress || null
     // On my way / Arrived buttons and their times.
     Object.assign(bookingDetail, mobileVisitStatus.statusFields(bookingData), {
       visitWindow: mobileVisitStatus.windowState(bookingData),
+      // A client's "didn't arrive" report, if any (the barber can reply "I'm here").
+      visitReport: (await visitReports.reportFields(bookingData)).visitReport || null,
     })
   }
 
@@ -2723,6 +2731,33 @@ exports.addWalkinBooking = async (req, res, next) => {
   startTime = Convert.convertTo24HourFormat(startTime)
   endTime = Convert.convertTo24HourFormat(endTime)
 
+  // Home visit made by the business ({ mobileVisit: address, travelFee }): the
+  // barber must travel there; the server works out the fee and adds it.
+  let visit = null
+  if (req.body.mobileVisit) {
+    const appointment = { salonDetailId: SalonDetail.id, on: jobDate, startTime, endTime }
+    if (!(employeeId > 0)) {
+      const picked = await mobileBarber.pickMobileBarber({
+        salonDetailId: SalonDetail.id,
+        lat: req.body.mobileVisit.lat,
+        lng: req.body.mobileVisit.lng,
+        serviceIds: (jobsData || []).map((j) => j.serviceId),
+        on: jobDate,
+        startTime,
+        endTime,
+      })
+      if (!picked.available) throw new AppError(picked.reason, 200)
+      employeeId = picked.employeeId
+    }
+    visit = await mobileBarber.prepareBooking({
+      appointment,
+      employeeId,
+      services: jobsData,
+      mobileVisit: req.body.mobileVisit,
+      sentTravelFee: req.body.travelFee,
+    })
+  }
+
   console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ jobsData:', jobsData)
   const assignTimeSlots = Custom.scheduleSessions(
     { startTime, endTime, on: jobDate, duration },
@@ -2844,6 +2879,8 @@ exports.addWalkinBooking = async (req, res, next) => {
     upFrontPolicyVersion: policies?.paymentPolicies[0]?.version,
     noshowPolicyVersion: policies?.noShowPolicies[0]?.version,
     customerStatus: hasAppointments && hasAppointments > 0 ? 'repeat' : 'new',
+    // Home visit: the client's address and the travel fee (added to the total).
+    ...(visit ? { ...visit, total: Number(total) + visit.travelFee, subTotal: Number(total) + visit.travelFee } : {}),
   })
 
   const finalInput = assiginEmployee.map((service) => ({
@@ -4668,6 +4705,9 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
   // Home visit: the client was not in when the barber got there.
   if (appointment.isMobileVisit && !appointment.arrivedAt) {
     throw new AppError('Tap "I\'ve arrived" on this home visit first, then mark the no-show.', 200);
+  }
+  if (appointment.isMobileVisit && (await visitReports.hasOpenReport(appointment.id))) {
+    throw new AppError('Your client has reported this visit. Wait until the report is settled.', 200);
   }
 
   const updatedBooking = { tip: 0 };

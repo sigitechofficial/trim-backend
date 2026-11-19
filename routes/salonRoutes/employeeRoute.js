@@ -224,5 +224,7 @@ router.get('/mobile-visits/team', catchAsync(mobileBarberController.team))
 router.put('/mobile-visits/team/:employee', teamEditGuard, catchAsync(mobileBarberController.setStaffAllowed))
 router.post('/mobile-visits/bookings/:booking/on-the-way', catchAsync(mobileBarberController.onTheWay))
 router.post('/mobile-visits/bookings/:booking/arrived', catchAsync(mobileBarberController.arrived))
+router.post('/mobile-visits/bookings/:booking/report-reply', catchAsync(mobileBarberController.reportReply))
+router.post('/mobile-visits/quote', catchAsync(mobileBarberController.businessQuote))
 
 module.exports = router

@@ -244,6 +244,8 @@ router.patch('/renter-moves/:move/retry', protect, adminOnly, catchAsync(renterM
 router.get('/chair-market', protect, adminOnly, catchAsync(chairMarketController.adminOverview))
 router.patch('/chair-market/offers/:offer/close', protect, adminOnly, catchAsync(chairMarketController.adminCloseOffer))
 router.get('/mobile-barbers', protect, catchAsync(mobileBarberController.adminList))
+router.get('/visit-reports', protect, catchAsync(mobileBarberController.adminReports))
+router.put('/visit-reports/:id', protect, catchAsync(mobileBarberController.adminDecide))
 router.get(
   '/salon-loyalty/:id',
   protect,

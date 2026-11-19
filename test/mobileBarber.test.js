@@ -305,3 +305,14 @@ test('admin numbers are per barber, not per shop', async () => {
   assert.deepEqual(staff.stats, { visits: 1, completed: 0, travelFees: 0 })
   assert.equal(totals.visits, 2)
 })
+
+test('the barber keeps only the area of the address: before accept, once cancelled, and 7 days after the visit', () => {
+  const { addressHiddenReason } = require('../helper/mobileBarber')
+  const { DateTime } = require('luxon')
+  const now = DateTime.fromISO('2026-11-20T12:00:00', { zone: 'Europe/London' })
+  assert.equal(addressHiddenReason({ status: 'requested', on: '2026-11-21' }, now), 'request')
+  assert.equal(addressHiddenReason({ status: 'cancel', on: '2026-11-21' }, now), 'cancelled')
+  assert.equal(addressHiddenReason({ status: 'book', on: '2026-11-21' }, now), null)
+  assert.equal(addressHiddenReason({ status: 'complete', on: '2026-11-13' }, now), null)
+  assert.equal(addressHiddenReason({ status: 'complete', on: '2026-11-12' }, now), 'visit_over')
+})

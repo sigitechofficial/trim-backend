@@ -92,6 +92,9 @@ router.post(
 )
 router.post('/mobile-visit/quote', publicProtected, catchAsync(mobileBarberController.quote))
 router.get('/mobile-visit/active', protect, catchAsync(mobileBarberController.activeVisit))
+router.post('/mobile-visit/:booking/here', protect, catchAsync(mobileBarberController.answerHere))
+router.post('/mobile-visit/:booking/report', protect, catchAsync(mobileBarberController.report))
+router.post('/mobile-visit/:booking/report/review', protect, catchAsync(mobileBarberController.askReview))
 router.post(
   '/book-appointment',
   protect,
