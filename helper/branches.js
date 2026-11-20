@@ -38,7 +38,7 @@ async function myBranches(ownerUserId) {
   })
   const b = await brand.findOne({ where: { ownerUserId } })
   return {
-    brand: b ? { id: b.id, name: b.name, branchLimit: b.branchLimit, planProductId: b.planProductId, planStatus: b.planStatus } : null,
+    brand: b ? { id: b.id, name: b.name, rcAppUserId: b.rcAppUserId, branchLimit: b.branchLimit, planProductId: b.planProductId, planStatus: b.planStatus } : null,
     branches: shops.map((s) => ({
       salonId: s.id,
       name: s.salonName,
