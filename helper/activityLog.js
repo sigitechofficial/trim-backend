@@ -93,6 +93,8 @@ const LABEL_OF = {
   'security.managers_two_step': 'Changed two-step login for managers',
   'team.access_started': 'Branch access started (for a period)',
   'team.access_ended': 'Branch access ended (period over)',
+  'team.access_late_bookings': 'Bookings left after a last day',
+  'clients.delete_request': 'A client asked to delete their data',
   'role.create': 'Made a role',
   'role.update': 'Changed a role',
   'role.delete': 'Deleted a role',
