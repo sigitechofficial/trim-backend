@@ -47,9 +47,61 @@ async function getProgram(salonDetailId) {
 const excludedIdsOf = (program) =>
   (program?.loyaltyExcludedServices || []).map((e) => Number(e.serviceId))
 
+// ---- Brand-wide cards (Step C) ----
+// When the owner shares the loyalty offer across their branches (Shared
+// settings: 'all' or 'locked'), a client has ONE card for the whole brand:
+// visits at any branch count and the reward can be used at any branch. The
+// card is kept on the owner's first shop (lowest id), so it never moves.
+
+const SHARED = ['all', 'locked']
+
+/**
+ * For each shop id: { cardShopId, brand: null | { name, branches } }.
+ * Shops of a brand whose loyalty offer is shared point at the brand's first
+ * shop; every other shop keeps its own card.
+ */
+async function cardScopes(shopIds) {
+  const ids = [...new Set((shopIds || []).map(Number).filter(Boolean))]
+  const out = new Map(ids.map((id) => [id, { cardShopId: id, brand: null }]))
+  if (!ids.length) return out
+  const shops = await salonDetail.findAll({
+    where: { id: ids, brandId: { [Op.ne]: null }, isExternalEmployee: { [Op.or]: [false, null] } },
+    attributes: ['id', 'userId', 'brandId'],
+  })
+  if (!shops.length) return out
+  const owners = [...new Set(shops.map((x) => x.userId))]
+  const db = require('../models')
+  const shared = new Set(
+    (await db.sharedSetting.findAll({ where: { ownerUserId: owners, key: 'loyalty', state: SHARED }, attributes: ['ownerUserId'] }))
+      .map((r) => r.ownerUserId),
+  )
+  if (!shared.size) return out
+  const branches = await salonDetail.findAll({
+    where: { userId: [...shared], isExternalEmployee: { [Op.or]: [false, null] }, deleted: { [Op.or]: [false, null] } },
+    attributes: ['id', 'userId', 'closedAt'],
+    order: [['id', 'ASC']],
+  })
+  const brands = await db.brand.findAll({ where: { ownerUserId: [...shared] }, attributes: ['ownerUserId', 'name'] })
+  const brandName = new Map(brands.map((b) => [b.ownerUserId, b.name]))
+  for (const x of shops) {
+    if (!shared.has(x.userId)) continue
+    const own = branches.filter((b) => b.userId === x.userId)
+    if (!own.length) continue
+    out.set(x.id, {
+      cardShopId: own[0].id,
+      brand: { name: brandName.get(x.userId) || null, branches: own.filter((b) => !b.closedAt).length },
+    })
+  }
+  return out
+}
+
+async function cardShopId(salonDetailId) {
+  return (await cardScopes([salonDetailId])).get(Number(salonDetailId))?.cardShopId || salonDetailId
+}
+
 async function getCard(salonDetailId, customerId) {
   if (!salonDetailId || !customerId) return null
-  return loyaltyCard.findOne({ where: { salonDetailId, customerId } })
+  return loyaltyCard.findOne({ where: { salonDetailId: await cardShopId(salonDetailId), customerId } })
 }
 
 // The open booking that holds this card's reward (ignoring `exceptBookingId`).
@@ -150,6 +202,7 @@ async function bookingValue(bookingId, transaction) {
 
 // Locks (or creates) the card inside the transaction.
 async function lockedCard(salonDetailId, customerId, transaction) {
+  salonDetailId = await cardShopId(salonDetailId)
   await loyaltyCard.findOrCreate({
     where: { salonDetailId, customerId },
     defaults: { visitCount: 0 },
@@ -251,7 +304,10 @@ async function closeReward(b, type) {
 async function notifyRewardEarned(salonDetailId, customerId, card) {
   try {
     const [shop, client] = await Promise.all([
-      salonDetail.findByPk(salonDetailId, { attributes: ['id', 'salonName'] }),
+      salonDetail.findByPk(salonDetailId, { attributes: ['id', 'salonName'] }).then(async (x) => {
+        const scope = (await cardScopes([salonDetailId])).get(Number(salonDetailId))
+        return scope?.brand?.name ? { ...x?.get({ plain: true }), salonName: scope.brand.name } : x
+      }),
       user.findByPk(customerId, { attributes: ['id'], include: { model: deviceToken, attributes: ['tokenId'] } }),
     ])
     const tokens = (client?.deviceTokens || []).map((d) => d.tokenId).filter(Boolean)
@@ -289,7 +345,10 @@ async function summaryForClient(salonDetailId, customerId, program = undefined) 
   const status = await cardStatus(card)
   const hasReward = status === 'ready' || status === 'reserved'
   if (!prog.isActive && !hasReward) return null
+  const scope = (await cardScopes([salonDetailId])).get(Number(salonDetailId))
   return {
+    // Step C: one card for every branch of the brand.
+    brandWide: scope?.brand ? { name: scope.brand.name, branches: scope.brand.branches } : null,
     active: !!prog.isActive,
     visitsRequired: prog.visitsRequired,
     percentage: Number(prog.discountPercentage),
@@ -314,16 +373,19 @@ async function offersForShops(shopIds, customerId) {
   const ids = [...new Set((shopIds || []).map(Number).filter(Boolean))]
   const out = new Map()
   if (!ids.length) return out
+  const scopes = await cardScopes(ids)
+  const cardShopIds = [...new Set([...scopes.values()].map((x) => x.cardShopId))]
   const [programs, cards] = await Promise.all([
     loyaltyProgram.findAll({
       where: { salonDetailId: ids },
       attributes: ['salonDetailId', 'isActive', 'visitsRequired', 'discountPercentage'],
     }),
     customerId
-      ? loyaltyCard.findAll({ where: { salonDetailId: ids, customerId } })
+      ? loyaltyCard.findAll({ where: { salonDetailId: cardShopIds, customerId } })
       : [],
   ])
-  const cardByShop = new Map(cards.map((c) => [c.salonDetailId, c]))
+  const byCardShop = new Map(cards.map((c) => [c.salonDetailId, c]))
+  const cardByShop = new Map(ids.map((id) => [id, byCardShop.get(scopes.get(id).cardShopId)]))
   const earnedIds = cards.filter((c) => c.rewardEarnedAt).map((c) => c.id)
   const held = earnedIds.length
     ? await booking.findAll({
@@ -359,7 +421,7 @@ async function cardsForCustomer(customerId) {
   for (const card of cards) {
     const summary = await summaryForClient(card.salonDetailId, customerId)
     if (!summary || !card.salonDetail) continue
-    out.push({ salon: card.salonDetail, ...summary })
+    out.push({ salon: card.salonDetail, ...summary }) // summary.brandWide: one card for every branch
   }
   const rank = { ready: 0, reserved: 1, progress: 2, expired: 3, none: 4 }
   return out.sort((a, b) => rank[a.status] - rank[b.status])
@@ -368,9 +430,11 @@ async function cardsForCustomer(customerId) {
 // Settings and simple numbers for the business app / admin.
 async function settingsForShop(salonDetailId) {
   const program = await getProgram(salonDetailId)
+  const scope = (await cardScopes([salonDetailId])).get(Number(salonDetailId))
+  const cardShop = scope?.cardShopId || salonDetailId
   const [clients, rewardsReady, rewardsUsed, discountGiven] = await Promise.all([
-    loyaltyCard.count({ where: { salonDetailId } }),
-    loyaltyCard.count({ where: { salonDetailId, rewardEarnedAt: { [Op.ne]: null } } }),
+    loyaltyCard.count({ where: { salonDetailId: cardShop } }),
+    loyaltyCard.count({ where: { salonDetailId: cardShop, rewardEarnedAt: { [Op.ne]: null } } }),
     booking.count({ where: { salonDetailId, status: 'complete', loyaltyDiscount: { [Op.gt]: 0 } } }),
     booking.sum('loyaltyDiscount', { where: { salonDetailId, status: 'complete' } }),
   ])
@@ -385,6 +449,7 @@ async function settingsForShop(salonDetailId) {
     excludedServiceIds: excludedIdsOf(program),
     excludedServices: await excludedServices(program),
     startedAt: program?.startedAt || null,
+    brandWide: scope?.brand ? { name: scope.brand.name, branches: scope.brand.branches } : null,
     limits: rules.LIMITS,
     stats: { clients, rewardsReady, rewardsUsed, discountGiven: round2(discountGiven || 0) },
   }
@@ -424,7 +489,60 @@ async function saveSettings(salonDetailId, input) {
   return { settings: await settingsForShop(salonDetailId) }
 }
 
+/**
+ * The owner shared the loyalty offer: put each client's cards from the
+ * brand's branches onto one card (rules.mergeCards). Open bookings holding a
+ * reward and the card history move with it. Returns { clients, merged, lostRewards }.
+ */
+async function mergeBrandCards(ownerUserId) {
+  const shops = await salonDetail.findAll({
+    where: { userId: ownerUserId, brandId: { [Op.ne]: null }, isExternalEmployee: { [Op.or]: [false, null] }, deleted: { [Op.or]: [false, null] } },
+    attributes: ['id'],
+    order: [['id', 'ASC']],
+  })
+  const summary = { clients: 0, merged: 0, lostRewards: 0 }
+  if (shops.length < 2) return summary
+  const target = shops[0].id
+  const ids = shops.map((x) => x.id)
+  const program = await getProgram(target)
+  const cards = await loyaltyCard.findAll({ where: { salonDetailId: ids } })
+  const byClient = new Map()
+  for (const c of cards) byClient.set(c.customerId, [...(byClient.get(c.customerId) || []), c])
+  const { loyaltyEvent: events } = require('../models')
+  for (const [customerId, list] of byClient) {
+    if (list.length === 1 && list[0].salonDetailId === target) continue
+    summary.clients++
+    await sequelize.transaction(async (t) => {
+      const held = await booking.findAll({
+        where: { loyaltyCardId: list.map((c) => c.id), loyaltyDiscount: { [Op.gt]: 0 }, status: { [Op.in]: HOLDING_STATUSES } },
+        attributes: ['loyaltyCardId'],
+        transaction: t,
+      })
+      const plain = list.map((c) => c.get({ plain: true }))
+      const m = rules.mergeCards(plain, program, { heldIds: new Set(held.map((h) => h.loyaltyCardId)) })
+      // The card lives on the first shop: reuse that row if there is one.
+      const home = list.find((c) => c.salonDetailId === target)
+      const keep = home || list.find((c) => c.id === m.keeperId)
+      const others = list.filter((c) => c.id !== keep.id)
+      const otherIds = others.map((c) => c.id)
+      if (otherIds.length) {
+        await booking.update({ loyaltyCardId: keep.id }, { where: { loyaltyCardId: otherIds }, transaction: t })
+        await events.update({ loyaltyCardId: keep.id }, { where: { loyaltyCardId: otherIds }, transaction: t })
+        await loyaltyCard.destroy({ where: { id: otherIds }, transaction: t })
+      }
+      await keep.update({ ...m.fields, salonDetailId: target }, { transaction: t })
+      await events.create({ loyaltyCardId: keep.id, type: 'merged', visitCount: m.fields.visitCount }, { transaction: t }).catch(() => {})
+      summary.merged += otherIds.length
+      summary.lostRewards += m.lostRewards.length
+    })
+  }
+  console.log(`[loyalty] brand cards merged for owner ${ownerUserId}:`, JSON.stringify(summary))
+  return summary
+}
+
 module.exports = {
+  cardScopes,
+  mergeBrandCards,
   rules,
   getProgram,
   quote,

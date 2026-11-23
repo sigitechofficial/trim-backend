@@ -144,3 +144,47 @@ test('applyToJobs lowers each job by its own share, matched by service', () => {
     ],
   )
 })
+
+// Step C: one brand-wide card from a client's branch cards.
+test('mergeCards adds visits and earns the reward when they reach the offer', () => {
+  const { mergeCards } = require('../helper/loyaltyRules')
+  const now = new Date('2026-11-23T10:00:00Z')
+  const program = { visitsRequired: 5, discountPercentage: 20, rewardExpiryDays: 30 }
+  const m = mergeCards([{ id: 1, visitCount: 3 }, { id: 2, visitCount: 2 }], program, { now })
+  assert.equal(m.keeperId, 1)
+  assert.equal(m.fields.visitCount, 5)
+  assert.equal(m.fields.rewardPercentage, 20)
+  assert.equal(new Date(m.fields.rewardExpiresAt).toISOString(), '2026-12-23T10:00:00.000Z')
+  assert.deepEqual(m.lostRewards, [])
+})
+
+test('mergeCards keeps a held reward first, then the biggest, and reports the rest', () => {
+  const { mergeCards } = require('../helper/loyaltyRules')
+  const now = new Date('2026-11-23T10:00:00Z')
+  const earned = new Date('2026-11-01T10:00:00Z')
+  const cards = [
+    { id: 1, visitCount: 5, rewardEarnedAt: earned, rewardPercentage: 50 },
+    { id: 2, visitCount: 4, rewardEarnedAt: earned, rewardPercentage: 10 },
+    { id: 3, visitCount: 1 },
+  ]
+  let m = mergeCards(cards, { visitsRequired: 4, discountPercentage: 10 }, { now })
+  assert.equal(m.keeperId, 1)
+  assert.equal(m.fields.rewardPercentage, 50)
+  assert.equal(m.fields.visitCount, 10)
+  assert.deepEqual(m.lostRewards, [2])
+  m = mergeCards(cards, { visitsRequired: 4, discountPercentage: 10 }, { now, heldIds: new Set([2]) })
+  assert.equal(m.keeperId, 2) // a booking already uses that reward
+  assert.equal(m.fields.rewardPercentage, 10)
+})
+
+test('mergeCards: below the offer, no reward; an expired reward is not kept', () => {
+  const { mergeCards } = require('../helper/loyaltyRules')
+  const now = new Date('2026-11-23T10:00:00Z')
+  const m = mergeCards(
+    [{ id: 1, visitCount: 1, rewardEarnedAt: new Date('2026-01-01'), rewardExpiresAt: new Date('2026-02-01'), rewardPercentage: 30 }, { id: 2, visitCount: 1 }],
+    { visitsRequired: 5, discountPercentage: 10 },
+    { now },
+  )
+  assert.equal(m.fields.visitCount, 2)
+  assert.equal(m.fields.rewardEarnedAt, null)
+})

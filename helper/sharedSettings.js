@@ -132,7 +132,9 @@ async function setState(ownerUserId, key, state, fromId, userId) {
   if (row) await row.update({ state, updatedByUserId: userId })
   else await db.sharedSetting.create({ ownerUserId, key, state, sourceSalonId: fromId, updatedByUserId: userId })
   const copied = state === 'branch' ? 0 : await spread(ownerUserId, key, fromId)
-  return { key, state, copiedTo: copied }
+  // A shared loyalty offer means one card per client for the whole brand.
+  const merged = key === 'loyalty' && state !== 'branch' ? await require('./loyalty').mergeBrandCards(ownerUserId) : undefined
+  return { key, state, copiedTo: copied, ...(merged ? { cardsMerged: merged } : {}) }
 }
 
 /** A new branch: every shared setting comes from the branch it was last set in. */

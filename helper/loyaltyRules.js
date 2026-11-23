@@ -85,6 +85,37 @@ function addVisit(card, program, { now = new Date() } = {}) {
   return { card: next, earned, expired }
 }
 
+/**
+ * One brand-wide card from a client's cards at several branches (Step C,
+ * when the owner shares the loyalty offer). The card with a reward to use (a
+ * held one first, then the biggest) is kept, else the one with most visits;
+ * every card's visits are added up, and a reward is earned if they reach the
+ * offer. Returns { keeperId, fields, lostRewards } (lostRewards: other unused
+ * rewards that cannot be kept on one card).
+ */
+function mergeCards(cards, program, { now = new Date(), heldIds = new Set() } = {}) {
+  if (!cards.length) return null
+  const usable = (c) => ['ready', 'reserved'].includes(rewardStatus(c, { now, held: heldIds.has(c.id) }))
+  const withReward = cards.filter(usable).sort((a, b) =>
+    (heldIds.has(b.id) ? 1 : 0) - (heldIds.has(a.id) ? 1 : 0) || Number(b.rewardPercentage) - Number(a.rewardPercentage))
+  const keeper = withReward[0] || [...cards].sort((a, b) => Number(b.visitCount) - Number(a.visitCount))[0]
+  const visitCount = cards.reduce((sum, c) => sum + (Number(c.visitCount) || 0), 0)
+  const lastVisitAt = cards.map((c) => c.lastVisitAt).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null
+  const fields = { visitCount, lastVisitAt }
+  if (withReward[0]) {
+    Object.assign(fields, { rewardEarnedAt: keeper.rewardEarnedAt, rewardExpiresAt: keeper.rewardExpiresAt, rewardPercentage: keeper.rewardPercentage })
+  } else if (program && visitCount >= Number(program.visitsRequired)) {
+    Object.assign(fields, {
+      rewardEarnedAt: now,
+      rewardPercentage: Number(program.discountPercentage),
+      rewardExpiresAt: program.rewardExpiryDays ? new Date(now.getTime() + Number(program.rewardExpiryDays) * 86400000) : null,
+    })
+  } else {
+    Object.assign(fields, { rewardEarnedAt: null, rewardExpiresAt: null, rewardPercentage: null })
+  }
+  return { keeperId: keeper.id, fields, lostRewards: withReward.slice(1).map((c) => c.id) }
+}
+
 // Card fields after a reward is used or lost: back to zero visits.
 function clearedReward() {
   return { visitCount: 0, rewardEarnedAt: null, rewardExpiresAt: null, rewardPercentage: null }
@@ -174,6 +205,7 @@ function validateSettings(input = {}) {
 }
 
 module.exports = {
+  mergeCards,
   LIMITS,
   HOLDING_STATUSES,
   round2,
