@@ -115,14 +115,15 @@ async function fetchAws(now = new Date()) {
   const m = now.getUTCMonth()
   const monthStart = new Date(Date.UTC(y, m, 1))
   const lastMonthStart = new Date(Date.UTC(y, m - 1, 1))
+  const yearAgoStart = new Date(Date.UTC(y, m - 11, 1)) // 12 months including this one
   const nextMonthStart = new Date(Date.UTC(y, m + 1, 1))
   const tomorrow = new Date(Date.UTC(y, m, now.getUTCDate() + 1))
   const thirtyAgo = new Date(Date.UTC(y, m, now.getUTCDate() - 29))
   const metric = ['UnblendedCost']
 
-  // 1. Last month and this month, by service.
+  // 1. The last 12 months (this one so far), by service.
   const byService = await ce.send(new GetCostAndUsageCommand({
-    TimePeriod: { Start: iso(lastMonthStart), End: iso(tomorrow) },
+    TimePeriod: { Start: iso(yearAgoStart), End: iso(tomorrow) },
     Granularity: 'MONTHLY',
     Metrics: metric,
     GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }],
@@ -184,6 +185,7 @@ async function fetchAws(now = new Date()) {
     forecastMonth: round2(thisMonth.total + forecastRest),
     lastMonth: lastMonth.total,
     services: thisMonth.services,
+    months: months.map((x) => ({ month: x.start.slice(0, 7), total: x.total, services: x.services })),
     envs,
     days,
   }
@@ -258,6 +260,29 @@ async function summary() {
     envs: (a.envs || []).map((x) => ({ env: x.env, usd: x.amount, gbp: gbp(x.amount) })),
     envsLabelled: (a.envs || []).some((x) => x.env !== 'shared' && x.amount > 0),
     days: days.map((d) => ({ day: d.day, usd: d.amount, gbp: gbp(d.amount), spike: avg != null && avg > 0.5 && d.amount > avg * 1.5 })),
+  }
+  // The last 12 months: each month's total and where it went; this month also
+  // has its forecast. Year figures use whole months only for the average.
+  const months = (a.months || []).map((x) => ({
+    month: x.month,
+    usd: x.total,
+    gbp: gbp(x.total),
+    current: x.month === a.month,
+    forecastGbp: x.month === a.month ? gbp(a.forecastMonth) : null,
+    services: (x.services || []).map((v) => ({ name: plainName(v.service), awsName: v.service, usd: v.amount, gbp: gbp(v.amount) })),
+  }))
+  const whole = months.filter((x) => !x.current && x.usd > 0)
+  const highest = whole.reduce((h, x) => (!h || x.gbp > h.gbp ? x : h), null)
+  const year = String(a.month).slice(0, 4)
+  out.aws.months = months
+  out.aws.year = {
+    last12Gbp: round2(months.reduce((t, x) => t + x.gbp, 0)),
+    thisYearGbp: round2(months.filter((x) => x.month.startsWith(year)).reduce((t, x) => t + x.gbp, 0)),
+    year,
+    averageMonthGbp: whole.length ? round2(whole.reduce((t, x) => t + x.gbp, 0) / whole.length) : null,
+    wholeMonths: whole.length,
+    highest: highest ? { month: highest.month, gbp: highest.gbp } : null,
+    forecastYearGbp: whole.length ? round2(months.filter((x) => x.month.startsWith(year) && !x.current).reduce((t, x) => t + x.gbp, 0) + gbp(a.forecastMonth) + (whole.length ? (whole.reduce((t, x) => t + x.gbp, 0) / whole.length) * (12 - Number(String(a.month).slice(5, 7))) : 0)) : null,
   }
   // What AWS costs per active shop (forecast for the month) and per booking (so far).
   out.unit = {
