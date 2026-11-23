@@ -24,7 +24,24 @@ router.param('employeeId', (req, res, next) => sameShop(req, res, next))
 router.param('salonDetailId', (req, res, next) => sameShop(req, res, next))
 // Owner-only team admin; access-level and pay edits are checked per member.
 router.use(['/default-access-levels/create', '/default-access-levels/update', '/active-deactive-employee', '/delete-employee'], ownerOnly)
-router.use(['/access-levels/create', '/access-levels/update', '/addWagesMethod', '/updateWagesMethod'], teamEditGuard)
+router.use(['/access-levels/create', '/access-levels/update', '/updateWagesMethod'], teamEditGuard)
+// A new team member sets their own pay method on first login (the app's
+// "Add wages method" step): themselves only, and only while they have none.
+// Anyone else goes through teamEditGuard as before.
+router.use('/addWagesMethod', async (req, res, next) => {
+  try {
+    const { resolveRequestActor } = require('../../helper/bookingRequestAccess')
+    const actor = req._actor || (req._actor = await resolveRequestActor(req))
+    const id = parseInt(req.body?.employeeId, 10)
+    if (actor.shopId && !actor.isOwner && id > 0 && id === actor.employeeId) {
+      const db = require('../../models')
+      if ((await db.employeeWagesMethod.count({ where: { employeeId: id } })) === 0) return next()
+    }
+    return teamEditGuard(req, res, next)
+  } catch (err) {
+    next(err)
+  }
+})
 // Step C: changing one person's access by hand to something other than their
 // custom role's levels takes them off the role (otherwise the next change to
 // the role would undo it). Saving the role's own levels keeps it.
@@ -49,7 +66,18 @@ router.use(['/access-levels/create', '/access-levels/update'], async (req, res, 
     next(err)
   }
 })
-router.use(['/AddEmployee', '/addEmployeeService'], needLevel('teamMember', 'high'))
+router.use('/AddEmployee', needLevel('teamMember', 'high'))
+// A new team member picks their own services on first login (the app's
+// "Add employee service" step). Allowed for themselves only, and only while
+// they have none yet; later changes go through updateEmployeeService.
+router.use('/addEmployeeService', needLevel('teamMember', 'high', {
+  skip: async (req) => {
+    const id = parseInt(req.body?.employeeId, 10)
+    if (!(id > 0) || id !== req.actor?.employeeId) return false
+    const db = require('../../models')
+    return (await db.employeeService.count({ where: { employeeId: id } })) === 0
+  },
+}))
 router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'], profileOrTeamEdit)
 // Step B: chair market, renter moves and shop work mode belong to the shop's
 // owner (a chair renter is the owner of their own shop, so they pass).

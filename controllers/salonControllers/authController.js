@@ -1453,10 +1453,13 @@ exports.employeeSession = async (req, res, next) => {
       hasWagesMethod: false,
     }
   } else {
+    // Same rule as login: a manager/receptionist who doesn't take bookings
+    // needs no services, hours or pay method.
     const isAllDataAvailable =
-      employeeDetails.employeeServices.length !== 0 &&
-      employeeDetails.times.length !== 0 &&
-      employeeDetails.employeeWagesMethod
+      employeeDetails.bookable === false ||
+      (employeeDetails.employeeServices.length !== 0 &&
+        employeeDetails.times.length !== 0 &&
+        employeeDetails.employeeWagesMethod)
 
     response.status = isAllDataAvailable ? '1' : '2'
     response.message = 'Success'
