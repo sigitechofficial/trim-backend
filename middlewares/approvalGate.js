@@ -22,7 +22,10 @@ module.exports = async function approvalGate(req, res, next) {
     if (approvalId > 0) {
       const row = await db.approvalRequest.findByPk(approvalId)
       const fullPath = `${req.baseUrl}${req.path}`
-      const valid = row && row.status === 'approving' && actor.isOwner &&
+      // The owner, or the manager who approved it (owner allows managers; same branch).
+      const byManager = !actor.isOwner && row && req.user?.staffUserId && row.decidedByUserId === req.user.staffUserId &&
+        (await approvals.managedBranchIds(req.user.staffUserId, [salonDetailId])).length > 0
+      const valid = row && row.status === 'approving' && (actor.isOwner || byManager) &&
         row.salonDetailId === salonDetailId && row.method === req.method && row.path === fullPath
       if (!valid) return reply(res, '0', 'This approval is not valid.')
       req.approvalRequestId = row.id

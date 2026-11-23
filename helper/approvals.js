@@ -240,6 +240,36 @@ async function salonInfo(salonDetailId) {
 }
 
 // Pushes. Never throw: a failed push must not undo the request.
+// ---- Managers can approve (owner's choice, off by default) ----
+async function getManagersApprove(ownerUserId) {
+  const [rows] = await db.sequelize.query('SELECT managersApprove AS m FROM users WHERE id = :id', { replacements: { id: ownerUserId } })
+  return !!(rows[0] && rows[0].m)
+}
+
+async function setManagersApprove(ownerUserId, on) {
+  await db.sequelize.query('UPDATE users SET managersApprove = :on WHERE id = :id', { replacements: { id: ownerUserId, on: on ? 1 : 0 } })
+}
+
+/** Branches (of these) where this person is an active manager. */
+async function managedBranchIds(staffUserId, salonIds) {
+  if (!staffUserId || !salonIds?.length) return []
+  const rows = await db.employee.findAll({
+    where: { userId: staffUserId, salonDetailId: salonIds, role: 'manager', status: true, deleted: false },
+    attributes: ['salonDetailId'],
+  })
+  return [...new Set(rows.map((r) => r.salonDetailId))]
+}
+
+/** Managers who may answer requests of this branch now (none unless the owner allows it). */
+async function approvingManagers(salonDetailId, ownerUserId) {
+  if (!ownerUserId || !(await getManagersApprove(ownerUserId))) return []
+  const rows = await db.employee.findAll({
+    where: { salonDetailId, role: 'manager', status: true, deleted: false },
+    attributes: ['userId'],
+  })
+  return [...new Set(rows.map((r) => r.userId).filter((id) => id && id !== ownerUserId))]
+}
+
 async function push(userIds, title, body, data) {
   try {
     const tokens = await require('./staffDevices').ownDeviceTokens(userIds)
@@ -284,6 +314,14 @@ async function createRequest({ req, rule, salonDetailId, actor, description }) {
     details: { request: row.id, change: row.summary },
     result: 'ok',
   })
+  // Managers of the branch too, when the owner lets them approve (not the requester).
+  const managers = (await approvingManagers(salonDetailId, salon?.userId)).filter((id) => id !== requesterId)
+  if (managers.length) {
+    push(managers, 'Approval needed', `${row.requesterName || 'A team member'} (${salon.salonName}): ${row.summary}`, {
+      approvalId: String(row.id),
+      salonId: String(salonDetailId),
+    })
+  }
   if (salon?.userId) {
     push([salon.userId], 'Approval needed', `${row.requesterName || 'A team member'} (${salon.salonName}): ${row.summary}`, {
       approvalId: String(row.id),
@@ -329,7 +367,7 @@ async function approve(row, { approver, accessToken }) {
     salonDetailId: row.salonDetailId,
     brandId: row.brandId,
     actorUserId: approver.id,
-    actorRole: 'owner',
+    actorRole: approver.role || 'owner',
     category: 'approvals',
     action: ok ? 'approval.approved' : 'approval.failed',
     details: { request: row.id, change: row.summary, askedBy: row.requesterName },
@@ -362,7 +400,7 @@ async function decline(row, { approver, reason }) {
     salonDetailId: row.salonDetailId,
     brandId: row.brandId,
     actorUserId: approver.id,
-    actorRole: 'owner',
+    actorRole: approver.role || 'owner',
     category: 'approvals',
     action: 'approval.declined',
     details: { request: row.id, change: row.summary, askedBy: row.requesterName, reason: reason || undefined },
@@ -416,6 +454,10 @@ async function remindAndExpire(now = new Date()) {
 }
 
 module.exports = {
+  getManagersApprove,
+  setManagersApprove,
+  managedBranchIds,
+  approvingManagers,
   RULES,
   EXPIRES_AFTER,
   ruleFor,

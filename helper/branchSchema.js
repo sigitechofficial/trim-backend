@@ -38,6 +38,8 @@ async function ensureBranchSchema(db) {
   // The owner's choice: managers also need two-step login.
   await addMissingColumns(qi, 'users', {
     twoStepForManagers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // The owner's choice: managers may answer approval requests of their branches.
+    managersApprove: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     // A client's choice: a brand's branches see each other's notes about them.
     shareAcrossBranches: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   })
