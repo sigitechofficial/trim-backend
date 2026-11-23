@@ -2009,6 +2009,54 @@ exports.deleteCoupon = async (req, res, next) => {
     Get Customer Subscription Plans
     __________________________
 */
+/** App Store / Google Play list price (GBP) of a branch plan: 2 branches £19.99, +£10 per branch. */
+const branchPlanPrice = (n) => (n >= 2 && n <= 10 ? (19.99 + (n - 2) * 10).toFixed(2) : null)
+
+/**
+ * Step A: the customerSubscription for a shop whose plan comes from its brand
+ * (planSource 'brand' with a branch product), or null for any other shop.
+ */
+async function brandPlanSubscription(salonData) {
+  const row = await salonDetail.findByPk(salonData.id, { attributes: ['brandId', 'planSource'] })
+  if (!row?.brandId || row.planSource !== 'brand') return null
+  const b = await require('../../models').brand.findByPk(row.brandId)
+  const n = branchLimitForProductId(b?.planProductId)
+  if (!b || n == null) return null
+  const statusMap = { payment_succeeded: 'active', cancelled: 'canceled', canceled: 'canceled', expired: 'expired', payment_failed: 'past_due', paused: 'paused' }
+  let status = statusMap[String(b.planStatus || '').toLowerCase()] || 'active'
+  if (b.planExpiry && new Date(b.planExpiry) < new Date() && status !== 'canceled') status = 'expired'
+  const name = `Owner + ${n - 1} branch${n - 1 === 1 ? '' : 'es'}`
+  return {
+    id: b.planProductId,
+    status,
+    name,
+    description: `${name}, unlimited staff in every branch`,
+    price: branchPlanPrice(n) || salonData.subscriptionPrice || 0,
+    PriceId: b.planProductId,
+    duration: 'month',
+    paymentMethods: /^trimbiz_branches_/.test(b.planProductId) ? 'Apple Pay' : 'RevenueCat',
+    expire: salonData.registrationExpiryDate,
+    start: salonData.registrationDate,
+    subscriptionLatestPaymentStatus: b.planStatus,
+    source: 'revenuecat',
+    subscriptionSource: 'revenuecat',
+    currency: 'gbp',
+    VAT: 0,
+    revenueCatUserId: b.rcAppUserId,
+    revenueCatStore: /^trimbiz_branches_/.test(b.planProductId) ? 'APP_STORE' : 'PLAY_STORE',
+    periodEnd: b.planExpiry,
+    teamSize: salonData.teamSize || null,
+    branchLimit: n,
+    planScope: 'brand',
+    metaData: { freeTrialDays: '', members: 1, membersCount: 1, paymentMethodId: 'revenuecat', sloanId: String(salonData.id), subscriptionName: name },
+  }
+}
+
+const branchLimitForProductId = (id) => {
+  const m = String(id || '').match(/branches[-_](\d+)/)
+  return m ? Number(m[1]) : null
+}
+
 exports.customerSubscription = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -2036,6 +2084,14 @@ exports.customerSubscription = async (req, res, next) => {
 
     if (!salonData) {
       return res.json(returnFunction('2', 'Shop not found', {}, ''));
+    }
+
+    // Step A: a branch on the brand's branch plan shows that plan, not the
+    // shop's last staff-plan record.
+    const branchPlan = await brandPlanSubscription(salonData)
+    if (branchPlan) {
+      const code = branchPlan.status === 'canceled' && new Date(branchPlan.periodEnd) < new Date() ? '2' : '1'
+      return res.json(returnFunction(code, code === '1' ? 'All subscription plan' : 'Subscription expired', { customerSubscription: branchPlan }, ''))
     }
 
     // ============================================
