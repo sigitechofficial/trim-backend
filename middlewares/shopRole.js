@@ -118,6 +118,21 @@ async function profileOrTeamEdit(req, res, next) {
   }
 }
 
+// Deleting a break: it must be in the caller's branch, and it is checked like
+// editing that person's hours (their own needs updateProfile 'high').
+async function breakDeleteGuard(req, res, next) {
+  try {
+    const actor = await resolveRequestActor(req)
+    const br = await require('../models').breakTime.findByPk(parseInt(req.params.id, 10), { attributes: ['id', 'employeeId', 'salonDetailId'] })
+    if (!br) return next() // the handler says it was not found
+    if (actor.shopId && br.salonDetailId !== actor.shopId) return deny(res, "You don't have access to do this.")
+    req.body = { ...(req.body || {}), employeeId: br.employeeId }
+    return profileOrTeamEdit(req, res, next)
+  } catch (err) {
+    return next(err)
+  }
+}
+
 const ids = (v) => (Array.isArray(v) ? v : [v]).map((x) => parseInt(x, 10)).filter((x) => x > 0)
 
 // Ids the app sends (booking, job, team member, shop) must belong to the
@@ -158,4 +173,4 @@ async function sameShop(req, res, next) {
   }
 }
 
-module.exports = { sameShop, ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, staffLevel }
+module.exports = { sameShop, ownerOnly, teamEditGuard, needLevel, profileOrTeamEdit, staffLevel, breakDeleteGuard }

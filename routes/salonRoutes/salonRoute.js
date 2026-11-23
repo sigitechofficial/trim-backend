@@ -109,6 +109,10 @@ router.use(
 router.use('/clients/export', needLevel('exportClients', 'high'))
 // Step C: settings shared across branches (locked ones are the owner's only).
 router.use(require('../../middlewares/sharedSettingsGate'))
+// Breaks: the permission check runs before the approval gate, so only someone
+// allowed to change these breaks can ask for it (the handlers come later).
+router.post('/breaks', require('../../middlewares/shopRole').profileOrTeamEdit)
+router.delete('/breaks/:id', require('../../middlewares/shopRole').breakDeleteGuard)
 router.use(require('../../middlewares/approvalGate'))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
@@ -225,7 +229,7 @@ router.get(
   '/breaks/:employeeId',
   catchAsync(salonController.getEmployeeBreaks),
 )
-router.delete('/breaks/:id', catchAsync(salonController.deleteBreak))
+router.delete('/breaks/:id', require('../../middlewares/shopRole').breakDeleteGuard, catchAsync(salonController.deleteBreak))
 // Update Address
 router.patch(
   '/updateSalonAddress',

@@ -64,6 +64,15 @@ const RULES = {
     default: false,
     routes: [['POST', '/salon/v1/employee', '/AddEmployee']],
   },
+  breaks: {
+    label: 'Breaks',
+    hint: "A team member changing or removing someone's breaks",
+    default: false,
+    routes: [
+      ['POST', '/salon/v1', '/breaks'],
+      ['DELETE', '/salon/v1', '/breaks/:id'],
+    ],
+  },
   exportClients: {
     label: 'Exporting the client list',
     hint: 'A team member downloading all clients with their details',
@@ -158,6 +167,29 @@ async function describe(rule, req, salonDetailId) {
     const e = b.employeeId ? await db.employee.findByPk(b.employeeId, { include: { model: db.user, attributes: ['firstName', 'lastName'] } }) : null
     const name = e?.user ? `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim() : 'a team member'
     return { summary: `Change ${name}'s access`, before: null }
+  }
+  if (rule === 'breaks') {
+    const hhmm = (t) => String(t || '').slice(0, 5)
+    const nameOf = async (employeeId) => {
+      const e = employeeId ? await db.employee.findByPk(employeeId, { include: { model: db.user, attributes: ['firstName', 'lastName'] } }) : null
+      return e?.user ? `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim() : 'a team member'
+    }
+    if (req.method === 'DELETE') {
+      const id = Number(String(req.path).split('/').pop())
+      const br = await db.breakTime.findOne({ where: { id, salonDetailId } })
+      if (!br) return null // not this branch's break: the handler answers as usual
+      return { summary: `Remove ${await nameOf(br.employeeId)}'s break on ${br.day} ${hhmm(br.breakStart)}–${hhmm(br.breakEnd)}`, before: null }
+    }
+    // The app sends every day on each save: only a real change needs approval.
+    const current = await db.breakTime.findAll({ where: { employeeId: b.employeeId, day: b.day }, attributes: ['breakStart', 'breakEnd'] })
+    const key = (list) => list.map((x) => `${hhmm(x.breakStart)}-${hhmm(x.breakEnd)}`).sort().join(',')
+    const next = Array.isArray(b.breaks) ? b.breaks : []
+    if (key(current) === key(next)) return null
+    const times = next.map((x) => `${hhmm(x.breakStart)}–${hhmm(x.breakEnd)}`).join(', ') || 'no breaks'
+    return {
+      summary: `Change ${await nameOf(b.employeeId)}'s breaks on ${b.day}: ${times}`,
+      before: { day: b.day, breaks: current.map((x) => ({ breakStart: hhmm(x.breakStart), breakEnd: hhmm(x.breakEnd) })) },
+    }
   }
   if (rule === 'exportClients') {
     const s = await db.salonDetail.findByPk(salonDetailId, { attributes: ['salonName'] })
