@@ -15,6 +15,8 @@ const AppError = require('../utils/appError')
 const DUE_DAYS = 30
 const OPEN_BOOKING = ['pending', 'book', 'requested']
 const today = () => new Date().toISOString().slice(0, 10)
+// MariaDB hands JSON columns back as text.
+const parseJson = (v) => { if (typeof v !== 'string') return v ?? null; try { return JSON.parse(v) } catch { return null } }
 const fullName = (u) => `${u?.firstName || ''} ${u?.lastName || ''}`.trim()
 
 async function getSharing(customerId) {
@@ -174,7 +176,7 @@ async function ownerRequests(ownerUserId) {
   return rows
     .map((r) => ({
       id: r.id, customerName: r.customerName, shopName: name.get(r.salonDetailId), status: r.status,
-      askedAt: r.createdAt, dueAt: r.dueAt, doneAt: r.doneAt, doneByName: r.doneByName, result: r.result,
+      askedAt: r.createdAt, dueAt: r.dueAt, doneAt: r.doneAt, doneByName: r.doneByName, result: parseJson(r.result),
       overdue: r.status === 'pending' && new Date(r.dueAt) < new Date(),
     }))
     .sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1))
