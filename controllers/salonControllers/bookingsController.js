@@ -76,6 +76,15 @@ const mobileBarber = require('../../helper/mobileBarber')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
 const visitReports = require('../../helper/visitReports')
 const { actingSalonId } = require('../../helper/branchScope')
+const { periodRefusal, periodRefusalFor } = require('../../helper/accessPeriods')
+
+// Step C: drop team members whose branch access (for a period) doesn't cover `on`.
+async function inPeriodOnly(rows, on) {
+  if (!rows?.length) return rows
+  const found = await employee.findAll({ where: { id: rows.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+  const out = new Set(found.filter((r) => periodRefusal(r, String(on).slice(0, 10))).map((r) => r.id))
+  return out.size ? rows.filter((e) => !out.has(e.id)) : rows
+}
 const {
   resolveRequestActor,
   ownRequestBookingIds,
@@ -1381,6 +1390,8 @@ exports.proposeBookingTime = async (req, res, next) => {
   if (employeeId && !(await activeStaffOf(request.salonDetailId, employeeId))) {
     throw new AppError('This staff member is not available.', 200)
   }
+  const outsideProposal = employeeId ? await periodRefusalFor(employeeId, on) : null
+  if (outsideProposal) throw new AppError(outsideProposal, 200)
 
   // Chain the services back to back from the new start time.
   const bookingJobs = await jobs.findAll({
@@ -2073,6 +2084,10 @@ exports.employeesWithAllServices = async (req, res, next) => {
   */
 exports.employeeAvailability = async (req, res, next) => {
   const { jobDate, duration, employeeId } = req.body
+  // Step C: no slots on days outside this team member's access to the branch.
+  if (await periodRefusalFor(employeeId, jobDate)) {
+    return res.json(returnFunction('1', 'Available Time Slots', { salonOpen: true, availableTimeSlots: [] }, ''))
+  }
 
   const salon = await salonDetail.findOne({
     where: { id: await actingSalonId(req) },
@@ -2223,6 +2238,10 @@ exports.addExtraService = async (req, res, next) => {
         'You cannot add service because the booking is marked as no-show'
     }
     throw new appError(message, 200)
+  }
+  for (const ele of extraServices) {
+    const outside = Number(ele.employeeId) > 0 ? await periodRefusalFor(ele.employeeId, ele.jobDate) : null
+    if (outside) throw new appError(outside, 200)
   }
   const bookingData = JSON.parse(JSON.stringify(result))
   const newServiceIds = await Promise.all(
@@ -2806,7 +2825,11 @@ exports.addWalkinBooking = async (req, res, next) => {
         },
       ],
     })
+    employeeData = await inPeriodOnly(employeeData, jobDate)
     employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
+  } else {
+    const outside = await periodRefusalFor(employeeId, jobDate)
+    if (outside) throw new appError(outside, 200)
   }
 
   const assiginEmployee =
@@ -3890,6 +3913,8 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
     startTime: appointment.startTime,
     endTime: appointment.endTime,
   })
+  const outsideMove = employeeId ? await periodRefusalFor(employeeId, appointment.on) : null
+  if (outsideMove) return res.json(returnFunction('2', outsideMove, {}, ''))
 
   // services offered by single employees
   if (employeeId) {
@@ -4052,9 +4077,12 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     startTime: appointment.startTime,
     endTime: appointment.endTime,
   })
+  if (!visitMove) employeeData = await inPeriodOnly(employeeData, appointment.on)
   JobsInput = visitMove
     ? assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
     : Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  const outsideMulti = await periodRefusalFor(JobsInput.filter((j) => j.status === 'assign').map((j) => j.employeeId), appointment.on)
+  if (outsideMulti) return res.json(returnFunction('2', outsideMulti, {}, ''))
   appointment.status = 'book'
   const findUnAssign = JobsInput.find((el) => el.status === 'pending')
   if (findUnAssign) {
@@ -4548,6 +4576,8 @@ exports.editService = async (req, res, next) => {
     where: { id: jobId },
     include: { model: booking },
   })
+  const outsideEdit = employeeId && jobData ? await periodRefusalFor(employeeId, jobData.on) : null
+  if (outsideEdit) throw new appError(outsideEdit, 200)
   //!TODO skipped booking End Time .. because its Not required on frontend on any app (IMP .. check if it required in reports)
 
   // A booking that used the loyalty reward keeps it on the edited line

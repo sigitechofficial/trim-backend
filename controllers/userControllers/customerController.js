@@ -59,6 +59,7 @@ const renterMove = require('../../helper/renterMove')
 const chairMarket = require('../../helper/chairMarket')
 const mobileBarber = require('../../helper/mobileBarber')
 const { barberClash } = require('../../helper/bookingClash')
+const { periodRefusalFor } = require('../../helper/accessPeriods')
 const mobileVisitStatus = require('../../helper/mobileVisitStatus')
 const visitReports = require('../../helper/visitReports')
 const ThrowNotification = require('../../utils/throwNotification')
@@ -2267,6 +2268,11 @@ exports.employeeAvailability = async (req, res, next) => {
 
   const bookingEmployeeId = bookingEmployee.id
 
+  // Step C: a team member with branch access for a period has no slots outside it.
+  if (await periodRefusalFor(bookingEmployeeId, jobDate)) {
+    return res.status(200).json(response({ data: { availableTimeSlots: [] } }))
+  }
+
   if (openingTime == '00:00' || openingTime == '00:00:00')
     openingTime = '00:00:01'
   if (closingTime == '00:00' || closingTime == '00:00:00')
@@ -2335,14 +2341,15 @@ exports.salonAvailability = async (req, res, next) => {
   const dayName = DateManupulation.dayOnDate(new Date(jobDate))
 
   // Load all active non-external employees working that day
-  const employees = await employee.findAll({
+  const allEmployees = await employee.findAll({
     where: {
       salonDetailId: salon.id,
       deleted: false,
+      status: true, // a blocked row, or one whose branch access ended, can't be booked
       isExternalEmployee: false,
       bookable: true,
     },
-    attributes: ['id'],
+    attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'],
     include: [
       {
         model: time,
@@ -2352,6 +2359,9 @@ exports.salonAvailability = async (req, res, next) => {
       },
     ],
   })
+  // Step C: and only those whose branch access (if for a period) covers that day.
+  const { periodRefusal } = require('../../helper/accessPeriods')
+  const employees = allEmployees.filter((e) => !periodRefusal(e, String(jobDate).slice(0, 10)))
 
   // Fallback: no employees working that day → salon-level open/close, no breaks
   if (employees.length === 0) {
@@ -2452,6 +2462,9 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
     endTime: appointment.endTime,
   })
   if (visitMove) employeeId = req.body.employeeId = visitMove.employeeId
+  // Step C: not on a day outside this team member's access to the branch.
+  const outsidePeriod = employeeId ? await periodRefusalFor(employeeId, appointment.on) : null
+  if (outsidePeriod) return res.status(200).json(response({ status: '2', message: outsidePeriod }))
 
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = DateManupulation.dayOnDate(appointmentDate)
@@ -2633,6 +2646,13 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
   console.log('ðŸš€ ~ assignTimeSlots:', assignTimeSlots)
 
+  // Step C: "anyone" never picks a team member outside their branch access period.
+  if (employeeData?.length) {
+    const { periodRefusal } = require('../../helper/accessPeriods')
+    const rows = await employee.findAll({ where: { id: employeeData.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+    const out = new Set(rows.filter((r) => periodRefusal(r, String(appointment.on).slice(0, 10))).map((r) => r.id))
+    if (out.size) employeeData = employeeData.filter((e) => !out.has(e.id))
+  }
   JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   // Home visit: every service stays with the one barber who travels.
   const visitMove = await mobileBarber.checkVisitMove({
@@ -2645,6 +2665,9 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   if (visitMove) {
     JobsInput = assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
   }
+  // Step C: not with a team member outside their branch access period that day.
+  const outsidePeriod = await periodRefusalFor(JobsInput.filter((j) => j.status === 'assign').map((j) => j.employeeId), appointment.on)
+  if (outsidePeriod) return res.status(200).json(response({ status: '2', message: outsidePeriod }))
   appointment.status = 'book'
   const findUnAssign =
     JobsInput.length > 0
@@ -3301,6 +3324,15 @@ exports.bookAppointment = async (req, res, next) => {
   // A chosen barber who is already booked at this time (in any of their
   // shops) can't be booked twice: no booking, and any held deposit is released.
   if (req.body.employeeId) {
+    // Step C: not on a day outside this team member's access to the branch.
+    const outside = await periodRefusalFor(req.body.employeeId, appointment.on)
+    if (outside) {
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError(outside, 200)
+    }
     const clash = await barberClash({
       employeeId: req.body.employeeId,
       on: appointment.on,
@@ -3365,6 +3397,13 @@ exports.bookAppointment = async (req, res, next) => {
   console.log('Ã°Å¸Å¡â‚¬ ~ assignTimeSlots:', assignTimeSlots)
 
   if (!req.body.employeeId) {
+    // Step C: "anyone" never picks a team member outside their branch access period.
+    if (employeeData?.length) {
+      const { periodRefusal } = require('../../helper/accessPeriods')
+      const rows = await employee.findAll({ where: { id: employeeData.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+      const out = new Set(rows.filter((r) => periodRefusal(r, String(appointment.on).slice(0, 10))).map((r) => r.id))
+      if (out.size) employeeData = employeeData.filter((e) => !out.has(e.id))
+    }
     JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   } else {
     JobsInput = assignTimeSlots.map((service) => ({

@@ -43,7 +43,10 @@ async function addToBranch(ownerUserId, sourceEmployeeId, targetSalonId, { role,
       // Step C: a period on a branch they already have only extends or sets
       // a period that was there; it never cuts permanent access short.
       if (period && existing.accessState && existing.accessState !== 'ended') {
+        const shorter = existing.accessUntil && period.until < new Date(existing.accessUntil)
         await existing.update({ accessUntil: period.until }, { transaction: t })
+        // A shorter period can leave bookings after the new last day: tell the owner.
+        if (shorter) setImmediate(() => require('./accessPeriods').warnOwnerOfLateBookings(existing, 'shortened'))
       } else if (period && existing.accessState === 'ended') {
         await existing.update({ ...period.fields, status: period.fields.status }, { transaction: t })
       }
