@@ -14,6 +14,9 @@ module.exports = (sequelize, DataTypes) => {
       planStatus: { type: DataTypes.STRING(32), allowNull: true },
       planExpiry: { type: DataTypes.DATE, allowNull: true },
       branchLimit: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+      // What the store charged at the last purchase or renewal (shown on Subscription).
+      planPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+      planCurrency: { type: DataTypes.STRING(8), allowNull: true },
       status: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     },
     {},

@@ -111,6 +111,11 @@ async function handleBrandEvent(event = {}) {
       if (row.pendingProductId && row.pendingProductId === product) patch.pendingProductId = null
       patch.planStatus = 'payment_succeeded'
       if (expiryOf(event)) patch.planExpiry = expiryOf(event)
+      const paid = Number(event.price_in_purchased_currency)
+      if (paid > 0 && event.currency) {
+        patch.planPrice = paid
+        patch.planCurrency = String(event.currency).toLowerCase()
+      }
     } else if (type === 'PRODUCT_CHANGE') {
       const next = event.new_product_id
       const nextLimit = branchLimitForProduct(next)
@@ -119,6 +124,8 @@ async function handleBrandEvent(event = {}) {
         patch.planProductId = next
         patch.branchLimit = nextLimit
         patch.pendingProductId = null
+        patch.planPrice = null // known again at the next renewal; list price meanwhile
+        patch.planCurrency = null
       } else if (nextLimit) {
         // Downgrade: from the next renewal.
         patch.pendingProductId = next

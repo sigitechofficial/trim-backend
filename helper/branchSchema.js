@@ -23,6 +23,10 @@ async function ensureBranchSchema(db) {
   const qi = db.sequelize.getQueryInterface()
   const { DataTypes } = db.Sequelize
   await db.brand.sync()
+  await addMissingColumns(qi, 'brands', {
+    planPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+    planCurrency: { type: DataTypes.STRING(8), allowNull: true },
+  })
   await db.activityLog.sync() // Step C
   await db.approvalRequest.sync()
   await db.approvalRule.sync()

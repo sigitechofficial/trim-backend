@@ -342,7 +342,7 @@ let returnFunction = (status, message, data, error) => {
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
     where: { id: await actingSalonId(req) },
-    attributes: ['id', 'parentSalonId', 'isExternalEmployee', 'renterGraceUntil', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate', 'subscriptionLatestPaymentStatus'],
+    attributes: ['id', 'parentSalonId', 'isExternalEmployee', 'renterGraceUntil', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate', 'subscriptionLatestPaymentStatus', 'planSource', 'pausedReason', 'closedAt'],
   })
   // Expire overdue requests first so the calendar and the requests count are current.
   if (salon?.id) await expireOverdueRequestsSafely({ salonDetailId: salon.id })
@@ -593,6 +593,11 @@ exports.calendarAppointments = async (req, res, next) => {
   }
 
   if (salon?.isExternalEmployee) {
+    subscriptionExpire = !isSalonRowActive(salon, DateTime.now().toISODate())
+  }
+  // Step A: a branch on the brand's plan follows that plan (copied onto the
+  // branch row), not the shop's last staff-plan record.
+  if (salon?.planSource === 'brand') {
     subscriptionExpire = !isSalonRowActive(salon, DateTime.now().toISODate())
   }
 

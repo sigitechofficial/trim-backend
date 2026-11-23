@@ -2031,7 +2031,7 @@ async function brandPlanSubscription(salonData) {
     status,
     name,
     description: `${name}, unlimited staff in every branch`,
-    price: branchPlanPrice(n) || salonData.subscriptionPrice || 0,
+    price: b.planPrice != null ? Number(b.planPrice).toFixed(2) : branchPlanPrice(n) || salonData.subscriptionPrice || 0,
     PriceId: b.planProductId,
     duration: 'month',
     paymentMethods: /^trimbiz_branches_/.test(b.planProductId) ? 'Apple Pay' : 'RevenueCat',
@@ -2040,15 +2040,15 @@ async function brandPlanSubscription(salonData) {
     subscriptionLatestPaymentStatus: b.planStatus,
     source: 'revenuecat',
     subscriptionSource: 'revenuecat',
-    currency: 'gbp',
-    VAT: 0,
+    currency: b.planPrice != null && b.planCurrency ? b.planCurrency : 'gbp',
+    VAT: '0', // the app reads these as text
     revenueCatUserId: b.rcAppUserId,
     revenueCatStore: /^trimbiz_branches_/.test(b.planProductId) ? 'APP_STORE' : 'PLAY_STORE',
     periodEnd: b.planExpiry,
     teamSize: salonData.teamSize || null,
     branchLimit: n,
     planScope: 'brand',
-    metaData: { freeTrialDays: '', members: 1, membersCount: 1, paymentMethodId: 'revenuecat', sloanId: String(salonData.id), subscriptionName: name },
+    metaData: { freeTrialDays: '', members: '1', membersCount: '1', paymentMethodId: 'revenuecat', sloanId: String(salonData.id), subscriptionName: name },
   }
 }
 
