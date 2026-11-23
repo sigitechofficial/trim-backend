@@ -27,6 +27,64 @@ function branchLimitForProduct(productId) {
   return null
 }
 
+// A brand that went back to one shop keeps its store subscription on the
+// brand id and can switch it to a staff plan (same subscription group), so the
+// brand also understands the staff products: headcount = owner + staff.
+const STAFF_PLANS = {
+  trimbiz_monthly_owner: [1, 'Owner Only'],
+  trimbiz_owner_one_staff: [2, 'Owner + 1 staff member'],
+  trimbiz_owner_two_staff: [3, 'Owner + 2 staff members'],
+  trimbiz_owner_three_staff: [4, 'Owner + 3 staff members'],
+  trimbiz_owner_four_staff: [5, 'Owner + 4 staff members'],
+  trimbiz_owner_five_staff: [6, 'Owner + 5 staff members'],
+  trimbiz_owner_unlimited_staff: [UNLIMITED_TEAM, 'Owner + Unlimited staff'],
+  'trimbiz_monthly:trimbiz-monthly-owner': [1, 'Owner Only'],
+  'trimbiz_monthly:trimbiz-owner-one-staff': [2, 'Owner + 1 staff member'],
+  'trimbiz_monthly:trimbiz-owner-two-staff': [3, 'Owner + 2 staff members'],
+  'trimbiz_monthly:trimbiz-owner-three-staff': [4, 'Owner + 3 staff members'],
+  'trimbiz_monthly:trimbiz-owner-four-staff': [5, 'Owner + 4 staff members'],
+  'trimbiz_monthly:trimbiz-owner-five-staff': [6, 'Owner + 5 staff members'],
+  'trimbiz_monthly:trimbiz-owner-unlimited-staff': [UNLIMITED_TEAM, 'Owner + Unlimited staff'],
+}
+
+/** Owner + staff a staff product allows (999 = unlimited); null for other products. */
+const staffHeadcountForProduct = (productId) => STAFF_PLANS[String(productId || '')]?.[0] ?? null
+
+/** Team size a brand plan gives each branch: unlimited on branch plans. */
+const teamSizeForProduct = (productId) => staffHeadcountForProduct(productId) ?? UNLIMITED_TEAM
+
+/** Branches a brand product covers: its branch count, 1 for a staff plan, else null. */
+const coveredBranches = (productId) => branchLimitForProduct(productId) ?? (staffHeadcountForProduct(productId) != null ? 1 : null)
+
+/** Plan order for upgrade vs downgrade: any branch plan is above any staff plan. */
+function planRank(productId) {
+  const b = branchLimitForProduct(productId)
+  if (b) return 1000 + b
+  return staffHeadcountForProduct(productId) ?? 0
+}
+
+/** The plan's name as the apps show it ("Owner + 1 branch", "Owner + 2 staff members"). */
+function planNameForProduct(productId) {
+  const b = branchLimitForProduct(productId)
+  if (b) return `Owner + ${b - 1} branch${b - 1 === 1 ? '' : 'es'}`
+  return STAFF_PLANS[String(productId || '')]?.[1] ?? null
+}
+
+/**
+ * A store event for a shop (app user id = shop id) whose branch the brand's
+ * plan now covers, e.g. the shop's old staff plan ending after the brand
+ * bought a branch plan. The brand is the truth, so the shop handlers must not
+ * write over the branch row.
+ */
+async function isBrandCoveredShopEvent(event = {}) {
+  const id = [event.app_user_id, event.original_app_user_id].find((x) => /^\d+$/.test(String(x || '')))
+  if (!id) return false
+  const shop = await salonDetail.findByPk(Number(id), { attributes: ['id', 'planSource', 'brandId'] })
+  if (!shop || shop.planSource !== 'brand' || !shop.brandId) return false
+  const b = await brand.findByPk(shop.brandId, { attributes: ['id', 'planProductId'] })
+  return !!b?.planProductId
+}
+
 async function mirrorBrandPlan(brandId, transaction) {
   const b = await brand.findByPk(brandId, { transaction })
   if (!b) return 0
@@ -35,7 +93,8 @@ async function mirrorBrandPlan(brandId, transaction) {
       registrationExpiryDate: b.planExpiry ? new Date(b.planExpiry).toISOString().slice(0, 10) : null,
       subscriptionLatestPaymentStatus: b.planStatus || null,
       subscriptionPlan: b.planProductId || null,
-      teamSize: UNLIMITED_TEAM,
+      // Branch plans: staff unlimited. A staff plan on the brand: its headcount.
+      teamSize: teamSizeForProduct(b.planProductId),
       // As when a shop buys its own plan (webhook): a paid plan makes the
       // branch listable in Home and search.
       ...(b.planProductId ? { approvedByAdmin: true } : {}),
@@ -101,7 +160,7 @@ async function handleBrandEvent(event = {}) {
     const row = await brand.findByPk(b.id, { lock: transaction.LOCK.UPDATE, transaction })
     const patch = {}
     const product = event.product_id
-    const limit = branchLimitForProduct(product)
+    const limit = coveredBranches(product)
 
     if (['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'SUBSCRIPTION_EXTENDED'].includes(type)) {
       // A renewal applies a downgrade asked for earlier (the store renews on
@@ -118,16 +177,16 @@ async function handleBrandEvent(event = {}) {
       }
     } else if (type === 'PRODUCT_CHANGE') {
       const next = event.new_product_id
-      const nextLimit = branchLimitForProduct(next)
-      if (nextLimit && nextLimit > (row.branchLimit || 1)) {
-        // Upgrade: more branches now.
+      const nextLimit = coveredBranches(next)
+      if (nextLimit && planRank(next) > planRank(row.planProductId)) {
+        // Upgrade (more branches, or a staff plan → a branch plan): now.
         patch.planProductId = next
         patch.branchLimit = nextLimit
         patch.pendingProductId = null
         patch.planPrice = null // known again at the next renewal; list price meanwhile
         patch.planCurrency = null
       } else if (nextLimit) {
-        // Downgrade: from the next renewal.
+        // Downgrade (fewer branches, or back to a staff plan): from the next renewal.
         patch.pendingProductId = next
       }
     } else if (type === 'CANCELLATION') {
@@ -182,7 +241,7 @@ async function checkBrandPlans(now = new Date()) {
         registrationExpiryDate: row.planExpiry ? new Date(row.planExpiry).toISOString().slice(0, 10) : null,
         subscriptionLatestPaymentStatus: row.planStatus || null,
         subscriptionPlan: row.planProductId || null,
-        teamSize: UNLIMITED_TEAM,
+        teamSize: teamSizeForProduct(row.planProductId),
       }
       const branches = await salonDetail.findAll({
         where: { brandId: row.id, planSource: 'brand' },
@@ -193,7 +252,7 @@ async function checkBrandPlans(now = new Date()) {
         String(x.registrationExpiryDate || '') !== String(want.registrationExpiryDate || '') ||
         (x.subscriptionLatestPaymentStatus || null) !== want.subscriptionLatestPaymentStatus ||
         (x.subscriptionPlan || null) !== want.subscriptionPlan ||
-        Number(x.teamSize) !== UNLIMITED_TEAM ||
+        Number(x.teamSize) !== want.teamSize ||
         !x.approvedByAdmin)
       if (drift.length || expired) {
         await mirrorBrandPlan(row.id, transaction)
@@ -208,4 +267,4 @@ async function checkBrandPlans(now = new Date()) {
   return summary
 }
 
-module.exports = { mirrorBrandPlan, enforceBranchLimit, handleBrandEvent, checkBrandPlans, branchLimitForProduct, brandFromEvent, UNLIMITED_TEAM, PLAN_LIMIT }
+module.exports = { isBrandCoveredShopEvent, staffHeadcountForProduct, teamSizeForProduct, planNameForProduct, coveredBranches, planRank, mirrorBrandPlan, enforceBranchLimit, handleBrandEvent, checkBrandPlans, branchLimitForProduct, brandFromEvent, UNLIMITED_TEAM, PLAN_LIMIT }

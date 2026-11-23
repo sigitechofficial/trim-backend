@@ -877,6 +877,11 @@ exports.revenueCatWebhookHandler = async (req, res) => {
         // Step A: a brand's branch plan (app user id brand_<id>) is kept on
         // the brand and copied to its branches; the shop handlers don't run.
         if (await require('../../helper/brandPlan').handleBrandEvent(event)) return;
+        // A branch the brand's plan covers ignores its old shop subscription.
+        if (await require('../../helper/brandPlan').isBrandCoveredShopEvent(event)) {
+          console.log(`[brandPlan] ${event.type} for shop ${event.app_user_id} skipped: the brand plan covers it`)
+          return;
+        }
 
         // Handle different event types
         switch (event.type) {

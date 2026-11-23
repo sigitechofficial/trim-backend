@@ -2020,21 +2020,22 @@ async function brandPlanSubscription(salonData) {
   const row = await salonDetail.findByPk(salonData.id, { attributes: ['brandId', 'planSource'] })
   if (!row?.brandId || row.planSource !== 'brand') return null
   const b = await require('../../models').brand.findByPk(row.brandId)
-  const n = branchLimitForProductId(b?.planProductId)
-  if (!b || n == null) return null
+  const plan = require('../../helper/brandPlan')
+  const name = plan.planNameForProduct(b?.planProductId)
+  if (!b || !name) return null
+  const n = branchLimitForProductId(b.planProductId) // null: a staff plan kept on the brand
   const statusMap = { payment_succeeded: 'active', cancelled: 'canceled', canceled: 'canceled', expired: 'expired', payment_failed: 'past_due', paused: 'paused' }
   let status = statusMap[String(b.planStatus || '').toLowerCase()] || 'active'
   if (b.planExpiry && new Date(b.planExpiry) < new Date() && status !== 'canceled') status = 'expired'
-  const name = `Owner + ${n - 1} branch${n - 1 === 1 ? '' : 'es'}`
   return {
     id: b.planProductId,
     status,
     name,
-    description: `${name}, unlimited staff in every branch`,
-    price: b.planPrice != null ? Number(b.planPrice).toFixed(2) : branchPlanPrice(n) || salonData.subscriptionPrice || 0,
+    description: n ? `${name}, unlimited staff in every branch` : name,
+    price: b.planPrice != null ? Number(b.planPrice).toFixed(2) : (n && branchPlanPrice(n)) || salonData.subscriptionPrice || 0,
     PriceId: b.planProductId,
     duration: 'month',
-    paymentMethods: /^trimbiz_branches_/.test(b.planProductId) ? 'Apple Pay' : 'RevenueCat',
+    paymentMethods: String(b.planProductId).includes(':') ? 'RevenueCat' : 'Apple Pay', // Google ids are subscription:baseplan
     expire: salonData.registrationExpiryDate,
     start: salonData.registrationDate,
     subscriptionLatestPaymentStatus: b.planStatus,
@@ -2043,10 +2044,10 @@ async function brandPlanSubscription(salonData) {
     currency: b.planPrice != null && b.planCurrency ? b.planCurrency : 'gbp',
     VAT: '0', // the app reads these as text
     revenueCatUserId: b.rcAppUserId,
-    revenueCatStore: /^trimbiz_branches_/.test(b.planProductId) ? 'APP_STORE' : 'PLAY_STORE',
+    revenueCatStore: String(b.planProductId).includes(':') ? 'PLAY_STORE' : 'APP_STORE',
     periodEnd: b.planExpiry,
-    teamSize: salonData.teamSize || null,
-    branchLimit: n,
+    teamSize: plan.teamSizeForProduct(b.planProductId),
+    branchLimit: n || 1,
     planScope: 'brand',
     metaData: { freeTrialDays: '', members: '1', membersCount: '1', paymentMethodId: 'revenuecat', sloanId: String(salonData.id), subscriptionName: name },
   }
