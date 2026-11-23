@@ -251,9 +251,6 @@ const fullAdminOnly = require('../../middlewares/fullAdminOnly')
 router.get('/running-costs', protect, fullAdminOnly, catchAsync(runningCosts.summary))
 router.post('/running-costs/refresh', protect, fullAdminOnly, catchAsync(runningCosts.refresh))
 router.put('/running-costs/settings', protect, fullAdminOnly, catchAsync(runningCosts.saveSettings))
-router.post('/running-costs/items', protect, fullAdminOnly, catchAsync(runningCosts.addItem))
-router.put('/running-costs/items/:id', protect, fullAdminOnly, catchAsync(runningCosts.updateItem))
-router.delete('/running-costs/items/:id', protect, fullAdminOnly, catchAsync(runningCosts.deleteItem))
 router.put('/visit-reports/:id', protect, catchAsync(mobileBarberController.adminDecide))
 router.get(
   '/salon-loyalty/:id',

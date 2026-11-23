@@ -5,7 +5,6 @@
 //   $0.01 per request and AWS updates its numbers up to 3 times a day, so the
 //   answer is kept in runningCostCache and fetched twice a day
 //   (jobs/runningCostCron.js) or when an admin presses Refresh (at most hourly).
-// - Other running costs the admin types in once (hosting, Firebase, stores...).
 // - A monthly budget: emails at 80% and 100% of it (once each per month).
 // - Cost per active shop and per booking, from Trim's own numbers.
 // AWS bills in USD; amounts are shown in GBP at the day's rate (USD too).
@@ -49,10 +48,6 @@ async function ensureRunningCostSchema() {
   await q(`CREATE TABLE IF NOT EXISTS runningCostSettings (
     id INT NOT NULL PRIMARY KEY, monthlyBudget DECIMAL(10,2) NULL, alertEmails VARCHAR(500) NULL,
     alertedMonth CHAR(7) NULL, alertedLevel INT NULL, updatedAt DATETIME NULL)`)
-  await q(`CREATE TABLE IF NOT EXISTS runningCostItems (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, category VARCHAR(40) NULL,
-    amountMonthly DECIMAL(10,2) NOT NULL, currency CHAR(3) NOT NULL DEFAULT 'GBP', notes VARCHAR(255) NULL,
-    active TINYINT(1) NOT NULL DEFAULT 1, createdAt DATETIME NULL, updatedAt DATETIME NULL)`)
   console.log('[runningCostSchema] ensured')
 }
 
@@ -222,52 +217,6 @@ async function saveSettings({ monthlyBudget, alertEmails }) {
   return settings()
 }
 
-async function items() {
-  const [rows] = await db.sequelize.query('SELECT id, name, category, amountMonthly, currency, notes, active FROM runningCostItems ORDER BY active DESC, name ASC')
-  return rows.map((r) => ({ ...r, amountMonthly: Number(r.amountMonthly), active: !!r.active }))
-}
-
-function cleanItem(b = {}) {
-  const AppError = require('../utils/appError')
-  const name = String(b.name || '').trim().slice(0, 120)
-  const amount = Number(b.amountMonthly)
-  const currency = ['GBP', 'USD', 'EUR'].includes(String(b.currency || 'GBP').toUpperCase()) ? String(b.currency || 'GBP').toUpperCase() : null
-  if (!name) throw new AppError('Give the cost a name, e.g. Firebase.', 200)
-  if (!(amount >= 0 && amount < 1000000)) throw new AppError('Enter the monthly amount, e.g. 25.', 200)
-  if (!currency) throw new AppError('Currency must be GBP, USD or EUR.', 200)
-  return {
-    name,
-    category: String(b.category || 'Other').trim().slice(0, 40),
-    amountMonthly: round2(amount),
-    currency,
-    notes: b.notes ? String(b.notes).slice(0, 255) : null,
-    active: b.active === false || b.active === 0 ? 0 : 1,
-  }
-}
-
-async function addItem(body) {
-  const v = cleanItem(body)
-  await db.sequelize.query(
-    'INSERT INTO runningCostItems (name, category, amountMonthly, currency, notes, active, createdAt, updatedAt) VALUES (:name, :category, :amountMonthly, :currency, :notes, :active, NOW(), NOW())',
-    { replacements: v },
-  )
-  return items()
-}
-
-async function updateItem(id, body) {
-  const v = cleanItem(body)
-  await db.sequelize.query(
-    'UPDATE runningCostItems SET name = :name, category = :category, amountMonthly = :amountMonthly, currency = :currency, notes = :notes, active = :active, updatedAt = NOW() WHERE id = :id',
-    { replacements: { ...v, id: Number(id) } },
-  )
-  return items()
-}
-
-async function deleteItem(id) {
-  await db.sequelize.query('DELETE FROM runningCostItems WHERE id = :id', { replacements: { id: Number(id) } })
-  return items()
-}
-
 /** Active shops now and bookings this month (UK calendar month). */
 async function trimNumbers(now = new Date()) {
   const { activeSalonWhere } = require('./salonSubscriptionRule')
@@ -283,20 +232,16 @@ async function trimNumbers(now = new Date()) {
 
 /** Everything the Running Costs page shows. */
 async function summary() {
-  const [aws, rates, s, list, trim] = await Promise.all([cacheGet('aws'), ratesToGbp(), settings(), items(), trimNumbers()])
+  const [aws, rates, s, trim] = await Promise.all([cacheGet('aws'), ratesToGbp(), settings(), trimNumbers()])
   const usdGbp = rates.USD
   const gbp = (usd) => round2(Number(usd || 0) * usdGbp)
   const a = aws?.value || null
-  const toGbp = (amount, cur) => round2(Number(amount) * (cur === 'GBP' ? 1 : cur === 'EUR' ? rates.EUR || 0.86 : usdGbp))
-  const other = list.filter((i) => i.active)
-  const otherMonthly = round2(other.reduce((s2, i) => s2 + toGbp(i.amountMonthly, i.currency), 0))
 
   const out = {
     connected: !!a,
     fetchedAt: aws?.fetchedAt || null,
     rate: { usdToGbp: usdGbp, source: rates.source, date: rates.rateDate || rates.day },
     settings: { monthlyBudget: s.monthlyBudget, alertEmails: s.alertEmails },
-    other: { items: list.map((i) => ({ ...i, monthlyGbp: toGbp(i.amountMonthly, i.currency) })), monthlyGbp: otherMonthly },
     trim,
   }
   if (!a) return out
@@ -314,12 +259,10 @@ async function summary() {
     envsLabelled: (a.envs || []).some((x) => x.env !== 'shared' && x.amount > 0),
     days: days.map((d) => ({ day: d.day, usd: d.amount, gbp: gbp(d.amount), spike: avg != null && avg > 0.5 && d.amount > avg * 1.5 })),
   }
-  // Total cost of running Trim this month: AWS forecast + the other costs.
-  out.totalMonthGbp = round2(gbp(a.forecastMonth) + otherMonthly)
-  const monthly = gbp(a.forecastMonth) + otherMonthly
+  // What AWS costs per active shop (forecast for the month) and per booking (so far).
   out.unit = {
-    perActiveShopGbp: trim.activeShops ? round2(monthly / trim.activeShops) : null,
-    perBookingGbp: trim.bookingsThisMonth ? round2((gbp(a.monthToDate) + otherMonthly * (new Date().getUTCDate() / 30)) / trim.bookingsThisMonth) : null,
+    perActiveShopGbp: trim.activeShops ? round2(gbp(a.forecastMonth) / trim.activeShops) : null,
+    perBookingGbp: trim.bookingsThisMonth ? round2(gbp(a.monthToDate) / trim.bookingsThisMonth) : null,
   }
   if (s.monthlyBudget != null) {
     const spent = gbp(a.monthToDate)
@@ -377,4 +320,4 @@ async function checkBudget() {
   }
 }
 
-module.exports = { ensureRunningCostSchema, summary, refresh, fetchAws, checkBudget, saveSettings, items, addItem, updateItem, deleteItem, plainName, ratesToGbp }
+module.exports = { ensureRunningCostSchema, summary, refresh, fetchAws, checkBudget, saveSettings, plainName, ratesToGbp }

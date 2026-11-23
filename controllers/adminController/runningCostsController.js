@@ -26,18 +26,3 @@ exports.saveSettings = async (req, res) => {
   await costs.checkBudget()
   return reply(res, '1', 'Saved.', await costs.summary())
 }
-
-exports.addItem = async (req, res) => {
-  await costs.addItem(req.body || {})
-  return reply(res, '1', 'Cost added.', await costs.summary())
-}
-
-exports.updateItem = async (req, res) => {
-  await costs.updateItem(req.params.id, req.body || {})
-  return reply(res, '1', 'Cost saved.', await costs.summary())
-}
-
-exports.deleteItem = async (req, res) => {
-  await costs.deleteItem(req.params.id)
-  return reply(res, '1', 'Cost removed.', await costs.summary())
-}
