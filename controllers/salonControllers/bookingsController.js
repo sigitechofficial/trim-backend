@@ -3056,7 +3056,9 @@ exports.clientHistory = async (req, res, next) => {
       '1',
       'Client Booking History',
       {
-        clientNote: '',
+        // The branch's note on this client (it was always sent empty, so the
+        // app's note editor opened blank and saving replaced the old note).
+        clientNote: notes?.customerNote || '',
         customerStatus,
         clientBookings,
         // Step C: what the brand's other branches know (when the client shares it).
