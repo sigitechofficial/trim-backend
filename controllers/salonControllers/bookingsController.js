@@ -3055,7 +3055,13 @@ exports.clientHistory = async (req, res, next) => {
     returnFunction(
       '1',
       'Client Booking History',
-      { clientNote: '', customerStatus, clientBookings },
+      {
+        clientNote: '',
+        customerStatus,
+        clientBookings,
+        // Step C: what the brand's other branches know (when the client shares it).
+        otherBranches: customerId && salon?.id ? await require('../../helper/clientPrivacy').fromOtherBranches(salon.id, Number(customerId)) : null,
+      },
       '',
     ),
   )

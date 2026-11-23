@@ -4576,14 +4576,17 @@ exports.fetchAllergies = async (req, res, next) => {
     },
   })
 
-  return res.json(returnFunction('1', 'Success', { allergiesList }, ''))
+  // Step C: allergies the brand's other branches noted (read-only here), when the client shares them.
+  const shared = await require('../../helper/clientPrivacy').fromOtherBranches(salon.id, Number(req.params.id))
+  return res.json(returnFunction('1', 'Success', { allergiesList, otherBranchAllergies: shared.allergies, sharingOff: !!shared.sharingOff }, ''))
 }
 
 //* Remove Client's allergies
 
 exports.removeAllergies = async (req, res, next) => {
+  // Only an allergy this branch noted: another branch's stays (Step C sharing shows them read-only).
   const newAllergy = await allergies.destroy({
-    where: { id: req.params?.id },
+    where: { id: req.params?.id, salonDetailId: await actingSalonId(req) },
   })
   return res.json(returnFunction('1', 'Success', { newAllergy }, ''))
 }

@@ -171,6 +171,10 @@ router.post('/test-coupon-tracking', catchAsync(appController.testCouponTracking
 // Loyalty discount (visit card)
 router.post('/loyalty/quote', protect, catchAsync(loyaltyController.quote))
 router.get('/loyalty/cards', protect, catchAsync(loyaltyController.myCards))
+// Step C: sharing across a brand's branches, and asking a shop to delete my data.
+router.get('/privacy', protect, catchAsync(require('../../controllers/privacyController').myPrivacy))
+router.put('/privacy', protect, catchAsync(require('../../controllers/privacyController').setSharing))
+router.post('/privacy/delete-request', protect, catchAsync(require('../../controllers/privacyController').askToDelete))
 
 // Drawer
 router.patch(

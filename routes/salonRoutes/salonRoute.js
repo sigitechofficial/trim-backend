@@ -502,6 +502,9 @@ const sharedSettingsController = require('../../controllers/salonControllers/sha
 router.get('/shared-settings', ownerOnly, catchAsync(sharedSettingsController.list))
 router.put('/shared-settings/:key', ownerOnly, catchAsync(sharedSettingsController.set))
 router.post('/clients/export', catchAsync(clientDataController.exportList))
+// Step C: clients' requests to delete their data (owner only, checked in the controller).
+router.get('/data-requests', catchAsync(require('../../controllers/privacyController').ownerList))
+router.post('/data-requests/:id/complete', catchAsync(require('../../controllers/privacyController').complete))
 router.post('/clients/:customerId/data-copy', needLevel('client', 'high'), catchAsync(clientDataController.dataCopy))
 
 router.patch(

@@ -77,6 +77,7 @@ const ACTIONS = [
   ['POST', '/salon/v1/bookings/importClients', 'data', 'clients.import', 'Imported clients'],
   ['POST', '/salon/v1/clients/export', 'data', 'clients.export', 'Exported the client list'],
   ['POST', '/salon/v1/clients/:customerId/data-copy', 'data', 'clients.data_copy', "Sent a client a copy of their data"],
+  ['POST', '/salon/v1/data-requests/:id/complete', 'data', 'clients.delete_done', "Deleted a client's data"],
   ['POST', '/salon/v1/bookings/removeClient', 'data', 'clients.remove', 'Removed a client'],
   ['POST', '/salon/v1/active-block-customer', 'data', 'clients.block', 'Blocked or unblocked a client'],
   ['POST', '/salon/v1/send-custom-notifications/:audienceType', 'data', 'clients.message', 'Sent a message to clients'],

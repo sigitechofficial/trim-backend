@@ -34,9 +34,12 @@ async function ensureBranchSchema(db) {
   await db.loginChallenge.sync()
   await db.customRole.sync()
   await db.sharedSetting.sync()
+  await db.dataRequest.sync() // clients' requests to delete their data
   // The owner's choice: managers also need two-step login.
   await addMissingColumns(qi, 'users', {
     twoStepForManagers: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // A client's choice: a brand's branches see each other's notes about them.
+    shareAcrossBranches: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   })
   await addMissingColumns(qi, 'salonDetails', {
     brandId: { type: DataTypes.INTEGER, allowNull: true },
