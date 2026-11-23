@@ -163,6 +163,7 @@ const { ensureBranchSchema } = require('./helper/branchSchema')
 ensureBranchSchema(db)
   .then(() => console.log('[branchSchema] ensured'))
   .catch((err) => console.error('[branchSchema] failed:', err.message))
+require('./helper/runningCosts').ensureRunningCostSchema().catch((e) => console.error('[runningCostSchema]', e.message))
 
 const { ensureAdvertSchema } = require('./helper/advertSchema')
 ensureAdvertSchema(db)
@@ -285,5 +286,6 @@ require('./jobs/mobileVisitCron')
 require('./jobs/brandPlanCron')
 require('./jobs/approvalsCron')
 require('./jobs/accessPeriodCron')
+require('./jobs/runningCostCron')
 
 // hello

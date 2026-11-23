@@ -245,6 +245,15 @@ router.get('/chair-market', protect, adminOnly, catchAsync(chairMarketController
 router.patch('/chair-market/offers/:offer/close', protect, adminOnly, catchAsync(chairMarketController.adminCloseOffer))
 router.get('/mobile-barbers', protect, catchAsync(mobileBarberController.adminList))
 router.get('/visit-reports', protect, catchAsync(mobileBarberController.adminReports))
+// Running Costs: what it costs to run Trim (main admin only).
+const runningCosts = require('../../controllers/adminController/runningCostsController')
+const fullAdminOnly = require('../../middlewares/fullAdminOnly')
+router.get('/running-costs', protect, fullAdminOnly, catchAsync(runningCosts.summary))
+router.post('/running-costs/refresh', protect, fullAdminOnly, catchAsync(runningCosts.refresh))
+router.put('/running-costs/settings', protect, fullAdminOnly, catchAsync(runningCosts.saveSettings))
+router.post('/running-costs/items', protect, fullAdminOnly, catchAsync(runningCosts.addItem))
+router.put('/running-costs/items/:id', protect, fullAdminOnly, catchAsync(runningCosts.updateItem))
+router.delete('/running-costs/items/:id', protect, fullAdminOnly, catchAsync(runningCosts.deleteItem))
 router.put('/visit-reports/:id', protect, catchAsync(mobileBarberController.adminDecide))
 router.get(
   '/salon-loyalty/:id',
