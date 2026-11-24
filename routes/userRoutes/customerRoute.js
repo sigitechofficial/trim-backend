@@ -40,6 +40,8 @@ const ProfileImage = multer({
 const upload = multer().none()
 
 // Apply multer middleware to the route
+// A closed, paused or blocked shop: no slots, bookings or moves (helper/shopOpen.js).
+const { requireOpenShop, fromSalonParam, fromEmployeeParam, fromBooking } = require('../../helper/shopOpen')
 router.post('/email-testing', upload, catchAsync(appController.emailtesting))
 
 router.post(
@@ -91,10 +93,12 @@ router.post(
 )
 router.post(
   '/employees-availability/employee/:employee',
+  requireOpenShop(fromEmployeeParam),
   catchAsync(appController.employeeAvailability),
 )
 router.post(
   '/salon-availability/salon/:salon',
+  requireOpenShop(fromSalonParam),
   catchAsync(appController.salonAvailability),
 )
 router.post('/mobile-visit/quote', publicProtected, catchAsync(mobileBarberController.quote))
@@ -126,16 +130,20 @@ router.post(
 
 router.post(
   '/solo-employee-appointment-schedule/:bookingId',
+  requireOpenShop(fromBooking),
   protect,
   catchAsync(appController.rescheduleSoloEmployeeAppointment),
 )
 router.post(
   '/multiple-employee-appointment-schedule/:bookingId',
+  requireOpenShop(fromBooking),
   protect,
   catchAsync(appController.rescheduleMultipleEmployeeAppointment),
 )
 router.post(
   '/respond-time-proposal',
+  // Declining is always allowed; accepting needs the shop open.
+  requireOpenShop((req) => (req.body?.accept === true || req.body?.accept === 'true' ? fromBooking(req) : null)),
   protect,
   catchAsync(appController.respondToTimeProposal),
 )

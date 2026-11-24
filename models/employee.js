@@ -56,6 +56,11 @@ module.exports = (sequelize, DataTypes) => {
     },
     // Step B: a manager over every branch of the brand; new branches get a
     // row for them too.
+    branchBlocked: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     allBranches: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

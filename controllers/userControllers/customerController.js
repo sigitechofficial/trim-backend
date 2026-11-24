@@ -3176,6 +3176,14 @@ exports.bookAppointment = async (req, res, next) => {
   // appointment.initialPayment =
   //   parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
 
+  // A closed, paused or blocked shop (old favourite, rebook or shared link).
+  if (!(await require('../../helper/shopOpen').isShopOpen(appointment.salonDetailId))) {
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+    throw new AppError(require('../../helper/shopOpen').CLOSED_MESSAGE, 200)
+  }
   if (!(await renterMove.takingBookings(appointment.salonDetailId))) {
     // The app's payment sheet may already hold the deposit; no booking, no charge.
     if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {

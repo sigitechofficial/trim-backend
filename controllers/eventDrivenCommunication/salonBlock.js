@@ -2,24 +2,38 @@ const { employee, salonDetail, user, deviceToken } = require('../../models')
 
 const { sendEvent } = require('../../socket_io')
 
-// Step A: block/unblock one branch only (admin): its staff rows and their
-// logins; the owner and the other branches carry on.
+// Block or unblock one branch only (Trim admin). Only this branch's staff rows
+// change, so someone who also works in other branches carries on there; only
+// people left with no active branch are signed out. Unblock turns back on just
+// the rows the block turned off (never someone the owner blocked themselves).
 exports.branchBlock = async (salonId, newStatus) => {
   try {
-    const staff = await employee.findAll({
-      where: { salonDetailId: salonId, isOwner: false, isExternalEmployee: false },
-      attributes: ['id', 'userId'],
-    })
+    const { Op } = require('sequelize')
     await salonDetail.update({ status: newStatus }, { where: { id: salonId } })
-    if (staff.length) {
-      await employee.update({ status: newStatus }, { where: { id: staff.map((e) => e.id) } })
-      // Their logins too, as a whole-shop block does (a staff member works in
-      // one branch for now).
-      await user.update({ status: newStatus }, { where: { id: staff.map((e) => e.userId) } })
-      if (!newStatus) {
-        await deviceToken.destroy({ where: { userId: staff.map((e) => e.userId) } })
-        staff.forEach((e) => sendEvent(`${e.id}E`, { event: 'account-block', data: { type: 'logout' }, bookingId: null }))
+    const staffWhere = { salonDetailId: salonId, isOwner: false, isExternalEmployee: false, deleted: false }
+    if (!newStatus) {
+      const rows = await employee.findAll({ where: { ...staffWhere, status: true }, attributes: ['id', 'userId'] })
+      if (!rows.length) return true
+      await employee.update({ status: false, branchBlocked: true }, { where: { id: rows.map((e) => e.id) } })
+      for (const e of rows) {
+        const elsewhere = await employee.count({ where: { userId: e.userId, deleted: false, status: true, id: { [Op.ne]: e.id } } })
+        if (elsewhere) continue // still works in another branch: stays signed in there
+        // Their own device rows and the matching rows under the owner's id.
+        await require('../../helper/staffDevices').revokeStaffDevices(e.userId)
+        sendEvent(`${e.id}E`, { event: 'account-block', data: { type: 'logout' }, bookingId: null })
       }
+      return true
+    }
+    const marked = await employee.findAll({ where: { ...staffWhere, branchBlocked: true }, attributes: ['id', 'userId'] })
+    if (marked.length) {
+      await employee.update({ status: true, branchBlocked: false }, { where: { id: marked.map((e) => e.id) } })
+      return true
+    }
+    // Blocked before rows were marked: restore as the old block did.
+    const legacy = await employee.findAll({ where: staffWhere, attributes: ['id', 'userId'] })
+    if (legacy.length) {
+      await employee.update({ status: true }, { where: { id: legacy.map((e) => e.id) } })
+      await user.update({ status: true }, { where: { id: legacy.map((e) => e.userId) } })
     }
     return true
   } catch (error) {

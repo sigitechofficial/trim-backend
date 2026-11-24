@@ -54,6 +54,8 @@ async function ensureBranchSchema(db) {
     role: { type: DataTypes.STRING(16), allowNull: true },
     bookable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     allBranches: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Turned off by Trim blocking this branch (so unblock restores only these).
+    branchBlocked: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     // Step C: an owner's custom role, and access to a branch for a period.
     customRoleId: { type: DataTypes.INTEGER, allowNull: true },
     accessFrom: { type: DataTypes.DATE, allowNull: true },
