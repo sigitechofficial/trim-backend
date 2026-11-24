@@ -2188,6 +2188,7 @@ exports.employeeAvailability = async (req, res, next) => {
   }
 
   // Travel time around this barber's home visits that day.
+  const busyNoTravel = [...busyTimes]
   if (employeeId > 0) {
     const travel = await mobileBarber.travelBlocks([employeeId], jobDate)
     busyTimes.push(...(travel.get(Number(employeeId)) || []))
@@ -2210,11 +2211,24 @@ exports.employeeAvailability = async (req, res, next) => {
     busyTimes,
   )
 
+  // Adding a service to a booking: does it fit right after the last service?
+  // With bookingId, that booking's own home-visit travel time doesn't count:
+  // the added service just makes the same visit longer.
+  let fitsAt
+  if (req.body?.startAt) {
+    let busyForFit = busyTimes
+    if (employeeId > 0 && Number(req.body.bookingId) > 0) {
+      const travel = await mobileBarber.travelBlocks([employeeId], jobDate, { excludeBookingId: req.body.bookingId })
+      busyForFit = [...busyNoTravel, ...(travel.get(Number(employeeId)) || [])]
+    }
+    fitsAt = Slot.slotAt(jobDate, employeeTiming.openingTime, closingTime, duration, busyForFit, req.body.startAt)
+  }
+
   return res.json(
     returnFunction(
       '1',
       'Available Time Slots',
-      { salonOpen, availableTimeSlots },
+      { salonOpen, availableTimeSlots, ...(fitsAt !== undefined ? { fitsAt } : {}) },
       '',
     ),
   )

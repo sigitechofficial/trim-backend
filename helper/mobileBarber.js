@@ -530,7 +530,9 @@ function toClock(minutes) {
  * from landing right before or after a home visit.
  * Returns a Map employeeId -> [{ startTime, endTime }].
  */
-async function travelBlocks(employeeIds, on) {
+// excludeBookingId: leave out that booking's own travel time (adding a
+// service to a home visit just makes the same visit longer).
+async function travelBlocks(employeeIds, on, { excludeBookingId } = {}) {
   const ids = [...new Set((employeeIds || []).map(Number).filter(Boolean))]
   const out = new Map()
   if (!ids.length || !on) return out
@@ -540,10 +542,11 @@ async function travelBlocks(employeeIds, on) {
   if (!withBuffer.length) return out
   const visits = await jobs.findAll({
     where: { employeeId: withBuffer, on, status: 'assign' },
-    attributes: ['employeeId', 'startTime', 'endTime'],
+    attributes: ['employeeId', 'startTime', 'endTime', 'bookingId'],
     include: [{ model: booking, attributes: [], where: { isMobileVisit: true, status: { [Op.notIn]: ['cancel', 'no-show'] } } }],
   })
   for (const j of visits) {
+    if (excludeBookingId && Number(j.bookingId) === Number(excludeBookingId)) continue
     const id = Number(j.employeeId)
     const pad = buffer.get(id)
     if (!out.has(id)) out.set(id, [])

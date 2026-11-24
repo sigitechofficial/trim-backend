@@ -800,7 +800,8 @@ const handleNonRenewingPurchase = async (event) => {
       name: displayName,
       periodStart,
       periodEnd: LIFETIME_PERIOD_END,
-      currency: currency || 'gbp',
+      // A free lifetime grant arrives as USD 0.00; Trim prices are in pounds.
+      currency: Number(amountPaid) > 0 && currency ? currency : 'gbp',
       amountPaid,
       invoice: null,
       invoiceId: event.id || idempotencyKey || null,

@@ -2372,6 +2372,8 @@ exports.customerSubscription = async (req, res, next) => {
       // Update price, currency and name from subscription record
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
       customerSubscription.currency = subscriptionRecord.currency || customerSubscription.currency || 'gbp';
+      // Older free lifetime grants were saved as USD 0.00: show them in pounds.
+      if (!(Number(customerSubscription.price) > 0)) customerSubscription.currency = 'gbp';
       customerSubscription.name = subscriptionRecord.name || customerSubscription.name || '';
       // Renewable price: the real price user will be charged when trial converts to paid
       if (subscriptionRecord.renewablePrice !== null && subscriptionRecord.renewablePrice !== undefined) {
