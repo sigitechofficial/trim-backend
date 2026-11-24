@@ -41,7 +41,9 @@ module.exports = async function approvalGate(req, res, next) {
     const row = await approvals.createRequest({ req, rule, salonDetailId, actor, description })
     const message = rule === 'exportClients'
       ? "Sent to the owner for approval. You'll get the file by email once they approve."
-      : 'Sent to the owner for approval. It will change once they approve.'
+      : rule === 'refunds'
+        ? 'Sent to the owner for approval. The booking is cancelled and the client refunded once they approve.'
+        : 'Sent to the owner for approval. It will change once they approve.'
     return reply(res, '0', message, {
       code: 'APPROVAL_SENT',
       approvalId: row.id,

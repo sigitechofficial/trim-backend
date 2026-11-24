@@ -79,6 +79,12 @@ const RULES = {
     default: true,
     routes: [['POST', '/salon/v1', '/clients/export']],
   },
+  refunds: {
+    label: 'Refunds',
+    hint: 'A team member cancelling a booking the client paid for online (the client gets the money back)',
+    default: true,
+    routes: [['POST', '/salon/v1/bookings', '/cancelBooking']],
+  },
   teamAccess: {
     label: "Changing someone's access",
     hint: 'Changing what a team member can see and do',
@@ -189,6 +195,29 @@ async function describe(rule, req, salonDetailId) {
     return {
       summary: `Change ${await nameOf(b.employeeId)}'s breaks on ${b.day}: ${times}`,
       before: { day: b.day, breaks: current.map((x) => ({ breakStart: hhmm(x.breakStart), breakEnd: hhmm(x.breakEnd) })) },
+    }
+  }
+  if (rule === 'refunds') {
+    // Only a cancellation that sends money back needs approval: requests (a
+    // hold is released, not refunded), unpaid and finished bookings go through.
+    const bk = await db.booking.findOne({
+      where: { id: parseInt(b.bookingId, 10) || 0, salonDetailId },
+      attributes: ['id', 'status', 'on', 'startTime', 'actualCapturedAmount', 'tip', 'initialPaymentIntend', 'clientFirstName', 'clientLastName', 'customerId'],
+    })
+    if (!bk || ['requested', 'complete', 'cancel', 'no-show'].includes(bk.status)) return null
+    const paid = Number(bk.actualCapturedAmount || 0) + Number(bk.tip || 0)
+    if (!(paid > 0) || !bk.initialPaymentIntend) return null
+    // A booking with a finished service can't be cancelled: the handler says so.
+    if (await db.jobs.count({ where: { bookingId: bk.id, status: 'complete' } })) return null
+    let name = `${bk.clientFirstName || ''} ${bk.clientLastName || ''}`.trim()
+    if (!name && bk.customerId) {
+      const u = await db.user.findByPk(bk.customerId, { attributes: ['firstName', 'lastName'] })
+      name = `${u?.firstName || ''} ${u?.lastName || ''}`.trim()
+    }
+    const when = `${bk.on || ''} ${String(bk.startTime || '').slice(0, 5)}`.trim()
+    return {
+      summary: `Cancel ${name || 'a client'}'s booking on ${when} and refund ${money(paid)}`,
+      before: { bookingId: bk.id, status: bk.status, paid },
     }
   }
   if (rule === 'exportClients') {

@@ -33,6 +33,8 @@ router.use(
 )
 router.use('/removeClient', needLevel('appointments', 'high'))
 router.use('/updateOnlibePayment', require('../../middlewares/shopRole').ownerOnly)
+// Step C: a team member's cancellation of a paid booking can wait for approval (refunds rule).
+router.use(require('../../middlewares/approvalGate'))
 //! Bookings
 // get All Bookings
 router.get('/salonBookings', catchAsync(bookingsController.salonBookings))
