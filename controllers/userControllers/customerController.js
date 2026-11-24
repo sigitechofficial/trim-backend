@@ -2007,6 +2007,8 @@ exports.salonDetails = async (req, res, next) => {
         takingBookings: await renterMove.takingBookings(Number(req.params.id)),
         // The shop's "Hiring chair renters" listing, or null when not hiring.
         chairListing: await chairMarket.publicChairListing(Number(req.params.id)),
+        // { id, name, branchCount } when the shop is one of 2+ branches of a brand.
+        brand: await require('../../helper/brandPage').brandOfSalon(Number(req.params.id)).catch(() => null),
       },
     }),
   )

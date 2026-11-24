@@ -71,6 +71,13 @@ router.get(
   publicProtected,
   catchAsync(appController.salonDetails),
 )
+// Brand page: every branch of the brand this shop belongs to (public).
+// ?lat=&lng= sorts them nearest first.
+router.get('/brand/:salon/branches', catchAsync(async (req, res) => {
+  const data = await require('../../helper/brandPage').branchesOf(req.params.salon, { lat: req.query.lat, lng: req.query.lng })
+  if (!data) return res.json({ status: '0', message: 'This shop has no other branches.', data: {}, error: '' })
+  return res.json({ status: '1', message: 'Branches', data, error: '' })
+}))
 
 //! Staff advertisement (customer side)
 router.get('/salon-times/:salon', catchAsync(appController.salonTimes))
