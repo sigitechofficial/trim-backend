@@ -390,9 +390,13 @@ exports.calendarAppointments = async (req, res, next) => {
     ],
     [
       literal(
-        `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-          FROM users
-          INNER JOIN bookings ON bookings.customerId = users.id
+        // The name on the booking first (walk-ins have no account), then the
+        // client's account name (QA-09: tiles said "Client" for walk-ins).
+        `(SELECT COALESCE(
+             NULLIF(TRIM(CONCAT(IFNULL(bookings.clientFirstName, ''), ' ', IFNULL(bookings.clientLastName, ''))), ''),
+             NULLIF(TRIM(CONCAT(IFNULL(users.firstName, ''), ' ', IFNULL(users.lastName, ''))), ''))
+          FROM bookings
+          LEFT JOIN users ON users.id = bookings.customerId
           WHERE bookings.id = jobs.bookingId
           LIMIT 1)`
       ),

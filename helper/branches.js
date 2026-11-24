@@ -173,6 +173,22 @@ async function upcomingBookings(salonId) {
   })
 }
 
+/** The bookings that stop a branch from closing (same rule as the count), for the app's dialog. */
+async function upcomingList(ownerUserId, salonId) {
+  const shop = await ownBranch(ownerUserId, salonId)
+  const today = new Date().toISOString().slice(0, 10)
+  const [rows] = await sequelize.query(
+    `SELECT b.id AS bookingId, b.\`on\` AS day, LEFT(b.startTime, 5) AS time,
+            COALESCE(NULLIF(TRIM(CONCAT(IFNULL(cu.firstName, ''), ' ', IFNULL(cu.lastName, ''))), ''),
+                     NULLIF(TRIM(CONCAT(IFNULL(b.clientFirstName, ''), ' ', IFNULL(b.clientLastName, ''))), ''), 'Walk-in') AS client
+       FROM bookings b LEFT JOIN users cu ON cu.id = b.customerId
+      WHERE b.salonDetailId = :id AND b.status IN ('book', 'pending', 'requested', 'assign') AND b.\`on\` >= :today
+      ORDER BY b.\`on\`, b.startTime LIMIT 50`,
+    { replacements: { id: shop.id, today } },
+  )
+  return { salonId: shop.id, name: shop.salonName, bookings: rows.map((r) => ({ ...r, day: String(r.day).slice(0, 10) })) }
+}
+
 async function ownBranch(ownerUserId, salonId) {
   const shop = await salonDetail.findOne({ where: { ...ownShopsWhere(ownerUserId), id: Number(salonId) } })
   if (!shop) throw new AppError('This branch is not yours.', 200)
@@ -310,4 +326,4 @@ async function renameBrand(ownerUserId, name) {
   return { id: b.id, name: b.name }
 }
 
-module.exports = { addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch, branchesSummary, branchesDay }
+module.exports = { upcomingList, addBranch, myBranches, renameBrand, ensureBrand, closeBranch, reopenBranch, branchesSummary, branchesDay }

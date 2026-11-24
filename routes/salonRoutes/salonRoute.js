@@ -475,6 +475,9 @@ router.get('/branches', catchAsync(salonController.myBranches))
 router.post('/branches', catchAsync(salonController.addBranch))
 router.patch('/branches/brand', catchAsync(salonController.renameBrand))
 router.post('/branches/:salonId/close', catchAsync(salonController.closeBranch))
+// What stops a branch from closing, shown before the owner confirms (owner only, as /branches).
+router.get('/branches/:salonId/upcoming', catchAsync(async (req, res) =>
+  res.json({ status: '1', message: 'Upcoming bookings', data: await require('../../helper/branches').upcomingList(req.user.id, req.params.salonId), error: '' })))
 router.get('/branches/members/:employeeId', catchAsync(salonController.memberBranches))
 router.post('/branches/:salonId/members', catchAsync(salonController.addMemberToBranch))
 router.patch('/branches/members/:employeeId/all-branches', catchAsync(salonController.setMemberAllBranches))
