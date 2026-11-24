@@ -467,6 +467,9 @@ router.patch(
 router.post('/account-delete', catchAsync(salonController.accountDelete))
 // Branches (Step A), owner only.
 router.get('/branches/summary', catchAsync(salonController.branchesSummary))
+// Brand report: owner, or a manager of every branch they work in (not under
+// /branches, which is owner-only). ?from&to, &format=csv for a file.
+router.get('/brand-report', catchAsync(require('../../helper/brandReport').handler))
 router.get('/branches/day', catchAsync(salonController.branchesDay))
 router.get('/branches', catchAsync(salonController.myBranches))
 router.post('/branches', catchAsync(salonController.addBranch))
