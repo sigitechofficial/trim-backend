@@ -127,12 +127,13 @@ async function memberBranches(ownerUserId, employeeId) {
   if (!source) return []
   const rows = await employee.findAll({
     where: { userId: source.userId, deleted: false },
-    attributes: ['id', 'salonDetailId', 'role', 'status', 'allBranches', 'accessFrom', 'accessUntil', 'accessState'],
+    attributes: ['id', 'salonDetailId', 'role', 'status', 'allBranches', 'accessFrom', 'accessUntil', 'accessState', 'bookable', 'isOwner'],
     include: { model: salonDetail, where: ownBranchesWhere(ownerUserId), attributes: ['id', 'salonName', 'closedAt'], required: true },
     order: [['salonDetailId', 'ASC']],
   })
   return rows.map((r) => ({
-    employeeId: r.id, salonId: r.salonDetailId, name: r.salonDetail.salonName, role: r.role, active: r.status, allBranches: r.allBranches,
+    employeeId: r.id, salonId: r.salonDetailId, name: r.salonDetail.salonName, role: r.role || (r.isOwner ? 'owner' : 'barber'), active: r.status, allBranches: r.allBranches,
+    bookable: r.bookable !== false,
     accessFrom: r.accessFrom, accessUntil: r.accessUntil, accessState: r.accessState,
     firstDay: ukDay(r.accessFrom), lastDay: ukDay(r.accessUntil),
   }))

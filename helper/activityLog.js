@@ -20,6 +20,7 @@ const ACTIONS = [
   ['PATCH', '/salon/v1/employee/delete-employee/:employee', 'people', 'team.remove', 'Removed a team member'],
   ['POST', '/salon/v1/employee/addWagesMethod', 'people', 'team.pay', "Set a team member's pay"],
   ['PATCH', '/salon/v1/employee/updateWagesMethod', 'people', 'team.pay', "Changed a team member's pay"],
+  ['POST', '/salon/v1/employee/bookable', 'people', 'team.bookable', 'Changed who takes client bookings'],
   ['POST', '/salon/v1/branches/:salonId/members', 'people', 'team.add_to_branch', 'Added a team member to a branch'],
   ['PATCH', '/salon/v1/branches/members/:employeeId/all-branches', 'people', 'team.all_branches', 'Changed all-branches access'],
   ['POST', '/salon/v1/roles', 'people', 'role.create', 'Made a role'],

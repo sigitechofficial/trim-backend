@@ -439,11 +439,17 @@ exports.calendarAppointments = async (req, res, next) => {
   if (!salon) {
     throw new AppError('Resource not found', 404)
   }
+  const calDay = String(req.params?.date || '').replace(/[^0-9-]/g, '')
   const employeCondition = {
     salonDetailId: salon?.id,
     deleted: 0,
     status: true,
     isExternalEmployee: false,
+    // Someone who doesn't take client bookings only shows on a day they have one.
+    [Op.or]: [
+      { bookable: true },
+      literal(`EXISTS (SELECT 1 FROM jobs cj WHERE cj.employeeId = employee.id AND cj.on = '${calDay}' AND cj.deletedAt IS NULL)`),
+    ],
   }
   const jobCondition = {
     status: {

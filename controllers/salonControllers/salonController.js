@@ -172,6 +172,8 @@ exports.addSalonDetail = async (req, res, next) => {
     userId,
     salonDetailId: newEntry.id,
     isOwner: true,
+    // Sign-up asks "Do you take client bookings yourself?" (default yes).
+    bookable: !['false', '0', false, 0].includes(req.body?.ownerTakesBookings),
   });
 
   // --------------- UPDATED CANCELLATION POLICY -----------------

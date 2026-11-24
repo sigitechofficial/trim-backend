@@ -82,8 +82,15 @@ router.use(['/updateEmployee', '/updateEmployeTimings', '/updateEmployeeService'
 // Step B: chair market, renter moves and shop work mode belong to the shop's
 // owner (a chair renter is the owner of their own shop, so they pass).
 router.use(['/chair-market', '/renter-moves', '/add-external-employee-default-service', '/mobile-visits/work-mode'], ownerOnly)
+// Takes client bookings (per branch): changing it is a team edit (the owner may
+// change their own; staff never their own or the owner's); reading it needs
+// team access.
+router.use('/bookable', (req, res, next) =>
+  req.method === 'POST' ? teamEditGuard(req, res, next) : needLevel('teamMember', 'low')(req, res, next))
 // Step C: some team changes wait for the owner's approval (after the guards).
 router.use(require('../../middlewares/approvalGate'))
+router.get('/bookable/:employee', catchAsync(require('../../helper/bookable').show))
+router.post('/bookable', catchAsync(require('../../helper/bookable').change))
 // for taking profile picture of customer
 const uploadSalonImgs = multer.diskStorage({
   destination: (req, file, cb) => {

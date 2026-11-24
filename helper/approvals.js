@@ -92,6 +92,7 @@ const RULES = {
     routes: [
       ['POST', '/salon/v1/employee', '/access-levels/create'],
       ['PATCH', '/salon/v1/employee', '/access-levels/update'],
+      ['POST', '/salon/v1/employee', '/bookable'],
     ],
   },
 }

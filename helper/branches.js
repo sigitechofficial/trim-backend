@@ -114,8 +114,13 @@ async function addBranch(ownerUserId, body = {}) {
       { transaction },
     )
     const fromOwnerRow = await employee.findOne({ where: { salonDetailId: from.id, userId: ownerUserId, deleted: false }, transaction })
+    // Will the owner take client bookings here? Asked on Add branch; else as
+    // in the branch the settings come from.
+    const ownerBookable = body.ownerTakesBookings === undefined
+      ? fromOwnerRow?.bookable !== false
+      : !['false', '0', false, 0].includes(body.ownerTakesBookings)
     const ownerRow = await employee.create(
-      { position: 'Owner', userId: ownerUserId, salonDetailId: branch.id, isOwner: true, role: 'owner' },
+      { position: 'Owner', userId: ownerUserId, salonDetailId: branch.id, isOwner: true, role: 'owner', bookable: ownerBookable },
       { transaction },
     )
 
