@@ -3268,9 +3268,22 @@ exports.salonHistory = async (req, res) => {
     }
   }
 
+  // Card list (Nov 2026): who, what and with whom, newest first. Older apps
+  // read only the first six fields and ignore the rest.
   const salonHistory = await booking.findAll({
     where: condition,
-    attributes: ['id', 'createdAt', 'total', 'status', 'on', 'startTime'],
+    attributes: [
+      'id', 'createdAt', 'total', 'status', 'on', 'startTime', 'isMobileVisit',
+      [literal(`COALESCE(
+        NULLIF(TRIM(CONCAT(IFNULL(booking.clientFirstName, ''), ' ', IFNULL(booking.clientLastName, ''))), ''),
+        (SELECT NULLIF(TRIM(CONCAT(IFNULL(u.firstName, ''), ' ', IFNULL(u.lastName, ''))), '') FROM users u WHERE u.id = booking.customerId),
+        'Walk-in client')`), 'clientName'],
+      [literal(`(SELECT GROUP_CONCAT(DISTINCT s.serviceName ORDER BY j.startTime SEPARATOR ', ')
+        FROM jobs j JOIN services s ON s.id = j.serviceId WHERE j.bookingId = booking.id)`), 'services'],
+      [literal(`(SELECT GROUP_CONCAT(DISTINCT TRIM(CONCAT(IFNULL(u.firstName, ''), ' ', IFNULL(u.lastName, ''))) SEPARATOR ', ')
+        FROM jobs j JOIN employees e ON e.id = j.employeeId JOIN users u ON u.id = e.userId WHERE j.bookingId = booking.id)`), 'barbers'],
+    ],
+    order: [['on', 'DESC'], ['startTime', 'DESC']],
   })
 
   return res
