@@ -68,11 +68,9 @@ async function ensureAdvertSchema(db) {
     }
   }
 
-  // 2. New tables for staff advert enquiries + messages.
+  // 2. New tables.
   // model.sync() (no alter) issues CREATE TABLE IF NOT EXISTS — safe/idempotent.
   for (const modelName of [
-    'staffAdvertisementEnquiry',
-    'staffAdvertisementEnquiryMessage',
     // Membership table linking a salon to its clients (CSV import / manual add).
     'salonClient',
   ]) {

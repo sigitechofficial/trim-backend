@@ -187,7 +187,7 @@ async function handleV2Webhook(notification, res) {
       case 'DID_FAIL_TO_RENEW':
       case 'EXPIRED':
         if (subtype === 'BILLING_RETRY' || notificationType === 'DID_FAIL_TO_RENEW') {
-          await handleRenewalFailure(transactionData, salonUser, salon);
+          await handleRenewalFailure(transactionData, salonUser, salon, gracePeriodEndOf(renewalJWT));
         } else {
           await handleGracePeriodExpired(transactionData, salonUser, salon);
         }
@@ -372,9 +372,10 @@ function getTeamSizeFromAppleProduct(productId) {
     'trimbiz_owner_four_staff': 5,                  // Owner + 4 staff = 5 total
     'trimbiz_owner_five_staff': 6,                  // Owner + 5 staff = 6 total
     'trimbiz_owner_unlimited_staff': 999,           // Unlimited
+    'trimbiz_monthly_renter': 0,                    // Chair renter's own plan: no staff
   };
   
-  return productTeamSizeMapping[productId] || null;
+  return productTeamSizeMapping[productId] ?? null;
 }
 
 // Helper function to get staff member count (excluding owner) from product ID
@@ -410,7 +411,7 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
       console.log(`   ⚠️ Could not determine old team size from product ID, using salon.teamSize: ${oldTeamSize}`);
     }
     
-    if (!newTeamSize) {
+    if (newTeamSize === null || newTeamSize === undefined) { // 0 = the renter plan (no staff)
       console.error(`   ❌ Could not determine new team size from product ID: ${newProductId}`);
       return;
     }
@@ -435,11 +436,13 @@ async function handleSubscriptionPlanChange(salon, oldProductId, newProductId) {
     
     console.log(`   ⚠️ DOWNGRADE detected: ${oldTeamSize} → ${newTeamSize} (${oldStaffCount} → ${newStaffCount} staff)`);
     
-    // Get all active employees (excluding owner) for this salon
+    // Get all staff (excluding owner) for this salon. Chair renters pay for
+    // their own plan, so a downgrade never blocks them.
     const allEmployees = await employee.findAll({
       where: {
         salonDetailId: salon.id,
         isOwner: false,
+        isExternalEmployee: false,
         deleted: false,
       },
       include: [{
@@ -961,7 +964,19 @@ async function handleRenewal(transaction, salonUser, salon) {
   console.log(`   Subscription: ${subscriptionName}`);
 }
 
-async function handleRenewalFailure(transaction, salonUser, salon) {
+// Apple's billing grace period end (ms) from the signed renewal info, or null.
+function gracePeriodEndOf(renewalJWT) {
+  try {
+    if (!renewalJWT) return null
+    const info = JSON.parse(Buffer.from(renewalJWT.split('.')[1], 'base64').toString())
+    const ms = Number(info?.gracePeriodExpiresDate)
+    return Number.isFinite(ms) && ms > 0 ? ms : null
+  } catch (_) {
+    return null
+  }
+}
+
+async function handleRenewalFailure(transaction, salonUser, salon, graceMs = null) {
   console.log('❌ Handling DID_FAIL_TO_RENEW');
   const subscription = await subscriptions.findOne({
     where: {
@@ -977,6 +992,13 @@ async function handleRenewalFailure(transaction, salonUser, salon) {
   }
   
   salon.subscriptionLatestPaymentStatus = 'payment_failed';
+  // Apple keeps the plan going during its billing grace period: keep the shop
+  // (or chair renter) bookable until then.
+  if (graceMs) {
+    const graceEnd = new Date(graceMs).toISOString().slice(0, 10);
+    const current = salon.registrationExpiryDate ? String(salon.registrationExpiryDate).slice(0, 10) : '';
+    if (graceEnd > current) salon.registrationExpiryDate = graceEnd;
+  }
   await salon.save();
   
   console.log(`⚠️ Renewal failure processed for salon ${salon.id}`);

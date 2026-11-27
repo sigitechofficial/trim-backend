@@ -5,9 +5,36 @@ const validateToken = require('../../middlewares/accessCheck')
 const catchAsync = require('../../middlewares/catchAync')
 // Refuses these changes while a booking is still an unanswered request.
 const notWhileRequested = require('../../middlewares/bookingRequestGuard')
+const { needLevel, sameShop } = require('../../middlewares/shopRole')
+const { booking } = require('../../models')
+
+// A booking request's decline goes through cancelBooking and has its own check.
+const isRequest = async (req) =>
+  (await booking.findByPk(parseInt(req.body?.bookingId, 10) || 0, { attributes: ['status'] }))?.status === 'requested'
 
 router.get('/successUrl', catchAsync(bookingsController.successUrl))
 router.use(validateToken)
+// Step A: the branch this request acts on (x-salon-id), checked once here.
+router.use(require('../../middlewares/branchScope'))
+// Booking, job, team member and shop ids sent by the app must be this shop's.
+router.use(sameShop)
+router.param('bookingId', (req, res, next) => sameShop(req, res, next))
+// Staff permissions, checked on the server (the app only hid the buttons).
+const ownAppointments = needLevel('appointments', 'low', { own: true })
+router.use(['/editService', '/jobStatus', '/serviceData'], ownAppointments)
+router.use('/cancelBooking', needLevel('appointments', 'high', { skip: isRequest }))
+router.use(['/addWalkinCustomer', '/addWalkinBooking', '/addExtraService'], needLevel('bookAppointments', 'low'))
+router.use('/importClients', needLevel('client', 'low'))
+// Step B: checkout and moves on bookings (low: their own bookings only).
+router.use(
+  ['/checkoutBooking', '/finalize-tap-to-pay', '/checkoutCash', '/checkoutMinimalPayment', '/saveUnpaid',
+    '/solo-employee-appointment-reschedule', '/multiple-employee-appointment-reschedule'],
+  needLevel('appointments', 'low', { own: true }),
+)
+router.use('/removeClient', needLevel('appointments', 'high'))
+router.use('/updateOnlibePayment', require('../../middlewares/shopRole').ownerOnly)
+// Step C: a team member's cancellation of a paid booking can wait for approval (refunds rule).
+router.use(require('../../middlewares/approvalGate'))
 //! Bookings
 // get All Bookings
 router.get('/salonBookings', catchAsync(bookingsController.salonBookings))
@@ -98,11 +125,13 @@ router.post('/editService', notWhileRequested, catchAsync(bookingsController.edi
 //!New Routes
 router.patch(
   '/mark-appointment-no-show/:bookingId',
+  ownAppointments,
   notWhileRequested,
   catchAsync(bookingsController.markAppointmentAsNoShow),
 )
 router.patch(
   '/mark-appointment-cancel/:bookingId',
+  needLevel('appointments', 'high'),
   notWhileRequested,
   catchAsync(bookingsController.markAppointmentAscancel),
 )

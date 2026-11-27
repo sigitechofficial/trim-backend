@@ -48,26 +48,20 @@ const {
   subscriptions,
   allergies,
   helpSupport,
-  rentChairAdvertisementEnquiry,
-  rentChairAdvertisementEnquiryMessage,
-  staffAdvertisementEnquiry,
-  staffAdvertisementEnquiryMessage,
 } = require('../../models')
-const {
-  parsePreferredWorkingDays,
-  MESSAGE_ATTRIBUTES,
-  formatRentChairEnquiryForCustomer,
-  getLatestMessagesByEnquiryIds,
-} = require('../../utils/rentChairEnquiryHelper')
-const {
-  MESSAGE_ATTRIBUTES: STAFF_MESSAGE_ATTRIBUTES,
-  formatStaffEnquiryForCustomer,
-  getLatestMessagesByEnquiryIds: getStaffLatestMessagesByEnquiryIds,
-} = require('../../utils/staffAdvertisementEnquiryHelper')
 const AppError = require('../../utils/appError')
 const Slot = require('../../utils/timeSlots')
 const Custom = require('../../utils/customFunctions')
 const Stripe = require('../stripe')
+const loyalty = require('../../helper/loyalty')
+const { activeSalonWhere, activeSalonCaseSql, bookableNowWhere, quoteDate } = require('../../helper/salonSubscriptionRule')
+const renterMove = require('../../helper/renterMove')
+const chairMarket = require('../../helper/chairMarket')
+const mobileBarber = require('../../helper/mobileBarber')
+const { barberClash } = require('../../helper/bookingClash')
+const { periodRefusalFor } = require('../../helper/accessPeriods')
+const mobileVisitStatus = require('../../helper/mobileVisitStatus')
+const visitReports = require('../../helper/visitReports')
 const ThrowNotification = require('../../utils/throwNotification')
 const DateManupulation = require('../../utils/dateManipulation')
 const CustomDate = require('../../utils/currentDay')
@@ -120,6 +114,7 @@ const {
   appointmentStart,
 } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
+const { chargeableDeposit } = require('../../utils/depositMinimum')
 
 // Must match bookingsController: a shop may suggest a new time at most twice.
 const MAX_TIME_PROPOSALS = 2
@@ -888,28 +883,9 @@ exports.home = async (req, res, next) => {
 
   // Base salon filter (no zone filter at all)
   const salonCondition = {
-    [Op.or]: [
-      {
-        // External employee salons are only visible if their parent salon has an active subscription
-        isExternalEmployee: true,
-        parentSalonId: {
-          [Op.in]: literal(`(
-            SELECT id FROM salonDetails
-            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
-            AND (
-              subscriptionLatestPaymentStatus IS NULL
-              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
-            )
-          )`),
-        },
-      },
-      {
-        registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
-        subscriptionLatestPaymentStatus: {
-          [Op.notIn]: ['expired','payment_failed', 'paused', 'refunded'],
-        },
-      },
-    ],
+    // Shop or chair renter with its own active subscription
+    ...activeSalonWhere(currentDay.currentDateOnly),
+    [Op.and]: [bookableNowWhere(currentDay.currentDateOnly)],
     approvedByAdmin: true,
     status: 1,
     deleted: 0,
@@ -932,12 +908,28 @@ exports.home = async (req, res, next) => {
     )
   )`;
 
+  // Mobile barbers who travel to this point count as near too; "Comes to you"
+  // keeps only them.
+  const reach = targetLat && targetLng
+    ? await mobileBarber.salonsReaching({ lat: targetLat, lng: targetLng })
+    : new Map();
+  const reachIds = [...reach.keys()].filter(Number.isInteger);
+  const comesToYou = ['true', '1', true, 1].includes(req.body?.comesToYou ?? req.query?.comesToYou);
+  if (comesToYou && !reachIds.length) {
+    return res.status(200).json(response({ data: { slons: [], appointments: [], currencyUnit: CURRENCY_UNIT, distanceUnit: 'km' } }));
+  }
+  const reachSql = `salonDetail.id IN (${reachIds.join(',') || 0})`;
+  const nearSql = comesToYou
+    ? reachSql
+    : reachIds.length ? `(${formula} <= ${rangeInKm} OR ${reachSql})` : `${formula} <= ${rangeInKm}`;
+
   // Optional filters (price, time, service type) added via subqueries
   const finalSalonCondition = {
     ...salonCondition,
 
-    // Distance gating only when coords are provided
-    ...(targetLat && targetLng ? { [Op.and]: literal(`${formula} <= ${rangeInKm}`) } : {}),
+    // Distance gating only when coords are provided (kept with the
+    // bookable-now rule from salonCondition, not instead of it)
+    ...(targetLat && targetLng ? { [Op.and]: [...(salonCondition[Op.and] || []), literal(nearSql)] } : {}),
 
     // Max price across any service in the salon
     ...((req.body.price || req.query.price) && {
@@ -1019,6 +1011,7 @@ exports.home = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'type', // 'between_shops': chair renter with no address yet
           // ⛔️ zoneId removed from filtering entirely; just return whatever is stored
           'zoneId',
         ],
@@ -1037,7 +1030,7 @@ exports.home = async (req, res, next) => {
     ],
 
     // When NOT favorites view, apply HAVING distance <= range
-    having: !req.params?.favorite ? literal(`${formula} <= ${rangeInKm}`) : undefined,
+    having: !req.params?.favorite && targetLat && targetLng ? literal(nearSql) : !req.params?.favorite ? literal(`${formula} <= ${rangeInKm}`) : undefined,
   };
 
   // Always compute/sort by distance if coords present
@@ -1061,6 +1054,23 @@ exports.home = async (req, res, next) => {
 
     // Keep distance sort (already applied). If you want to sort by discount instead, comment next line.
     // results.sort((a, b) => b.averageDiscount - a.averageDiscount);
+
+    // Loyalty offer badge for each shop card
+    try {
+      const offers = await loyalty.offersForShops(results.map((s) => s.id), req.user?.id || null)
+      results = results.map((s) => ({ ...s, loyaltyOffer: offers.get(s.id) || null }))
+    } catch (err) {
+      console.error('[loyalty] home offers failed:', err.message)
+    }
+
+    // Mobile barber badge; a mobile-only barber's base address stays private.
+    await mobileBarber.decorateSalons(results)
+    for (const s of results) {
+      if (s.mobile) {
+        s.mobile.comesToYou = reach.has(s.id)
+        s.mobile.milesToYou = reach.get(s.id) ?? null
+      }
+    }
   }
 
   // Upcoming/pending appointments for this customer (for the home header)
@@ -1250,27 +1260,8 @@ exports.searchSalons = async (req, res, next) => {
     }
 
     const baseSalonFilter = {
-      [Op.or]: [
-        {
-          isExternalEmployee: true,
-          parentSalonId: {
-            [Op.in]: literal(`(
-            SELECT id FROM salonDetails
-            WHERE registrationExpiryDate >= '${currentDay.currentDateOnly}'
-            AND (
-              subscriptionLatestPaymentStatus IS NULL
-              OR subscriptionLatestPaymentStatus NOT IN ('expired', 'cancelled', 'canceled', 'payment_failed', 'paused', 'refunded')
-            )
-          )`),
-          },
-        },
-        {
-          registrationExpiryDate: { [Op.gte]: currentDay.currentDateOnly },
-          subscriptionLatestPaymentStatus: {
-            [Op.notIn]: ['expired', 'payment_failed', 'paused', 'refunded'],
-          },
-        },
-      ],
+      ...activeSalonWhere(currentDay.currentDateOnly),
+      [Op.and]: [bookableNowWhere(currentDay.currentDateOnly)],
       approvedByAdmin: true,
       status: 1,
       deleted: 0,
@@ -1496,6 +1487,18 @@ exports.searchSalons = async (req, res, next) => {
     )
   )`
 
+    // Mobile barbers who travel to this point count as near too; "Comes to
+    // you" keeps only them.
+    const reach = hasCoords
+      ? await mobileBarber.salonsReaching({ lat: latNum, lng: lngNum })
+      : new Map()
+    const reachIds = [...reach.keys()].filter(Number.isInteger)
+    const comesToYou = truthy(req.body?.comesToYou)
+    if (comesToYou) andFragments.push({ id: { [Op.in]: reachIds.length ? reachIds : [0] } })
+    const nearSql = reachIds.length
+      ? `(${formula} <= ${rangeInKm} OR salonDetail.id IN (${reachIds.join(',')}))`
+      : `${formula} <= ${rangeInKm}`
+
     const finalWhere =
       andFragments.length === 1 ? andFragments[0] : { [Op.and]: andFragments }
 
@@ -1514,6 +1517,7 @@ exports.searchSalons = async (req, res, next) => {
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
       [
         literal(`(
           SELECT FORMAT(AVG(ratings.value), 1)
@@ -1555,6 +1559,7 @@ exports.searchSalons = async (req, res, next) => {
             'lng',
             'building',
             'postalCode',
+            'type', // 'between_shops': chair renter with no address yet
             'zoneId',
           ],
         },
@@ -1578,7 +1583,7 @@ exports.searchSalons = async (req, res, next) => {
 
     if (hasCoords) {
       queryBody.attributes = [...attributes, [literal(`${formula}`), 'distance']]
-      queryBody.having = literal(`${formula} <= ${rangeInKm}`)
+      queryBody.having = literal(nearSql)
       queryBody.order = [[literal('distance'), 'ASC']]
     } else {
       queryBody.order = [['salonName', 'ASC']]
@@ -1688,6 +1693,23 @@ exports.searchSalons = async (req, res, next) => {
       return plain
     })
 
+    // Loyalty offer badge for each shop card
+    try {
+      const offers = await loyalty.offersForShops(salons.map((s) => s.id), req.user?.id || null)
+      salons.forEach((s) => { s.loyaltyOffer = offers.get(s.id) || null })
+    } catch (err) {
+      console.error('[loyalty] search offers failed:', err.message)
+    }
+
+    // Mobile barber badge; a mobile-only barber's base address stays private.
+    await mobileBarber.decorateSalons(salons)
+    for (const s of salons) {
+      if (s.mobile) {
+        s.mobile.comesToYou = reach.has(s.id)
+        s.mobile.milesToYou = reach.get(s.id) ?? null
+      }
+    }
+
     const payload = {
       status: '1',
       message: 'Search results fetched successfully',
@@ -1750,6 +1772,7 @@ exports.salonDetails = async (req, res, next) => {
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
       [
         literal(
           '(SELECT accountConnected FROM wallets WHERE wallets.salonDetailId = salonDetail.id LIMIT 1)',
@@ -1811,6 +1834,7 @@ exports.salonDetails = async (req, res, next) => {
           'lng',
           'building',
           'postalCode',
+          'type', // 'between_shops': chair renter with no address yet
         ],
       },
       {
@@ -1840,7 +1864,10 @@ exports.salonDetails = async (req, res, next) => {
       },
       {
         model: employee,
-        where: { isExternalEmployee: false },
+        // Step A: managers/receptionists who don't cut hair are not shown.
+        // Staff who left or were switched off aren't shown either.
+        where: { isExternalEmployee: false, bookable: true, deleted: false, status: true },
+        required: false,
         attributes: [
           'id',
           'position',
@@ -1854,6 +1881,8 @@ exports.salonDetails = async (req, res, next) => {
         include: [
           {
             model: user,
+            // A removed login has no row here: leave that team member out.
+            required: true,
             attributes: ['id', `firstName`, `lastName`, 'image'],
           },
         ],
@@ -1939,6 +1968,26 @@ exports.salonDetails = async (req, res, next) => {
     },
   })
 
+  // Visit-card offer and this client's progress (null when there is none).
+  let loyaltyCard = null
+  try {
+    loyaltyCard = await loyalty.summaryForClient(Number(req.params.id), req.user?.id || null)
+  } catch (err) {
+    console.error('[loyalty] shop page summary failed:', err.message)
+  }
+
+  // Mobile barbers here (who comes to you, radius, travel fee). A mobile-only
+  // barber's base address is reduced to the area.
+  let mobile = { workMode: 'shop', mobile: false, mobileOnly: false, barbers: [] }
+  let detail = results
+  if (results) {
+    detail = results.toJSON()
+    // Days the staff advert needs someone, as a list (empty = any day).
+    detail.staffAdvertisementDays = chairMarket.daysOf(detail.staffAdvertisementDays)
+    await mobileBarber.decorateSalons(detail)
+    mobile = detail.mobile
+  }
+
   return res.status(200).json(
     response({
       message:"Data loaded",
@@ -1946,1096 +1995,26 @@ exports.salonDetails = async (req, res, next) => {
         announcements: announcements,
         customerStatus,
         like,
-        detail: results,
+        detail,
+        mobile,
         policies,
         currencyUnit: CURRENCY_UNIT,
         feedbackCount,
+        loyalty: loyaltyCard,
+        // Set for a chair renter who moved shop in the last 30 days.
+        recentMove: await renterMove.recentMove(Number(req.params.id)),
+        // False for a chair renter between shops after the grace period.
+        takingBookings: await renterMove.takingBookings(Number(req.params.id)),
+        // The shop's "Hiring chair renters" listing, or null when not hiring.
+        chairListing: await chairMarket.publicChairListing(Number(req.params.id)),
+        // { id, name, branchCount } when the shop is one of 2+ branches of a brand.
+        brand: await require('../../helper/brandPage').brandOfSalon(Number(req.params.id)).catch(() => null),
       },
     }),
   )
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-exports.submitRentChairAdvertisementEnquiry = async (req, res, next) => {
-  const {
-    salonDetailId,
-    firstName,
-    lastName,
-    email,
-    phoneNumber,
-    currentLocation,
-    yearsExperience,
-    socialMedia,
-    preferredWorkingDays,
-    notes,
-  } = req.body
-
-  const salonId = Number(salonDetailId)
-  if (!Number.isInteger(salonId) || salonId <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'salonDetailId is required and must be a valid integer',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const trimmedFirstName =
-    typeof firstName === 'string' ? firstName.trim() : ''
-  const trimmedLastName = typeof lastName === 'string' ? lastName.trim() : ''
-  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
-  const trimmedPhone =
-    typeof phoneNumber === 'string' ? phoneNumber.trim() : ''
-  const trimmedLocation =
-    typeof currentLocation === 'string' ? currentLocation.trim() : ''
-  const trimmedSocialMedia =
-    socialMedia === undefined || socialMedia === null
-      ? ''
-      : typeof socialMedia === 'string'
-        ? socialMedia.trim()
-        : null
-  const trimmedNotes =
-    notes === undefined || notes === null
-      ? ''
-      : typeof notes === 'string'
-        ? notes.trim()
-        : null
-
-  if (!trimmedFirstName || trimmedFirstName.length > 100) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'firstName is required and must be at most 100 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedLastName || trimmedLastName.length > 100) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'lastName is required and must be at most 100 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedEmail || trimmedEmail.length > 255 || !EMAIL_REGEX.test(trimmedEmail)) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'A valid email is required and must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedPhone || trimmedPhone.length > 72) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'phoneNumber is required and must be at most 72 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedLocation || trimmedLocation.length > 255) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'currentLocation is required and must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const parsedYearsExperience = Number(yearsExperience)
-  if (
-    yearsExperience === undefined ||
-    yearsExperience === null ||
-    yearsExperience === '' ||
-    !Number.isInteger(parsedYearsExperience) ||
-    parsedYearsExperience < 0
-  ) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'yearsExperience is required and must be an integer >= 0',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedSocialMedia === null) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'socialMedia must be a string when provided',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedSocialMedia.length > 255) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'socialMedia must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const preferredDaysResult = parsePreferredWorkingDays(preferredWorkingDays)
-  if (preferredDaysResult.error) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: preferredDaysResult.error,
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedNotes === null) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'notes must be a string when provided',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedNotes.length > 2000) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'notes must be at most 2000 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const salon = await salonDetail.findOne({
-    where: { id: salonId },
-    attributes: [
-      'id',
-      'salonName',
-      'userId',
-      'rentChairAdvertisementStatus',
-      'rentChairAdvertisementChairCount',
-    ],
-    include: {
-      model: user,
-      attributes: ['id'],
-      include: { model: deviceToken, attributes: ['tokenId'] },
-    },
-  })
-
-  if (!salon) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Shop not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!salon.rentChairAdvertisementStatus) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'This shop is not accepting chair rental enquiries',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if ((salon.rentChairAdvertisementChairCount ?? 0) <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'This shop has no chairs available to rent',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const customerUserId = req.user?.id ?? null
-  const storedPreferredWorkingDays = JSON.stringify(preferredDaysResult.days)
-
-  if (customerUserId) {
-    const existingEnquiry = await rentChairAdvertisementEnquiry.findOne({
-      where: {
-        customerUserId,
-        salonDetailId: salon.id,
-      },
-      include: [
-        {
-          model: salonDetail,
-          attributes: ['id', 'salonName', 'coverImage'],
-        },
-      ],
-    })
-
-    if (existingEnquiry) {
-      const latestMap = await getLatestMessagesByEnquiryIds([existingEnquiry.id])
-
-      return res.status(200).json(
-        response({
-          status: '1',
-          message: 'You already have an enquiry with this shop.',
-          data: {
-            enquiryId: existingEnquiry.id,
-            alreadyExists: true,
-            enquiry: formatRentChairEnquiryForCustomer(
-              existingEnquiry,
-              latestMap.get(existingEnquiry.id),
-            ),
-          },
-        }),
-      )
-    }
-  }
-
-  const enquiry = await rentChairAdvertisementEnquiry.create({
-    salonDetailId: salon.id,
-    customerUserId,
-    firstName: trimmedFirstName,
-    lastName: trimmedLastName,
-    email: trimmedEmail,
-    phoneNumber: trimmedPhone,
-    currentLocation: trimmedLocation,
-    yearsExperience: parsedYearsExperience,
-    socialMedia: trimmedSocialMedia || null,
-    preferredWorkingDays: storedPreferredWorkingDays,
-    notes: trimmedNotes || null,
-    status: 0,
-  })
-
-  const ownerTokens =
-    salon.user?.deviceTokens
-      ?.map((token) => token?.tokenId)
-      .filter(Boolean) ?? []
-
-  const notificationData = {
-    enquiryId: String(enquiry.id),
-    salonDetailId: String(salon.id),
-    type: 'rentChairAdvertisementEnquiry',
-    firstName: trimmedFirstName,
-    lastName: trimmedLastName,
-    email: trimmedEmail,
-    phoneNumber: trimmedPhone,
-    currentLocation: trimmedLocation,
-    yearsExperience: String(parsedYearsExperience),
-    socialMedia: trimmedSocialMedia || '',
-    preferredWorkingDays: storedPreferredWorkingDays,
-    notes: trimmedNotes || '',
-    customerUserId: customerUserId ? String(customerUserId) : '',
-    canReplyInApp: customerUserId ? 'true' : 'false',
-  }
-
-  await ThrowNotification(
-    ownerTokens,
-    {
-      title: 'Chair rental enquiry',
-      body: `${trimmedFirstName} ${trimmedLastName} sent a chair rental enquiry.`,
-    },
-    notificationData,
-    salon.userId,
-  )
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'Enquiry sent successfully',
-      data: { enquiryId: enquiry.id, alreadyExists: false },
-    }),
-  )
-}
-
-exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
-  const enquiries = await rentChairAdvertisementEnquiry.findAll({
-    where: { customerUserId: req.user.id },
-    include: [
-      {
-        model: salonDetail,
-        attributes: ['id', 'salonName', 'coverImage'],
-      },
-    ],
-  })
-
-  const latestMap = await getLatestMessagesByEnquiryIds(
-    enquiries.map((enquiry) => enquiry.id),
-  )
-
-  const formattedEnquiries = enquiries
-    .map((enquiry) =>
-      formatRentChairEnquiryForCustomer(enquiry, latestMap.get(enquiry.id)),
-    )
-    .sort((a, b) => {
-      const aTime = new Date(
-        a.latestMessageAt || a.updatedAt || a.createdAt,
-      ).getTime()
-      const bTime = new Date(
-        b.latestMessageAt || b.updatedAt || b.createdAt,
-      ).getTime()
-      return bTime - aTime
-    })
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: { enquiries: formattedEnquiries },
-    }),
-  )
-}
-
-exports.getRentChairAdvertisementEnquiryBySalon = async (req, res, next) => {
-  const salonId = Number(req.params.salonDetailId)
-
-  if (!Number.isInteger(salonId) || salonId <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'salonDetailId must be a valid integer',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      customerUserId: req.user.id,
-      salonDetailId: salonId,
-    },
-    include: [
-      {
-        model: salonDetail,
-        attributes: ['id', 'salonName', 'coverImage'],
-      },
-    ],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '1',
-        message: 'success',
-        data: { exists: false, enquiry: null },
-      }),
-    )
-  }
-
-  const latestMap = await getLatestMessagesByEnquiryIds([enquiry.id])
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: {
-        exists: true,
-        enquiry: formatRentChairEnquiryForCustomer(
-          enquiry,
-          latestMap.get(enquiry.id),
-        ),
-      },
-    }),
-  )
-}
-
-exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      customerUserId: req.user.id,
-    },
-    attributes: ['id'],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Enquiry not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
-    where: { rentChairAdvertisementEnquiryId: enquiry.id },
-    attributes: MESSAGE_ATTRIBUTES,
-    order: [['createdAt', 'ASC']],
-  })
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: { messages },
-    }),
-  )
-}
-
-exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      customerUserId: req.user.id,
-    },
-    attributes: ['id', 'salonDetailId', 'firstName', 'lastName'],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Enquiry not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const trimmedMessage =
-    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
-
-  if (!trimmedMessage) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'message is required',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedMessage.length > 2000) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'message must be at most 2000 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const createdMessage = await rentChairAdvertisementEnquiryMessage.create({
-    rentChairAdvertisementEnquiryId: enquiry.id,
-    senderRole: 'customer',
-    senderUserId: req.user.id,
-    message: trimmedMessage,
-  })
-
-  const salon = await salonDetail.findOne({
-    where: { id: enquiry.salonDetailId },
-    attributes: ['id', 'userId', 'salonName'],
-    include: {
-      model: user,
-      attributes: ['id'],
-      include: { model: deviceToken, attributes: ['tokenId'] },
-    },
-  })
-
-  if (salon?.user) {
-    const ownerTokens =
-      salon.user.deviceTokens?.map((token) => token?.tokenId).filter(Boolean) ??
-      []
-
-    await ThrowNotification(
-      ownerTokens,
-      {
-        title: 'Chair rental enquiry reply',
-        body: `${enquiry.firstName} ${enquiry.lastName} replied to their chair rental enquiry.`,
-      },
-      {
-        type: 'rentChairAdvertisementEnquiryMessage',
-        enquiryId: String(enquiry.id),
-        messageId: String(createdMessage.id),
-        salonDetailId: String(enquiry.salonDetailId),
-      },
-      salon.userId,
-    )
-  }
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'Message sent successfully',
-      data: { message: createdMessage },
-    }),
-  )
-}
-
-// ─── Staff advertisement (customer side) ─────────────────────────────────────
-// Mirror of the rent-a-chair enquiry flow, gated on the staffAdvertisement*
-// fields. Same enquiry form fields; no rent involved.
-
-exports.submitStaffAdvertisementEnquiry = async (req, res, next) => {
-  const {
-    salonDetailId,
-    firstName,
-    lastName,
-    email,
-    phoneNumber,
-    currentLocation,
-    yearsExperience,
-    socialMedia,
-    preferredWorkingDays,
-    notes,
-  } = req.body
-
-  const salonId = Number(salonDetailId)
-  if (!Number.isInteger(salonId) || salonId <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'salonDetailId is required and must be a valid integer',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const trimmedFirstName =
-    typeof firstName === 'string' ? firstName.trim() : ''
-  const trimmedLastName = typeof lastName === 'string' ? lastName.trim() : ''
-  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
-  const trimmedPhone =
-    typeof phoneNumber === 'string' ? phoneNumber.trim() : ''
-  const trimmedLocation =
-    typeof currentLocation === 'string' ? currentLocation.trim() : ''
-  const trimmedSocialMedia =
-    socialMedia === undefined || socialMedia === null
-      ? ''
-      : typeof socialMedia === 'string'
-        ? socialMedia.trim()
-        : null
-  const trimmedNotes =
-    notes === undefined || notes === null
-      ? ''
-      : typeof notes === 'string'
-        ? notes.trim()
-        : null
-
-  if (!trimmedFirstName || trimmedFirstName.length > 100) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'firstName is required and must be at most 100 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedLastName || trimmedLastName.length > 100) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'lastName is required and must be at most 100 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedEmail || trimmedEmail.length > 255 || !EMAIL_REGEX.test(trimmedEmail)) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'A valid email is required and must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedPhone || trimmedPhone.length > 72) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'phoneNumber is required and must be at most 72 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!trimmedLocation || trimmedLocation.length > 255) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'currentLocation is required and must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const parsedYearsExperience = Number(yearsExperience)
-  if (
-    yearsExperience === undefined ||
-    yearsExperience === null ||
-    yearsExperience === '' ||
-    !Number.isInteger(parsedYearsExperience) ||
-    parsedYearsExperience < 0
-  ) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'yearsExperience is required and must be an integer >= 0',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedSocialMedia === null) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'socialMedia must be a string when provided',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedSocialMedia.length > 255) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'socialMedia must be at most 255 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const preferredDaysResult = parsePreferredWorkingDays(preferredWorkingDays)
-  if (preferredDaysResult.error) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: preferredDaysResult.error,
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedNotes === null) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'notes must be a string when provided',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedNotes.length > 2000) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'notes must be at most 2000 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const salon = await salonDetail.findOne({
-    where: { id: salonId },
-    attributes: [
-      'id',
-      'salonName',
-      'userId',
-      'staffAdvertisementStatus',
-      'staffAdvertisementCount',
-    ],
-    include: {
-      model: user,
-      attributes: ['id'],
-      include: { model: deviceToken, attributes: ['tokenId'] },
-    },
-  })
-
-  if (!salon) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Shop not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (!salon.staffAdvertisementStatus) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'This shop is not accepting staff enquiries',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if ((salon.staffAdvertisementCount ?? 0) <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'This shop is not hiring staff',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const customerUserId = req.user?.id ?? null
-  const storedPreferredWorkingDays = JSON.stringify(preferredDaysResult.days)
-
-  if (customerUserId) {
-    const existingEnquiry = await staffAdvertisementEnquiry.findOne({
-      where: {
-        customerUserId,
-        salonDetailId: salon.id,
-      },
-      include: [
-        {
-          model: salonDetail,
-          attributes: ['id', 'salonName', 'coverImage'],
-        },
-      ],
-    })
-
-    if (existingEnquiry) {
-      const latestMap = await getStaffLatestMessagesByEnquiryIds([
-        existingEnquiry.id,
-      ])
-
-      return res.status(200).json(
-        response({
-          status: '1',
-          message: 'You already have an enquiry with this shop.',
-          data: {
-            enquiryId: existingEnquiry.id,
-            alreadyExists: true,
-            enquiry: formatStaffEnquiryForCustomer(
-              existingEnquiry,
-              latestMap.get(existingEnquiry.id),
-            ),
-          },
-        }),
-      )
-    }
-  }
-
-  const enquiry = await staffAdvertisementEnquiry.create({
-    salonDetailId: salon.id,
-    customerUserId,
-    firstName: trimmedFirstName,
-    lastName: trimmedLastName,
-    email: trimmedEmail,
-    phoneNumber: trimmedPhone,
-    currentLocation: trimmedLocation,
-    yearsExperience: parsedYearsExperience,
-    socialMedia: trimmedSocialMedia || null,
-    preferredWorkingDays: storedPreferredWorkingDays,
-    notes: trimmedNotes || null,
-    status: 0,
-  })
-
-  const ownerTokens =
-    salon.user?.deviceTokens
-      ?.map((token) => token?.tokenId)
-      .filter(Boolean) ?? []
-
-  const notificationData = {
-    enquiryId: String(enquiry.id),
-    salonDetailId: String(salon.id),
-    type: 'staffAdvertisementEnquiry',
-    firstName: trimmedFirstName,
-    lastName: trimmedLastName,
-    email: trimmedEmail,
-    phoneNumber: trimmedPhone,
-    currentLocation: trimmedLocation,
-    yearsExperience: String(parsedYearsExperience),
-    socialMedia: trimmedSocialMedia || '',
-    preferredWorkingDays: storedPreferredWorkingDays,
-    notes: trimmedNotes || '',
-    customerUserId: customerUserId ? String(customerUserId) : '',
-    canReplyInApp: customerUserId ? 'true' : 'false',
-  }
-
-  await ThrowNotification(
-    ownerTokens,
-    {
-      title: 'Staff enquiry',
-      body: `${trimmedFirstName} ${trimmedLastName} sent a staff enquiry.`,
-    },
-    notificationData,
-    salon.userId,
-  )
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'Enquiry sent successfully',
-      data: { enquiryId: enquiry.id, alreadyExists: false },
-    }),
-  )
-}
-
-exports.listStaffAdvertisementEnquiries = async (req, res, next) => {
-  const enquiries = await staffAdvertisementEnquiry.findAll({
-    where: { customerUserId: req.user.id },
-    include: [
-      {
-        model: salonDetail,
-        attributes: ['id', 'salonName', 'coverImage'],
-      },
-    ],
-  })
-
-  const latestMap = await getStaffLatestMessagesByEnquiryIds(
-    enquiries.map((enquiry) => enquiry.id),
-  )
-
-  const formattedEnquiries = enquiries
-    .map((enquiry) =>
-      formatStaffEnquiryForCustomer(enquiry, latestMap.get(enquiry.id)),
-    )
-    .sort((a, b) => {
-      const aTime = new Date(
-        a.latestMessageAt || a.updatedAt || a.createdAt,
-      ).getTime()
-      const bTime = new Date(
-        b.latestMessageAt || b.updatedAt || b.createdAt,
-      ).getTime()
-      return bTime - aTime
-    })
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: { enquiries: formattedEnquiries },
-    }),
-  )
-}
-
-exports.getStaffAdvertisementEnquiryBySalon = async (req, res, next) => {
-  const salonId = Number(req.params.salonDetailId)
-
-  if (!Number.isInteger(salonId) || salonId <= 0) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'salonDetailId must be a valid integer',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      customerUserId: req.user.id,
-      salonDetailId: salonId,
-    },
-    include: [
-      {
-        model: salonDetail,
-        attributes: ['id', 'salonName', 'coverImage'],
-      },
-    ],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '1',
-        message: 'success',
-        data: { exists: false, enquiry: null },
-      }),
-    )
-  }
-
-  const latestMap = await getStaffLatestMessagesByEnquiryIds([enquiry.id])
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: {
-        exists: true,
-        enquiry: formatStaffEnquiryForCustomer(
-          enquiry,
-          latestMap.get(enquiry.id),
-        ),
-      },
-    }),
-  )
-}
-
-exports.getStaffAdvertisementEnquiryMessages = async (req, res, next) => {
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      customerUserId: req.user.id,
-    },
-    attributes: ['id'],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Enquiry not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const messages = await staffAdvertisementEnquiryMessage.findAll({
-    where: { staffAdvertisementEnquiryId: enquiry.id },
-    attributes: STAFF_MESSAGE_ATTRIBUTES,
-    order: [['createdAt', 'ASC']],
-  })
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'success',
-      data: { messages },
-    }),
-  )
-}
-
-exports.sendStaffAdvertisementEnquiryMessage = async (req, res, next) => {
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      customerUserId: req.user.id,
-    },
-    attributes: ['id', 'salonDetailId', 'firstName', 'lastName'],
-  })
-
-  if (!enquiry) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'Enquiry not found',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const trimmedMessage =
-    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
-
-  if (!trimmedMessage) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'message is required',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  if (trimmedMessage.length > 2000) {
-    return res.status(200).json(
-      response({
-        status: '0',
-        message: 'message must be at most 2000 characters',
-        data: {},
-        error: '',
-      }),
-    )
-  }
-
-  const createdMessage = await staffAdvertisementEnquiryMessage.create({
-    staffAdvertisementEnquiryId: enquiry.id,
-    senderRole: 'customer',
-    senderUserId: req.user.id,
-    message: trimmedMessage,
-  })
-
-  const salon = await salonDetail.findOne({
-    where: { id: enquiry.salonDetailId },
-    attributes: ['id', 'userId', 'salonName'],
-    include: {
-      model: user,
-      attributes: ['id'],
-      include: { model: deviceToken, attributes: ['tokenId'] },
-    },
-  })
-
-  if (salon?.user) {
-    const ownerTokens =
-      salon.user.deviceTokens?.map((token) => token?.tokenId).filter(Boolean) ??
-      []
-
-    await ThrowNotification(
-      ownerTokens,
-      {
-        title: 'Staff enquiry reply',
-        body: `${enquiry.firstName} ${enquiry.lastName} replied to their staff enquiry.`,
-      },
-      {
-        type: 'staffAdvertisementEnquiryMessage',
-        enquiryId: String(enquiry.id),
-        messageId: String(createdMessage.id),
-        salonDetailId: String(enquiry.salonDetailId),
-      },
-      salon.userId,
-    )
-  }
-
-  return res.status(200).json(
-    response({
-      status: '1',
-      message: 'Message sent successfully',
-      data: { message: createdMessage },
-    }),
-  )
-}
 
 //* 3.Salon Times
 
@@ -3173,7 +2152,7 @@ exports.employeesWithAllServices = async (req, res, next) => {
     attributes: ['employeeId'],
     include: {
       model: employee,
-      where: { deleted: false, status: true, isExternalEmployee: false },
+      where: { deleted: false, status: true, isExternalEmployee: false, bookable: true },
     },
     group: ['employeeId'],
     having: literal(`COUNT(DISTINCT serviceId) = ${services.length}`),
@@ -3291,6 +2270,11 @@ exports.employeeAvailability = async (req, res, next) => {
 
   const bookingEmployeeId = bookingEmployee.id
 
+  // Step C: a team member with branch access for a period has no slots outside it.
+  if (await periodRefusalFor(bookingEmployeeId, jobDate)) {
+    return res.status(200).json(response({ data: { availableTimeSlots: [] } }))
+  }
+
   if (openingTime == '00:00' || openingTime == '00:00:00')
     openingTime = '00:00:01'
   if (closingTime == '00:00' || closingTime == '00:00:00')
@@ -3325,6 +2309,10 @@ exports.employeeAvailability = async (req, res, next) => {
     })
   }
 
+  // Travel time around this barber's home visits that day.
+  const travel = await mobileBarber.travelBlocks([bookingEmployeeId], jobDate)
+  busyTimes.push(...(travel.get(Number(bookingEmployeeId)) || []))
+
   const availableTimeSlots = Slot.getAvailableTimeSlots(
     jobDate,
     openingTime,
@@ -3355,13 +2343,15 @@ exports.salonAvailability = async (req, res, next) => {
   const dayName = DateManupulation.dayOnDate(new Date(jobDate))
 
   // Load all active non-external employees working that day
-  const employees = await employee.findAll({
+  const allEmployees = await employee.findAll({
     where: {
       salonDetailId: salon.id,
       deleted: false,
+      status: true, // a blocked row, or one whose branch access ended, can't be booked
       isExternalEmployee: false,
+      bookable: true,
     },
-    attributes: ['id'],
+    attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'],
     include: [
       {
         model: time,
@@ -3371,6 +2361,9 @@ exports.salonAvailability = async (req, res, next) => {
       },
     ],
   })
+  // Step C: and only those whose branch access (if for a period) covers that day.
+  const { periodRefusal } = require('../../helper/accessPeriods')
+  const employees = allEmployees.filter((e) => !periodRefusal(e, String(jobDate).slice(0, 10)))
 
   // Fallback: no employees working that day → salon-level open/close, no breaks
   if (employees.length === 0) {
@@ -3379,6 +2372,9 @@ exports.salonAvailability = async (req, res, next) => {
     )
     return res.status(200).json(response({ data: { availableTimeSlots } }))
   }
+
+  // Travel time around home visits that day, per barber.
+  const travel = await mobileBarber.travelBlocks(employees.map((e) => e.id), jobDate)
 
   // For each employee calculate their available slots
   const employeeSlotSets = await Promise.all(
@@ -3416,6 +2412,7 @@ exports.salonAvailability = async (req, res, next) => {
           startTime: formatBusyTime(b.breakStart),
           endTime: formatBusyTime(b.breakEnd),
         })),
+        ...(travel.get(Number(emp.id)) || []),
       ]
 
       return Slot.getAvailableTimeSlots(
@@ -3435,7 +2432,8 @@ exports.salonAvailability = async (req, res, next) => {
 
 exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   const { bookingId } = req.params
-  const { appointment, services, employeeId } = req.body
+  const { appointment, services } = req.body
+  let { employeeId } = req.body
   const userId = req.user.id;
   console.log(
     'ðŸš€ ~ exports.rescheduleSoloEmployeeAppointment= ~ employeeId:',
@@ -3457,6 +2455,19 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   appointment.endTime = DateManupulation.convertTo24HourFormat(
     appointment.endTime,
   )
+  // Home visit: stays with a barber who travels, with travel time around it.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  if (visitMove) employeeId = req.body.employeeId = visitMove.employeeId
+  // Step C: not on a day outside this team member's access to the branch.
+  const outsidePeriod = employeeId ? await periodRefusalFor(employeeId, appointment.on) : null
+  if (outsidePeriod) return res.status(200).json(response({ status: '2', message: outsidePeriod }))
+
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = DateManupulation.dayOnDate(appointmentDate)
 
@@ -3546,7 +2557,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 
   await booking.update(
     {
-      total:req.body.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
     },
     { where: { id: bookingId } },
   )
@@ -3561,7 +2572,7 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
 
     await booking.update(
       {
-        total:req.body.total,
+        total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
         discount:0,
         vatAmount:req.body.vatOriginalAmount,
       },
@@ -3603,6 +2614,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
       deleted: false,
       status: true,
       isExternalEmployee: false,
+      bookable: true,
     },
     attributes: ['id'],
     include: [
@@ -3636,7 +2648,28 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const assignTimeSlots = Custom.scheduleSessions(appointment, services)
   console.log('ðŸš€ ~ assignTimeSlots:', assignTimeSlots)
 
+  // Step C: "anyone" never picks a team member outside their branch access period.
+  if (employeeData?.length) {
+    const { periodRefusal } = require('../../helper/accessPeriods')
+    const rows = await employee.findAll({ where: { id: employeeData.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+    const out = new Set(rows.filter((r) => periodRefusal(r, String(appointment.on).slice(0, 10))).map((r) => r.id))
+    if (out.size) employeeData = employeeData.filter((e) => !out.has(e.id))
+  }
   JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  // Home visit: every service stays with the one barber who travels.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId: req.body.employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  if (visitMove) {
+    JobsInput = assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
+  }
+  // Step C: not with a team member outside their branch access period that day.
+  const outsidePeriod = await periodRefusalFor(JobsInput.filter((j) => j.status === 'assign').map((j) => j.employeeId), appointment.on)
+  if (outsidePeriod) return res.status(200).json(response({ status: '2', message: outsidePeriod }))
   appointment.status = 'book'
   const findUnAssign =
     JobsInput.length > 0
@@ -3690,7 +2723,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
 
   await booking.update(
     {
-      total:req.body.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
     },
     { where: { id: bookingId } },
   )
@@ -3705,7 +2738,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
 
     await booking.update(
       {
-        total:req.body.total,
+        total: await mobileBarber.totalWithTravelFee(bookingId, req.body.total),
         discount:0.00,
       },
       { where: { id: bookingId } },
@@ -3881,6 +2914,10 @@ exports.cancelAppointment = async (req, res, next) => {
       'noshowPolicyVersion',
       'cancellationPolicyVersion',
       'by',
+      'isMobileVisit',
+      'travelFee',
+      'onTheWayAt',
+      'arrivedAt',
     ],
     include: [
       {
@@ -3985,6 +3022,19 @@ exports.cancelAppointment = async (req, res, next) => {
       .status(200)
       .json(response({ message: 'Booking request cancelled', data: {} }))
   }
+  // Home visit: the policy applies to the services only; the travel fee is
+  // charged only once the barber has set off. Worked out here, not in the app.
+  if (appointment.isMobileVisit) {
+    req.body.cancellationCharges = mobileBarber.cancellationCharge({
+      total: appointment.total,
+      travelFee: appointment.travelFee,
+      percent: req.body?.cancellationPercentage,
+      barberSetOff: !!(appointment.onTheWayAt || appointment.arrivedAt),
+    })
+  }
+  // Booked before the barber moved shop: no cancellation charge.
+  if (await renterMove.freeCancelAfterMove(appointment.id)) req.body.cancellationCharges = 0
+
   //& Refund or extra amount chagr will be here
   const updatedBooking = {
     cancellationCharges: req.body.cancellationCharges,
@@ -4126,6 +3176,26 @@ exports.bookAppointment = async (req, res, next) => {
   // appointment.initialPayment =
   //   parseFloat(appointment?.initialPayment) - parseFloat(appointment?.tip)
 
+  // A closed, paused or blocked shop (old favourite, rebook or shared link).
+  if (!(await require('../../helper/shopOpen').isShopOpen(appointment.salonDetailId))) {
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+    throw new AppError(require('../../helper/shopOpen').CLOSED_MESSAGE, 200)
+  }
+  if (!(await renterMove.takingBookings(appointment.salonDetailId))) {
+    // The app's payment sheet may already hold the deposit; no booking, no charge.
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+    throw new AppError(
+      'This barber isn\'t taking new bookings until they join a new shop.',
+      200,
+    )
+  }
+
   const hasAppointments = await booking.count({
     where: {
       salonDetailId: appointment.salonDetailId,
@@ -4158,6 +3228,97 @@ exports.bookAppointment = async (req, res, next) => {
     throw new AppError('Please select payment a method first', 200)
   }
 
+  // Loyalty reward: worked out here, never taken from the app. An older app
+  // (no useLoyalty) books at full price and the reward waits for next time.
+  delete appointment.loyaltyDiscount
+  delete appointment.loyaltyPercentage
+  delete appointment.loyaltyCardId
+  let loyaltyLines = []
+  if (req.body.useLoyalty === true || req.body.useLoyalty === 'true') {
+    const quoted = await loyalty.quote({
+      salonDetailId: appointment.salonDetailId,
+      customerId,
+      serviceIds: (services || []).map((s) => s.serviceId),
+    })
+    let problem = null
+    if (!quoted.eligible) {
+      problem = 'Your loyalty reward can no longer be used on this booking. Please check your booking again.'
+    } else if (req.body.couponId && !quoted.combineWithCoupon) {
+      problem = 'This shop does not allow a coupon code together with the loyalty reward.'
+    } else if (Math.abs((Number(req.body.loyaltyDiscount) || 0) - quoted.loyaltyDiscount) > 0.01) {
+      problem = 'Your loyalty discount has changed. Please check your booking again.'
+    }
+    if (problem) {
+      // The app's payment sheet may already hold the deposit; no booking, no charge.
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, {
+          attributes: ['connectAccountId'],
+        })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError(problem, 200)
+    }
+    appointment.loyaltyDiscount = quoted.loyaltyDiscount
+    appointment.loyaltyPercentage = quoted.percentage
+    appointment.loyaltyCardId = quoted.cardId
+    loyaltyLines = quoted.lines
+  }
+
+  // Mobile barber home visit: checked and priced here, never taken from the app.
+  delete appointment.isMobileVisit
+  delete appointment.travelFee
+  delete appointment.travelMiles
+  delete appointment.visitAddressId
+  // Releases the deposit the app's payment sheet may already hold; no booking, no charge.
+  const releaseHold = async () => {
+    if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+      const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+      await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+    }
+  }
+  if (!req.body.mobileVisit) {
+    // A mobile-only business has no shop to visit (older apps can't ask for a home visit).
+    const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['workMode'] })
+    if (shop?.workMode === 'mobile') {
+      await releaseHold()
+      throw new AppError('This barber only visits clients at home. Please update the app and choose your address.', 200)
+    }
+  }
+  if (req.body.mobileVisit) {
+    let visit
+    try {
+      // No barber chosen ("any barber"): the first mobile barber who can go.
+      if (!req.body.employeeId) {
+        const picked = await mobileBarber.pickMobileBarber({
+          salonDetailId: appointment.salonDetailId,
+          lat: req.body.mobileVisit.lat,
+          lng: req.body.mobileVisit.lng,
+          serviceIds: (services || []).map((s) => s.serviceId),
+          on: appointment.on,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+        })
+        if (!picked.available) throw new AppError(picked.reason, 200)
+        req.body.employeeId = picked.employeeId
+      }
+      visit = await mobileBarber.prepareBooking({
+        appointment: {
+          ...appointment,
+          startTime: DateManupulation.convertTo24HourFormat(appointment.startTime),
+          endTime: DateManupulation.convertTo24HourFormat(appointment.endTime),
+        },
+        employeeId: req.body.employeeId,
+        services,
+        mobileVisit: req.body.mobileVisit,
+        sentTravelFee: req.body.travelFee,
+      })
+    } catch (err) {
+      await releaseHold()
+      throw err
+    }
+    Object.assign(appointment, visit)
+  }
+
   appointment.startTime = DateManupulation.convertTo24HourFormat(
     appointment.startTime,
   )
@@ -4170,39 +3331,31 @@ exports.bookAppointment = async (req, res, next) => {
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = DateManupulation.dayOnDate(appointmentDate)
 
-  // services offered by single employees
+  // A chosen barber who is already booked at this time (in any of their
+  // shops) can't be booked twice: no booking, and any held deposit is released.
   if (req.body.employeeId) {
-    const availability = await jobs.findOne({
-      where: {
-        status: 'assign', //TODO add  Date check
-        on: appointment.on,
-        employeeId: req.body.employeeId,
-        [Op.or]: [
-          {
-            // Case starts within the busy time range
-            startTime: {
-              [Op.between]: [appointment.startTime, appointment.endTime],
-            },
-          },
-          {
-            //  when ends within the busy time range
-            endTime: {
-              [Op.between]: [appointment.startTime, appointment.endTime],
-            },
-          },
-          {
-            //when within the job time range
-            [Op.and]: [
-              { startTime: { [Op.lte]: appointment.startTime } },
-              { endTime: { [Op.gte]: appointment.endTime } },
-            ],
-          },
-        ],
-      },
-      attributes: ['startTime', 'endTime'],
+    // Step C: not on a day outside this team member's access to the branch.
+    const outside = await periodRefusalFor(req.body.employeeId, appointment.on)
+    if (outside) {
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError(outside, 200)
+    }
+    const clash = await barberClash({
+      employeeId: req.body.employeeId,
+      on: appointment.on,
+      startTime: appointment.startTime,
+      endTime: appointment.endTime,
     })
-
-    // if(availability){ return res.status(200).json(response({ status :'2',message:"Time slot booked by another customer"}))}//!TODO comment cause we already capture upfront amount.
+    if (clash) {
+      if (req.body.paymentMethod === 'card' && req.body.initialPaymentIntend) {
+        const shop = await salonDetail.findByPk(appointment.salonDetailId, { attributes: ['connectAccountId'] })
+        await Stripe.releaseHeldPayment(req.body.initialPaymentIntend, shop?.connectAccountId)
+      }
+      throw new AppError('Sorry, this time was just booked. Please choose another time.', 200)
+    }
   }
 
   let employeeData, JobsInput
@@ -4214,6 +3367,7 @@ exports.bookAppointment = async (req, res, next) => {
         deleted: false,
         status: true,
         isExternalEmployee: false,
+        bookable: true,
       },
       attributes: ['id'],
       include: [
@@ -4240,6 +3394,9 @@ exports.bookAppointment = async (req, res, next) => {
       ],
     })
     employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
+    // Travel time around home visits counts as busy when picking a barber.
+    const travel = await mobileBarber.travelBlocks(employeeData.map((e) => e.id), appointment.on)
+    for (const emp of employeeData) emp.jobs.push(...(travel.get(Number(emp.id)) || []))
   }
 
   console.log(
@@ -4250,6 +3407,13 @@ exports.bookAppointment = async (req, res, next) => {
   console.log('Ã°Å¸Å¡â‚¬ ~ assignTimeSlots:', assignTimeSlots)
 
   if (!req.body.employeeId) {
+    // Step C: "anyone" never picks a team member outside their branch access period.
+    if (employeeData?.length) {
+      const { periodRefusal } = require('../../helper/accessPeriods')
+      const rows = await employee.findAll({ where: { id: employeeData.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+      const out = new Set(rows.filter((r) => periodRefusal(r, String(appointment.on).slice(0, 10))).map((r) => r.id))
+      if (out.size) employeeData = employeeData.filter((e) => !out.has(e.id))
+    }
     JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
   } else {
     JobsInput = assignTimeSlots.map((service) => ({
@@ -4265,7 +3429,9 @@ exports.bookAppointment = async (req, res, next) => {
   }
   // Manual approval: the booking waits for the shop. Its jobs keep their normal
   // status, so the time slot stays held; accept restores 'book' / 'pending'.
-  const needsApproval = await requiresApproval(appointment.salonDetailId, customerId)
+  // A home visit always waits for the barber to accept it.
+  const needsApproval =
+    appointment.isMobileVisit || (await requiresApproval(appointment.salonDetailId, customerId))
   if (needsApproval) {
     appointment.status = 'requested'
     appointment.requestExpiresAt = requestExpiresAt(appointment.on, appointment.startTime)
@@ -4385,7 +3551,8 @@ exports.bookAppointment = async (req, res, next) => {
     });
   }
 
-  const finalInput = JobsInput.map((service) => ({
+  // Each job carries its share of the loyalty discount (0 without one).
+  const finalInput = loyalty.applyToJobs(JobsInput, loyaltyLines).map((service) => ({
     ...service,
     bookingId: book.id,
   }))
@@ -4466,19 +3633,26 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   const customerId = req.user.id
   console.log("CustomerId=================>>>>",customerId)
 
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
     throw new AppError('Shop does not accept online payments.', 200)
 
-  const upFrontAmount =
+  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
+  // Below Stripe's 30p minimum the deposit is paid at the shop instead.
+  const upFrontAmount = chargeableDeposit(
     req.body.advanceAmount && req.body.advanceAmount > 0
       ? parseFloat(req.body.advanceAmount)
-      : 0
+      : 0,
+    tip,
+  )
   const platformFee = req.body?.platformFee
     ? parseFloat(req.body?.platformFee)
     : 0
-  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
   const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
   const account = await salonDetail.findOne({
@@ -4501,7 +3675,9 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
   )
 
   // Manual-approval shop: authorise only; captured when the shop accepts.
-  const needsApproval = await requiresApproval(req.body.salonId, customerId)
+  // A home visit always waits for the barber to accept it.
+  const mobileVisit = req.body.mobileVisit === true || req.body.mobileVisit === 'true'
+  const needsApproval = mobileVisit || (await requiresApproval(req.body.salonId, customerId))
 
   //TODO Ensure that the payment goes to the specific salon's account, not the admin's account.
   const indent =
@@ -4537,6 +3713,10 @@ exports.captureUpFrontPaymentInfo = async (req, res, next) => {
 
 exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
   //Partial payment upfront
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
@@ -4574,30 +3754,13 @@ exports.captureUpFrontPaymentInfoFromWeb = async (req, res, next) => {
 
 //* 5.fetch Appointments -----------------
 
-// Salon "subscription active" rule — IDENTICAL to POST /customer/home's salon filter.
-// Normal salon (isExternalEmployee=0): registrationExpiryDate >= today
-//   AND subscriptionLatestPaymentStatus IS NOT NULL
-//   AND subscriptionLatestPaymentStatus NOT IN ('expired','payment_failed','paused','refunded').
-// External-employee salon: same rule evaluated against its parentSalonId (Home Branch A),
-//   where a NULL parent status counts as active and 'cancelled'/'canceled' are also blocked.
+// Salon "subscription active" rule — same helper as POST /customer/home's salon filter
+// (helper/salonSubscriptionRule.js, incl. the chair renter grace period).
 // `dateOnly` is the server-computed 'YYYY-MM-DD' (CustomDate.currentDay().currentDateOnly),
 // same value Home uses. Returns 1/0; callers coerce to a real boolean before responding.
 // Must be selected inside the `salonDetail` include so the `salonDetail` alias is in scope.
 const salonSubscriptionActiveLiteral = (dateOnly) =>
-  literal(`(CASE
-    WHEN \`salonDetail\`.\`isExternalEmployee\` = 1 THEN (
-      SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-      FROM salonDetails AS parentSalon
-      WHERE parentSalon.id = \`salonDetail\`.\`parentSalonId\`
-        AND parentSalon.registrationExpiryDate >= '${dateOnly}'
-        AND (parentSalon.subscriptionLatestPaymentStatus IS NULL
-             OR parentSalon.subscriptionLatestPaymentStatus NOT IN ('expired','cancelled','canceled','payment_failed','paused','refunded')))
-    ELSE (CASE
-      WHEN \`salonDetail\`.\`registrationExpiryDate\` >= '${dateOnly}'
-        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` IS NOT NULL
-        AND \`salonDetail\`.\`subscriptionLatestPaymentStatus\` NOT IN ('expired','payment_failed','paused','refunded')
-      THEN 1 ELSE 0 END)
-  END)`)
+  literal(activeSalonCaseSql('`salonDetail`', quoteDate(dateOnly)))
 
 exports.fetchAppointments = async (req, res, next) => {
   // TODO Filters
@@ -4630,6 +3793,16 @@ exports.fetchAppointments = async (req, res, next) => {
       'proposalCount',
       'clientDeclineNote',
       'clientDeclinedAt',
+      'visitAddressId',
+      'isMobileVisit',
+      'travelFee',
+      'travelMiles',
+      'onTheWayAt',
+      'etaMinutes',
+      'arrivedAt',
+      'arrivedDistanceM',
+      'arrivalFlag',
+      'clientConfirm',
       [
         literal(
           '(SELECT COUNT(*) FROM jobs WHERE jobs.bookingId = booking.id)',
@@ -4661,6 +3834,7 @@ exports.fetchAppointments = async (req, res, next) => {
 
   // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
   appointments = JSON.parse(JSON.stringify(appointments))
+  await renterMove.applyVisitAddresses(appointments)
   appointments.forEach((a) => {
     if (a.salonDetail) {
       a.salonDetail.subscriptionActive =
@@ -4716,6 +3890,18 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
       'proposalCount',
       'clientDeclineNote',
       'clientDeclinedAt',
+      'visitAddressId',
+      'isMobileVisit',
+      'travelFee',
+      'travelMiles',
+      'onTheWayAt',
+      'etaMinutes',
+      'arrivedAt',
+      'arrivedDistanceM',
+      'arrivalFlag',
+      'clientConfirm',
+      'loyaltyDiscount',
+      'loyaltyPercentage',
       [
         literal(
           '(SELECT cb.reasonText FROM cancelledBookings cb WHERE cb.bookingId = booking.id ORDER BY cb.id DESC LIMIT 1)',
@@ -4769,6 +3955,7 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
               `lng`,
               `postalCode`,
               `province`,
+              `type`, // 'between_shops': chair renter with no address yet
             ],
           },
           {
@@ -4835,6 +4022,18 @@ exports.fetchAppointmentsDetails = async (req, res, next) => {
 
   const output = data.toJSON()
   output.jobs = actualJobs
+  await renterMove.applyVisitAddresses(output)
+  // Home visit: salonDetail.addressDB is now the client's own address.
+  if (output.isMobileVisit) {
+    const visit = await addressDBS.findByPk(output.visitAddressId)
+    output.visitAddress = visit ? { ...visit.toJSON(), note: visit.title || '' } : null
+    // "Your barber is on the way / has arrived" banner, "Is your barber here?" and reports.
+    Object.assign(output, mobileVisitStatus.statusFields(output), await visitReports.reportFields(output))
+  }
+  output.freeCancelAfterMove = await renterMove.freeCancelAfterMove(output.id)
+  // "Your barber has moved" card: only for bookings on or after the move.
+  const moved = await renterMove.recentMove(output.salonDetail?.id)
+  output.barberMoved = moved && String(output.on) >= String(moved.moveDate) ? moved : null
 
   // Coerce the computed 1/0 into a real boolean for salonDetail.subscriptionActive.
   if (output.salonDetail) {
@@ -5263,10 +4462,11 @@ exports.applyCoupon = async (req, res, next) => {
     });
     console.log(`✅ Coupon tracking record created for coupon ID: ${data.id}`);
 
-  // 8️⃣ Return success
+  // 8️⃣ Return success (and whether the shop lets it join the loyalty reward)
+  const loyaltyOffer = await loyalty.getProgram(salonId);
   const output = response({
     message: 'Success',
-    data: { promoCode: data },
+    data: { promoCode: data, combinableWithLoyalty: !!loyaltyOffer?.combineWithCoupon },
   });
   return res.status(200).json(output);
 };
@@ -7450,19 +6650,26 @@ exports.captureUpFrontPaymentInfoWithSetupIntent = async (req, res, next) => {
   const customerId = req.user.id
   console.log("CustomerId=================>>>>",customerId)
 
+  // No deposit is taken for a barber who is not taking bookings.
+  if (req.body.salonId && !(await renterMove.takingBookings(Number(req.body.salonId)))) {
+    throw new AppError('This barber isn\'t taking new bookings until they join a new shop.', 200)
+  }
   if (!req.body.onlinePayments)
     throw new AppError('Shop does not accept online payments.', 200)
   if (!req.body.stripeCustomerId)
     throw new AppError('Shop does not accept online payments.', 200)
 
-  const upFrontAmount =
+  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
+  // Below Stripe's 30p minimum the deposit is paid at the shop instead.
+  const upFrontAmount = chargeableDeposit(
     req.body.advanceAmount && req.body.advanceAmount > 0
       ? parseFloat(req.body.advanceAmount)
-      : 0
+      : 0,
+    tip,
+  )
   const platformFee = req.body?.platformFee
     ? parseFloat(req.body?.platformFee)
     : 0
-  const tip = req.body.tip ? parseFloat(req.body.tip) : 0
   const advanceAmount = upFrontAmount + tip 
   const actualCapturedAmount = upFrontAmount
   const account = await salonDetail.findOne({
@@ -7688,7 +6895,7 @@ exports.sendReminder = async (req, res) => {
           },
         ],
       },
-      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder'],
+      attributes: ['id', 'on', 'startTime', 'customerId', 'salonDetailId', 'reminderSent', 'twoHoursReminder', 'isMobileVisit', 'visitAddressId'],
       include: [
         {
           model: jobs,
@@ -7818,9 +7025,19 @@ exports.sendReminder = async (req, res) => {
               body: `Your booking with ${salonUser.firstName} is in about 2 hours ${dateShort}  @ ${time12Hour}`,
             };
 
+      // Home visit: say the barber is coming to the client.
+      if (b.isMobileVisit) {
+        notifCustomer.body = notifCustomer.body.replace('Your booking with', 'Your home visit from')
+      }
+
       // Salon notification format: "You have a booking with [customer] at [time]pm on [date] for a [service]"
       const servicePrefix = servicesNames.length === 1 ? 'for a' : 'for a';
-      const serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
+      let serviceTextWithPrefix = servicesText ? ` ${servicePrefix} ${servicesText}` : '';
+      if (b.isMobileVisit && b.visitAddressId) {
+        const visit = await addressDBS.findByPk(b.visitAddressId)
+        const line = mobileBarber.addressLine(visit)
+        if (line) serviceTextWithPrefix += `. Home visit: ${line}`
+      }
       const notifSalon =
         which === '24h'
           ? {

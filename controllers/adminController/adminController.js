@@ -959,6 +959,17 @@ exports.fecthSalons = async (req, res, next) => {
         )`),
         'subscriptionTier',
       ],
+      // Step A: the brand this branch belongs to, and how many branches it has.
+      'brandId',
+      'planSource',
+      'pausedReason',
+      'closedAt',
+      [literal(`(SELECT brands.name FROM brands WHERE brands.id = salonDetail.brandId)`), 'brandName'],
+      [literal(`(SELECT brands.rcAppUserId FROM brands WHERE brands.id = salonDetail.brandId)`), 'brandRcAppUserId'],
+      [
+        literal(`(SELECT COUNT(*) FROM salonDetails b WHERE salonDetail.brandId IS NOT NULL AND b.brandId = salonDetail.brandId AND b.closedAt IS NULL)`),
+        'brandBranches',
+      ],
       // AND employees.isOwner = false
     ],
     include: [
@@ -1526,6 +1537,20 @@ exports.fecthAppointmentsDetails = async (req, res, next) => {
       `status`,
       `subTotal`,
       `discount`,
+      'loyaltyDiscount',
+      'loyaltyPercentage',
+      // Mobile barber home visit and its On my way / Arrived times
+      'isMobileVisit',
+      'travelFee',
+      'travelMiles',
+      'onTheWayAt',
+      'etaMinutes',
+      'arrivedAt',
+      'arrivedDistanceM',
+      'arrivedAccuracyM',
+      'arrivalFlag',
+      'mockAttempts',
+      'clientConfirm',
       `total`,
       `initialPayment`,
       `vatAmount`,
@@ -2938,6 +2963,16 @@ exports.changeSalonStatus = async (req, res, next) => {
   )
 }
 
+// Step A: block or unblock one branch only. Clients stop seeing it and its
+// staff are signed out; the owner and other branches are not touched.
+exports.changeBranchStatus = async (req, res) => {
+  const branch = await salonDetail.findByPk(Number(req.params.salonId), { attributes: ['id', 'status', 'brandId'] })
+  if (!branch) throw new AppError('No branch found with that ID', 200)
+  const newStatus = branch.status ? 0 : 1
+  await require('../eventDrivenCommunication/salonBlock').branchBlock(branch.id, newStatus)
+  res.status(200).json(response({ message: newStatus ? 'Branch unblocked' : 'Branch blocked', data: { salonId: branch.id, newStatus } }))
+}
+
 //*1 Client Status Change
 exports.changeCustomerStatus = async (req, res, next) => {
   const id = req.params.id
@@ -4095,5 +4130,55 @@ exports.updateRebookReminderConfig = async (req, res, next) => {
       message: 'Rebooking reminder config updated',
       data: { rebookReminderConfig: config },
     }),
+  )
+}
+
+/*
+    Step A: a brand and its branches (admin)
+    ________________________________________
+*/
+const returnFunction = (status, message, data, error) => ({ status, message, data, error })
+
+exports.brandDetail = async (req, res) => {
+  const { brand: brandModel, salonDetail: shop, employee: staff, user: person } = require('../../models')
+  // /brands/:id, or /brands/by-salon/:salonId for a branch's page.
+  let brandId = Number(req.params.id)
+  if (req.params.salonId) {
+    const row = await shop.findByPk(Number(req.params.salonId), { attributes: ['brandId'] })
+    if (!row?.brandId) return res.json(returnFunction('1', 'Single shop', { brand: null, branches: [], members: [] }, ''))
+    brandId = row.brandId
+  }
+  const b = await brandModel.findByPk(brandId, {
+    include: { model: person, as: 'owner', attributes: ['id', 'firstName', 'lastName', 'email'] },
+  })
+  if (!b) return res.json(returnFunction('0', 'Brand not found.', {}, ''))
+  const branches = await shop.findAll({
+    where: { brandId: b.id },
+    attributes: ['id', 'salonName', 'planSource', 'pausedReason', 'closedAt', 'registrationExpiryDate', 'subscriptionLatestPaymentStatus', 'teamSize', 'createdAt', 'status'],
+    order: [['id', 'ASC']],
+  })
+  const members = await staff.findAll({
+    where: { salonDetailId: branches.map((x) => x.id), deleted: false },
+    attributes: ['id', 'salonDetailId', 'role', 'isOwner', 'bookable', 'status', 'position'],
+    include: { model: person, attributes: ['firstName', 'lastName', 'email'] },
+    order: [['salonDetailId', 'ASC'], ['id', 'ASC']],
+  })
+  return res.json(
+    returnFunction('1', 'Brand', {
+      brand: {
+        id: b.id, name: b.name, owner: b.owner, rcAppUserId: b.rcAppUserId, branchLimit: b.branchLimit,
+        planProductId: b.planProductId, pendingProductId: b.pendingProductId, planStatus: b.planStatus, planExpiry: b.planExpiry,
+      },
+      branches: branches.map((x) => ({
+        id: x.id, name: x.salonName, planSource: x.planSource, createdAt: x.createdAt,
+        state: x.closedAt ? 'closed' : x.pausedReason ? `paused (${x.pausedReason})` : 'open',
+        blocked: x.status === false || x.status === 0,
+        registrationExpiryDate: x.registrationExpiryDate, paymentStatus: x.subscriptionLatestPaymentStatus,
+      })),
+      members: members.map((m) => ({
+        employeeId: m.id, salonId: m.salonDetailId, role: m.role || (m.isOwner ? 'owner' : 'barber'), bookable: m.bookable,
+        active: m.status, position: m.position, name: `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim(), email: m.user?.email,
+      })),
+    }, ''),
   )
 }

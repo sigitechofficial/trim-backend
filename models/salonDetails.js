@@ -136,6 +136,73 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Chair renter between shops: stays listed until this date (see helper/renterMove.js).
+    renterGraceUntil: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    // Chair renter on the free days before their own plan: the last reminder
+    // sent (14, 7 or 1 days left, 0 once ended), so each goes out once.
+    renterPlanReminderDays: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    // Chair renter whose Trim plan a shop covers: that shop's id. While set,
+    // the renter row mirrors the shop's plan date and status 'shop_covered';
+    // the renter's own plan is kept in renterOwnExpiry / renterOwnStatus.
+    renterCoveredBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    renterOwnExpiry: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    renterOwnStatus: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
+    // How many times this renter got free days after a shop stopped covering
+    // them: 7 days the first time, 3 after that (helper/renterCoverage.js).
+    // The shop whose plan stopped covering this renter because that plan lapsed
+    // (or ran out of seats). When the shop's plan is active again the owner
+    // is asked once to cover them again; then it is cleared.
+    renterUncoveredBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    renterGraceCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    // How the business works: 'shop', 'mobile' (travels to clients only; the
+    // address is a private base used for distance) or 'both'.
+    workMode: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
+      defaultValue: 'shop',
+    },
+    // Branches (Step A). brandId null = a single shop. planSource 'brand' =
+    // the brand's plan covers this branch. Pause/close don't reuse status
+    // (status is the admin block).
+    brandId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    planSource: {
+      type: DataTypes.STRING(8),
+      allowNull: false,
+      defaultValue: 'own',
+    },
+    pausedReason: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
+    closedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     deleted: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
@@ -210,6 +277,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: null,
     },
+    staffAdvertisementDays: {
+      type: DataTypes.STRING(80),
+      allowNull: true,
+    },
     stripeOnboardingStatus: {
       type: DataTypes.STRING(32),
       allowNull: true,
@@ -272,6 +343,7 @@ module.exports = (sequelize, DataTypes) => {
   salonDetail.associate = (models) => {
     models.user.hasMany(salonDetail)
     salonDetail.belongsTo(models.user)
+    salonDetail.belongsTo(models.brand, { foreignKey: 'brandId' })
 
     salonDetail.hasMany(models.employee)
     models.employee.belongsTo(salonDetail)
@@ -325,10 +397,6 @@ module.exports = (sequelize, DataTypes) => {
 
     salonDetail.hasMany(models.rentCollection) // only for external employee salon id
     models.rentCollection.belongsTo(salonDetail)
-
-    salonDetail.hasMany(models.rentChairAdvertisementEnquiry)
-
-    salonDetail.hasMany(models.staffAdvertisementEnquiry)
   }
 
   return salonDetail

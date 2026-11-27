@@ -61,6 +61,8 @@ app.use('/Public', express.static(path.join(__dirname, 'Public')))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cors())
+// Lets helpers that only get a user id find the request's acting branch.
+app.use(require('./helper/requestContext').requestContext)
 app.use(morgan('dev')) // Added for logging
 
 // Swagger Documentation
@@ -157,6 +159,12 @@ if (syncDb) {
 
 // Global sync is disabled above, so ensure ONLY the advert columns/tables exist
 // (idempotent, targeted — does not touch the rest of the schema).
+const { ensureBranchSchema } = require('./helper/branchSchema')
+ensureBranchSchema(db)
+  .then(() => console.log('[branchSchema] ensured'))
+  .catch((err) => console.error('[branchSchema] failed:', err.message))
+require('./helper/runningCosts').ensureRunningCostSchema().catch((e) => console.error('[runningCostSchema]', e.message))
+
 const { ensureAdvertSchema } = require('./helper/advertSchema')
 ensureAdvertSchema(db)
   .then(() => console.log('[advertSchema] ensured'))
@@ -172,6 +180,37 @@ const { ensureBookingApprovalSchema } = require('./helper/bookingApprovalSchema'
 ensureBookingApprovalSchema(db)
   .then(() => console.log('[bookingApprovalSchema] ensured'))
   .catch((err) => console.error('[bookingApprovalSchema] failed:', err.message))
+
+const { ensureLoyaltySchema } = require('./helper/loyaltySchema')
+ensureLoyaltySchema(db)
+  .then(() => console.log('[loyaltySchema] ensured'))
+  .catch((err) => console.error('[loyaltySchema] failed:', err.message))
+
+// Chair moves, chair market and renters' own plans: tables first, then the
+// one-time renter plan step. The server starts listening only after this, so
+// no request ever sees renters without their free days.
+const { ensureRenterMoveSchema } = require('./helper/renterMoveSchema')
+const { ensureChairMarketSchema } = require('./helper/chairMarketSchema')
+const { runRenterPlanMigration } = require('./helper/renterPlanMigration')
+const chairReady = Promise.all([
+  ensureRenterMoveSchema(db)
+    .then(() => console.log('[renterMoveSchema] ensured'))
+    .then(() => runRenterPlanMigration(db))
+    .then((r) => {
+      if (!r.ran) return
+      console.log(`[renterPlanMigration] ${r.renters} chair renters got 30 free days`)
+      if (r.blocked.length) {
+        console.warn(`[renterPlanMigration] ${r.blocked.length} chair renters are still blocked from the old rule; review:`,
+          r.blocked.map((b) => `${b.id} ${b.salonName} <${b.email}>`).join('; '))
+      }
+    }),
+  ensureChairMarketSchema(db).then(() => console.log('[chairMarketSchema] ensured')),
+]).catch((err) => console.error('[chair schema / renter plan migration] failed:', err.message))
+
+const { ensureMobileBarberSchema } = require('./helper/mobileBarberSchema')
+ensureMobileBarberSchema(db)
+  .then(() => console.log('[mobileBarberSchema] ensured'))
+  .catch((err) => console.error('[mobileBarberSchema] failed:', err.message))
 
 // Handle unhandled promise rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
@@ -205,8 +244,8 @@ const gracefulShutdown = () => {
 process.on('SIGTERM', gracefulShutdown)
 process.on('SIGINT', gracefulShutdown)
 
-// Start the server
-server.listen(serverPort, (err) => {
+// Start the server (after the chair renter tables and plan step are ready)
+chairReady.finally(() => server.listen(serverPort, (err) => {
   if (err) throw err
   
   const env = process.env.NODE_ENV || 'development'
@@ -231,7 +270,7 @@ server.listen(serverPort, (err) => {
   // Publish the App-Link / Universal-Link association files to the apex
   // trimworldwide.com document root so tapped share links open the app.
   publishApexDeepLinkFiles()
-})
+}))
 
 
 
@@ -240,5 +279,13 @@ require('./jobs/appVersionCron')
 
 // ─── Booking Requests Cron (expiry + shop reminder, every 5 minutes) ─────────
 require('./jobs/bookingRequestCron')
+
+// ─── Renter Move Cron (chair renters moving shop on their move date) ─────────
+require('./jobs/renterMoveCron')
+require('./jobs/mobileVisitCron')
+require('./jobs/brandPlanCron')
+require('./jobs/approvalsCron')
+require('./jobs/accessPeriodCron')
+require('./jobs/runningCostCron')
 
 // hello

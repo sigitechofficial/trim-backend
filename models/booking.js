@@ -232,6 +232,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    // Chair renter moved shop after this booking's day: the address the client
+    // actually went to (addressDBS id). Null = use the salon's current address.
+    visitAddressId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     // Accept with a new time: the shop moved the request and waits for the
     // client to confirm (requestOutcome 'proposed'). previous* = the time the
     // client originally asked for.
@@ -251,6 +257,35 @@ module.exports = (sequelize, DataTypes) => {
     clientDeclinedAt: { type: DataTypes.DATE, allowNull: true },
     // Who answered the request for the shop (owner or staff name).
     respondedByName: { type: DataTypes.STRING(255), allowNull: true },
+    // Loyalty reward used on this booking (set by the server, never the app).
+    loyaltyDiscount: { type: DataTypes.DECIMAL(20, 2), allowNull: false, defaultValue: 0 },
+    loyaltyPercentage: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+    loyaltyCardId: { type: DataTypes.INTEGER, allowNull: true },
+    // Mobile barber visit: the barber travels to the client's address
+    // (visitAddressId). travelFee is part of total, set by the server.
+    isMobileVisit: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    travelFee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+    travelMiles: { type: DataTypes.DECIMAL(6, 1), allowNull: true },
+    // Home visit day (helper/mobileVisitStatus.js): barber set off with an ETA,
+    // arrived, and the one-off reminder / running-late notice times.
+    onTheWayAt: { type: DataTypes.DATE, allowNull: true },
+    etaMinutes: { type: DataTypes.INTEGER, allowNull: true },
+    arrivedAt: { type: DataTypes.DATE, allowNull: true },
+    arrivedDistanceM: { type: DataTypes.INTEGER, allowNull: true }, // metres from the pin at I've arrived
+    // Where the barber was at On my way / I've arrived, and checks against fake GPS.
+    onTheWayLat: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+    onTheWayLng: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+    arrivedLat: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+    arrivedLng: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+    arrivedAccuracyM: { type: DataTypes.INTEGER, allowNull: true },
+    mockAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // null, 'suspicious' (too fast from On my way) or 'mock' (fake location seen before)
+    arrivalFlag: { type: DataTypes.STRING(16), allowNull: true },
+    // Client's answer to "Is your barber here?": 'yes', 'no' or 'auto_yes' (no answer in time)
+    clientConfirm: { type: DataTypes.STRING(8), allowNull: true },
+    clientConfirmAt: { type: DataTypes.DATE, allowNull: true },
+    barberRemindedAt: { type: DataTypes.DATE, allowNull: true },
+    lateNoticeAt: { type: DataTypes.DATE, allowNull: true },
   })
 
   booking.associate = (models) => {

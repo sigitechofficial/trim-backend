@@ -1,4 +1,5 @@
 const express = require('express')
+const adminOnly = require('../../middlewares/adminOnly')
 const fs = require('fs')
 const multer = require('multer')
 const path = require('path')
@@ -8,6 +9,10 @@ const adminReports = require('../../controllers/adminController/adminReportsCont
 const reportController = require('../../controllers/salonControllers/newReportsController')
 const customerController = require('../../controllers/userControllers/customerController')
 const protect = require('../../middlewares/accessCheck')
+const loyaltyController = require('../../controllers/loyaltyController')
+const renterMoveController = require('../../controllers/salonControllers/renterMoveController')
+const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
+const mobileBarberController = require('../../controllers/mobileBarberController')
 const catchAsync = require('../../middlewares/catchAync')
 const {
   user,
@@ -190,6 +195,9 @@ router.put(
   catchAsync(adminController.updateSalonDetails),
 )
 router.get('/salon-view', protect, catchAsync(adminController.fecthSalons))
+// Step A: a brand, its branches and its team.
+router.get('/brands/by-salon/:salonId', protect, catchAsync(adminController.brandDetail))
+router.get('/brands/:id', protect, catchAsync(adminController.brandDetail))
 router.get(
   '/salon-without/:sticker',
   protect,
@@ -217,6 +225,7 @@ router.put(
   protect,
   catchAsync(adminController.changeSalonStatus),
 )
+router.put('/branch-change-status/:salonId', protect, catchAsync(adminController.changeBranchStatus))
 router.get(
   '/salon-subscription/:id',
   protect,
@@ -226,6 +235,32 @@ router.patch(
   '/salon-booking-approval/:id',
   protect,
   catchAsync(adminController.updateSalonBookingApproval),
+)
+// Chair renters moving shop
+router.get('/renter-moves', protect, adminOnly, catchAsync(renterMoveController.adminList))
+router.patch('/renter-moves/:move/cancel', protect, adminOnly, catchAsync(renterMoveController.adminCancel))
+router.patch('/renter-moves/:move/rent-settled', protect, adminOnly, catchAsync(renterMoveController.adminSettleRent))
+router.patch('/renter-moves/:move/retry', protect, adminOnly, catchAsync(renterMoveController.adminRetry))
+router.get('/chair-market', protect, adminOnly, catchAsync(chairMarketController.adminOverview))
+router.patch('/chair-market/offers/:offer/close', protect, adminOnly, catchAsync(chairMarketController.adminCloseOffer))
+router.get('/mobile-barbers', protect, catchAsync(mobileBarberController.adminList))
+router.get('/visit-reports', protect, catchAsync(mobileBarberController.adminReports))
+// Running Costs: what it costs to run Trim (main admin only).
+const runningCosts = require('../../controllers/adminController/runningCostsController')
+const fullAdminOnly = require('../../middlewares/fullAdminOnly')
+router.get('/running-costs', protect, fullAdminOnly, catchAsync(runningCosts.summary))
+router.post('/running-costs/refresh', protect, fullAdminOnly, catchAsync(runningCosts.refresh))
+router.put('/running-costs/settings', protect, fullAdminOnly, catchAsync(runningCosts.saveSettings))
+router.put('/visit-reports/:id', protect, catchAsync(mobileBarberController.adminDecide))
+router.get(
+  '/salon-loyalty/:id',
+  protect,
+  catchAsync(loyaltyController.adminGetShopLoyalty),
+)
+router.patch(
+  '/salon-loyalty/:id',
+  protect,
+  catchAsync(loyaltyController.adminSetShopLoyalty),
 )
 router.delete(
   '/salon-delete/:id',

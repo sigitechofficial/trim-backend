@@ -31,6 +31,7 @@ function getFirebaseAdmin() {
 const FIREBASE_PROVIDER_MAP = {
   'google.com': 'google',
   'apple.com': 'apple',
+  'facebook.com': 'facebook',
 }
 
 /**

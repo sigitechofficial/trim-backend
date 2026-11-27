@@ -30,6 +30,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(10, 2),
         defaultValue: 0,
       },
+      // Loyalty reward taken off this line; `total` is already reduced by it.
+      loyaltyDiscount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
       duration: {
         type: DataTypes.INTEGER,
         allowNull: false,

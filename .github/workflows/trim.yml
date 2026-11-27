@@ -39,6 +39,11 @@ jobs:
         run: |
           echo "${{ secrets.ENV_FILE_CONTENT_PROD }}" > .env
           echo "REBOOK_CRON_SECRET=${{ secrets.REBOOK_CRON_SECRET }}" >> .env
+          # Old store Business apps sign in with Google/Apple without a token:
+          # keep that working until the new apps are out, then remove this line.
+          echo "SOCIAL_LOGIN_TOKEN=optional" >> .env
+          # Running costs read the AWS bill, which cPanel cannot reach.
+          echo "RUNNING_COST_TIMER=off" >> .env
 
       - name: Create config folder and files
         run: |

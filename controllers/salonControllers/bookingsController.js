@@ -68,8 +68,23 @@ const {
   timeProposed,
 } = require('../eventDrivenCommunication/appointmentRequest')
 const { DateTime } = require('luxon')
+const { isSalonRowActive } = require('../../helper/salonSubscriptionRule')
 const { requestExpiresAt: requestDeadline } = require('../../helper/bookingApproval')
 const { expireOverdueRequestsSafely } = require('../../helper/expireBookingRequests')
+const loyalty = require('../../helper/loyalty')
+const mobileBarber = require('../../helper/mobileBarber')
+const mobileVisitStatus = require('../../helper/mobileVisitStatus')
+const visitReports = require('../../helper/visitReports')
+const { actingSalonId } = require('../../helper/branchScope')
+const { periodRefusal, periodRefusalFor } = require('../../helper/accessPeriods')
+
+// Step C: drop team members whose branch access (for a period) doesn't cover `on`.
+async function inPeriodOnly(rows, on) {
+  if (!rows?.length) return rows
+  const found = await employee.findAll({ where: { id: rows.map((e) => e.id) }, attributes: ['id', 'accessFrom', 'accessUntil', 'accessState'] })
+  const out = new Set(found.filter((r) => periodRefusal(r, String(on).slice(0, 10))).map((r) => r.id))
+  return out.size ? rows.filter((e) => !out.has(e.id)) : rows
+}
 const {
   resolveRequestActor,
   ownRequestBookingIds,
@@ -335,8 +350,8 @@ let returnFunction = (status, message, data, error) => {
 
 exports.calendarAppointments = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req?.user?.id },
-    attributes: ['id', 'parentSalonId', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate'],
+    where: { id: await actingSalonId(req) },
+    attributes: ['id', 'parentSalonId', 'isExternalEmployee', 'renterGraceUntil', 'onlinePayments', 'autoAcceptBookings', 'approvalScope', 'registrationExpiryDate', 'registrationDate', 'subscriptionLatestPaymentStatus', 'planSource', 'pausedReason', 'closedAt'],
   })
   // Expire overdue requests first so the calendar and the requests count are current.
   if (salon?.id) await expireOverdueRequestsSafely({ salonDetailId: salon.id })
@@ -375,9 +390,13 @@ exports.calendarAppointments = async (req, res, next) => {
     ],
     [
       literal(
-        `(SELECT CONCAT(users.firstName, ' ', users.lastName)
-          FROM users
-          INNER JOIN bookings ON bookings.customerId = users.id
+        // The name on the booking first (walk-ins have no account), then the
+        // client's account name (QA-09: tiles said "Client" for walk-ins).
+        `(SELECT COALESCE(
+             NULLIF(TRIM(CONCAT(IFNULL(bookings.clientFirstName, ''), ' ', IFNULL(bookings.clientLastName, ''))), ''),
+             NULLIF(TRIM(CONCAT(IFNULL(users.firstName, ''), ' ', IFNULL(users.lastName, ''))), ''))
+          FROM bookings
+          LEFT JOIN users ON users.id = bookings.customerId
           WHERE bookings.id = jobs.bookingId
           LIMIT 1)`
       ),
@@ -404,6 +423,11 @@ exports.calendarAppointments = async (req, res, next) => {
       literal(`(SELECT bookings.requestOutcome FROM bookings WHERE bookings.id = jobs.bookingId)`),
       'requestOutcome',
     ],
+    // Home visit: the calendar tile shows a "Home visit" tag.
+    [
+      literal(`(SELECT bookings.isMobileVisit FROM bookings WHERE bookings.id = jobs.bookingId)`),
+      'isMobileVisit',
+    ],
   ]
 
   if (salon?.parentSalonId) {
@@ -412,19 +436,24 @@ exports.calendarAppointments = async (req, res, next) => {
       attributes: ['id', 'salonName', 'registrationExpiryDate', 'registrationDate'],
     })
 
-    if (parentSalon) {
-      parentSalonName = parentSalon.salonName
-      subscriptionSalon = parentSalon
-    }
+    // A chair renter pays for their own plan, so only the shop name comes
+    // from the host; the subscription stays the renter's own.
+    if (parentSalon) parentSalonName = parentSalon.salonName
   }
   if (!salon) {
     throw new AppError('Resource not found', 404)
   }
+  const calDay = String(req.params?.date || '').replace(/[^0-9-]/g, '')
   const employeCondition = {
     salonDetailId: salon?.id,
     deleted: 0,
     status: true,
     isExternalEmployee: false,
+    // Someone who doesn't take client bookings only shows on a day they have one.
+    [Op.or]: [
+      { bookable: true },
+      literal(`EXISTS (SELECT 1 FROM jobs cj WHERE cj.employeeId = employee.id AND cj.on = '${calDay}' AND cj.deletedAt IS NULL)`),
+    ],
   }
   const jobCondition = {
     status: {
@@ -556,8 +585,9 @@ exports.calendarAppointments = async (req, res, next) => {
     results.push(unassign)
   }
 
-  // Check salon subscription status (parent salon for rent-a-chair / external employees)
+  // Check salon subscription status (a chair renter's own plan for renters)
   let subscriptionExpire = false
+  const renterBetweenShops = !!(salon?.isExternalEmployee && !salon?.parentSalonId && salon?.renterGraceUntil)
   const subscriptionSalonId = subscriptionSalon?.id ?? salon?.id
   const salonSubscription = await subscriptions.findOne({
     where: { salonDetailId: subscriptionSalonId },
@@ -581,6 +611,15 @@ exports.calendarAppointments = async (req, res, next) => {
     }
   }
 
+  if (salon?.isExternalEmployee) {
+    subscriptionExpire = !isSalonRowActive(salon, DateTime.now().toISODate())
+  }
+  // Step A: a branch on the brand's plan follows that plan (copied onto the
+  // branch row), not the shop's last staff-plan record.
+  if (salon?.planSource === 'brand') {
+    subscriptionExpire = !isSalonRowActive(salon, DateTime.now().toISODate())
+  }
+
   const output = response({
     message: 'Success.',
     data: {
@@ -594,6 +633,8 @@ exports.calendarAppointments = async (req, res, next) => {
       subscriptionExpire,
       registrationExpiryDate: subscriptionSalon?.registrationExpiryDate,
       registrationDate: subscriptionSalon?.registrationDate,
+      renterBetweenShops,
+      renterGraceUntil: renterBetweenShops ? salon.renterGraceUntil : null,
     },
   })
 
@@ -625,12 +666,7 @@ exports.salonBookings = async (req, res, next) => {
       status: {
         [Op.or]: ['book', 'pending', 'requested'],
       },
-      [Op.and]: literal(`EXISTS (
-      SELECT 1
-      FROM salonDetails
-      WHERE salonDetails.id = booking.salonDetailId
-      AND salonDetails.userId = ${userId}
-    )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       clientRemoved: false,
     },
     attributes: [
@@ -650,6 +686,7 @@ exports.salonBookings = async (req, res, next) => {
       'countryCode',
       'phoneNum',
       'vatAmount',
+      'isMobileVisit',
       [
         literal(`(SELECT CONCAT(users.firstName, ' ', users.lastName)
                 FROM users
@@ -702,12 +739,7 @@ exports.salonBookings = async (req, res, next) => {
 
   const salonEmployee = await employee.findAll({
     where: {
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
       isExternalEmployee: false,
       status: true,
     },
@@ -762,6 +794,8 @@ exports.salonBookings = async (req, res, next) => {
       total: booking.total,
       services,
       specialists: specialists.length > 0 ? [...new Set(specialists)] : [''],
+      // Home visit: the calendar shows a "Mobile visit" tag.
+      isMobileVisit: !!booking.isMobileVisit,
     }
     bookings.push(retObj)
   })
@@ -904,7 +938,7 @@ exports.getbookingByFilter = async (req, res, next) => {
 
 exports.bookingDetails = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'connectAccountId'], // ✅ include account ID
   });
 
@@ -1022,6 +1056,7 @@ exports.bookingDetails = async (req, res, next) => {
       serviceName: ele.service?.serviceName,
       color: ele.service?.category?.color,
       price: ele.total,
+      loyaltyDiscount: ele.loyaltyDiscount,
       startTime: dateManipulation.convertTo12HourFormat(ele.startTime),
       duration: ele.duration,
       endTime: dateManipulation.convertTo12HourFormat(ele.endTime),
@@ -1031,6 +1066,16 @@ exports.bookingDetails = async (req, res, next) => {
     };
     services.push(obj);
   });
+
+  // The client's visit card at this shop ("3 / 5 visits", reward ready...).
+  let loyaltyCard = null
+  if (bookingData.customerId > 0) {
+    try {
+      loyaltyCard = await loyalty.summaryForClient(bookingData.salonDetailId, bookingData.customerId)
+    } catch (err) {
+      console.error('[loyalty] booking detail card failed:', err.message)
+    }
+  }
 
   const clientName = `${bookingData.user?.firstName || bookingData.clientFirstName} ${bookingData.user?.lastName || bookingData.clientLastName}`;
   const clientContact = `${bookingData.user?.countryCode || bookingData.countryCode} ${bookingData.user?.phoneNum || bookingData.phoneNum}`;
@@ -1076,7 +1121,25 @@ exports.bookingDetails = async (req, res, next) => {
     customerStatus,
     connectAccountId: salon?.connectAccountId || '', // ✅ added here
     couponOnBooking: couponData, // Add coupon information
+    loyaltyDiscount: bookingData.loyaltyDiscount,
+    loyaltyPercentage: bookingData.loyaltyPercentage,
+    loyaltyCard,
+    // Home visit: the client's address (postcode area only until accepted).
+    isMobileVisit: !!bookingData.isMobileVisit,
+    travelFee: bookingData.travelFee,
+    travelMiles: bookingData.travelMiles,
   };
+  if (bookingData.isMobileVisit) {
+    const holder = { isMobileVisit: true, visitAddressId: bookingData.visitAddressId, status: bookingData.status, on: bookingData.on }
+    await mobileBarber.attachVisitAddress(holder)
+    bookingDetail.visitAddress = holder.visitAddress || null
+    // On my way / Arrived buttons and their times.
+    Object.assign(bookingDetail, mobileVisitStatus.statusFields(bookingData), {
+      visitWindow: mobileVisitStatus.windowState(bookingData),
+      // A client's "didn't arrive" report, if any (the barber can reply "I'm here").
+      visitReport: (await visitReports.reportFields(bookingData)).visitReport || null,
+    })
+  }
 
   return res.json(returnFunction('1', 'Booking details', { bookingDetail }, ''));
 };
@@ -1204,6 +1267,11 @@ exports.bookingRequests = async (req, res, next) => {
       'proposedAt',
       'proposalCount',
       'clientDeclineNote',
+      'status',
+      'isMobileVisit',
+      'visitAddressId',
+      'travelFee',
+      'travelMiles',
     ],
     include: [
       { model: user, attributes: ['id', 'firstName', 'lastName', 'image'] },
@@ -1222,6 +1290,8 @@ exports.bookingRequests = async (req, res, next) => {
     ],
     order: [['requestExpiresAt', 'ASC']],
   })
+  // Home visits show the postcode area only until accepted.
+  await mobileBarber.attachVisitAddress(requests)
   return res.json(
     response({
       message: 'Booking requests',
@@ -1330,6 +1400,8 @@ exports.proposeBookingTime = async (req, res, next) => {
   if (employeeId && !(await activeStaffOf(request.salonDetailId, employeeId))) {
     throw new AppError('This staff member is not available.', 200)
   }
+  const outsideProposal = employeeId ? await periodRefusalFor(employeeId, on) : null
+  if (outsideProposal) throw new AppError(outsideProposal, 200)
 
   // Chain the services back to back from the new start time.
   const bookingJobs = await jobs.findAll({
@@ -1353,6 +1425,8 @@ exports.proposeBookingTime = async (req, res, next) => {
     }
   })
   const endTime = cursor
+  // Home visit: the suggested barber must travel here and have travel time.
+  await mobileBarber.checkVisitMove({ bookingId: request.id, employeeId, on, startTime, endTime })
 
   // Who the client asked for vs who the shop suggests (names for the client).
   const staffNames = async (ids) => {
@@ -1928,7 +2002,7 @@ exports.getServicesofCategories = async (req, res, next) => {
 exports.employeesWithAllServices = async (req, res, next) => {
   const userId = req.user.id
   const SalonDetail = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
   })
   const { services } = req.body
   console.log('ðŸš€ ~ exports.employeesWithAllServices= ~ services:', services)
@@ -2020,9 +2094,13 @@ exports.employeesWithAllServices = async (req, res, next) => {
   */
 exports.employeeAvailability = async (req, res, next) => {
   const { jobDate, duration, employeeId } = req.body
+  // Step C: no slots on days outside this team member's access to the branch.
+  if (await periodRefusalFor(employeeId, jobDate)) {
+    return res.json(returnFunction('1', 'Available Time Slots', { salonOpen: true, availableTimeSlots: [] }, ''))
+  }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -2109,6 +2187,13 @@ exports.employeeAvailability = async (req, res, next) => {
     })
   }
 
+  // Travel time around this barber's home visits that day.
+  const busyNoTravel = [...busyTimes]
+  if (employeeId > 0) {
+    const travel = await mobileBarber.travelBlocks([employeeId], jobDate)
+    busyTimes.push(...(travel.get(Number(employeeId)) || []))
+  }
+
   console.log('TIMES BUSY', JSON.parse(JSON.stringify(busyTimes)))
 
   const closingTime =
@@ -2126,11 +2211,24 @@ exports.employeeAvailability = async (req, res, next) => {
     busyTimes,
   )
 
+  // Adding a service to a booking: does it fit right after the last service?
+  // With bookingId, that booking's own home-visit travel time doesn't count:
+  // the added service just makes the same visit longer.
+  let fitsAt
+  if (req.body?.startAt) {
+    let busyForFit = busyTimes
+    if (employeeId > 0 && Number(req.body.bookingId) > 0) {
+      const travel = await mobileBarber.travelBlocks([employeeId], jobDate, { excludeBookingId: req.body.bookingId })
+      busyForFit = [...busyNoTravel, ...(travel.get(Number(employeeId)) || [])]
+    }
+    fitsAt = Slot.slotAt(jobDate, employeeTiming.openingTime, closingTime, duration, busyForFit, req.body.startAt)
+  }
+
   return res.json(
     returnFunction(
       '1',
       'Available Time Slots',
-      { salonOpen, availableTimeSlots },
+      { salonOpen, availableTimeSlots, ...(fitsAt !== undefined ? { fitsAt } : {}) },
       '',
     ),
   )
@@ -2164,6 +2262,10 @@ exports.addExtraService = async (req, res, next) => {
         'You cannot add service because the booking is marked as no-show'
     }
     throw new appError(message, 200)
+  }
+  for (const ele of extraServices) {
+    const outside = Number(ele.employeeId) > 0 ? await periodRefusalFor(ele.employeeId, ele.jobDate) : null
+    if (outside) throw new appError(outside, 200)
   }
   const bookingData = JSON.parse(JSON.stringify(result))
   const newServiceIds = await Promise.all(
@@ -2351,7 +2453,7 @@ exports.getSalonCustomer = async (req, res, next) => {
 
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2426,7 +2528,7 @@ exports.bulkImportClients = async (req, res, next) => {
   const notify = req.body.notify === true || req.body.notify === 'true'
   const rawClients = Array.isArray(req.body.clients) ? req.body.clients : []
 
-  const SalonDetail = await salonDetail.findOne({ where: { userId } })
+  const SalonDetail = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   if (!SalonDetail) {
     return res.json(returnFunction('0', 'Salon not found.', {}, ''))
   }
@@ -2601,7 +2703,7 @@ exports.addWalkinCustomer = async (req, res, next) => {
   const { email, countryCode, phoneNum, firstName, lastName } = req.body
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2671,11 +2773,38 @@ exports.addWalkinBooking = async (req, res, next) => {
   } = req.body
   const SalonDetail = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   startTime = Convert.convertTo24HourFormat(startTime)
   endTime = Convert.convertTo24HourFormat(endTime)
+
+  // Home visit made by the business ({ mobileVisit: address, travelFee }): the
+  // barber must travel there; the server works out the fee and adds it.
+  let visit = null
+  if (req.body.mobileVisit) {
+    const appointment = { salonDetailId: SalonDetail.id, on: jobDate, startTime, endTime }
+    if (!(employeeId > 0)) {
+      const picked = await mobileBarber.pickMobileBarber({
+        salonDetailId: SalonDetail.id,
+        lat: req.body.mobileVisit.lat,
+        lng: req.body.mobileVisit.lng,
+        serviceIds: (jobsData || []).map((j) => j.serviceId),
+        on: jobDate,
+        startTime,
+        endTime,
+      })
+      if (!picked.available) throw new AppError(picked.reason, 200)
+      employeeId = picked.employeeId
+    }
+    visit = await mobileBarber.prepareBooking({
+      appointment,
+      employeeId,
+      services: jobsData,
+      mobileVisit: req.body.mobileVisit,
+      sentTravelFee: req.body.travelFee,
+    })
+  }
 
   console.log('ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ ~ exports.addWalkinBooking= ~ jobsData:', jobsData)
   const assignTimeSlots = Custom.scheduleSessions(
@@ -2720,7 +2849,11 @@ exports.addWalkinBooking = async (req, res, next) => {
         },
       ],
     })
+    employeeData = await inPeriodOnly(employeeData, jobDate)
     employeeData.sort((a, b) => a.jobs.length - b.jobs.length)
+  } else {
+    const outside = await periodRefusalFor(employeeId, jobDate)
+    if (outside) throw new appError(outside, 200)
   }
 
   const assiginEmployee =
@@ -2798,6 +2931,8 @@ exports.addWalkinBooking = async (req, res, next) => {
     upFrontPolicyVersion: policies?.paymentPolicies[0]?.version,
     noshowPolicyVersion: policies?.noShowPolicies[0]?.version,
     customerStatus: hasAppointments && hasAppointments > 0 ? 'repeat' : 'new',
+    // Home visit: the client's address and the travel fee (added to the total).
+    ...(visit ? { ...visit, total: Number(total) + visit.travelFee, subTotal: Number(total) + visit.travelFee } : {}),
   })
 
   const finalInput = assiginEmployee.map((service) => ({
@@ -2826,7 +2961,7 @@ exports.jobStatus = async (req, res, next) => {
   const { status, jobIds, notify } = req.body
   const jobData = await jobs.findOne({
     where: { id: jobIds },
-    attributes: ['id', 'total', 'employeeId', 'serviceId', 'bookingId'],
+    attributes: ['id', 'total', 'loyaltyDiscount', 'employeeId', 'serviceId', 'bookingId'],
     include: [
       {
         model: employee,
@@ -2838,7 +2973,7 @@ exports.jobStatus = async (req, res, next) => {
       },
       {
         model: booking,
-        attributes: ['id', 'total', 'salonDetailId', 'duration'],
+        attributes: ['id', 'total', 'loyaltyDiscount', 'salonDetailId', 'duration'],
       },
     ],
   })
@@ -2864,8 +2999,17 @@ exports.jobStatus = async (req, res, next) => {
     const updatedBookingDuration =
       parseInt(jobData.booking.duration) - parseInt(jobData.duration)
 
+    const updatedLoyalty = Math.max(
+      parseFloat(jobData.booking.loyaltyDiscount || 0) -
+        parseFloat(jobData.loyaltyDiscount || 0),
+      0,
+    )
     await booking.update(
-      { total: updatedBookingTotal, duration: updatedBookingDuration },
+      {
+        total: updatedBookingTotal,
+        duration: updatedBookingDuration,
+        loyaltyDiscount: updatedLoyalty,
+      },
       { where: { id: jobData.bookingId } },
     )
   } else if (status == 'complete') {
@@ -2908,7 +3052,7 @@ exports.clientHistory = async (req, res, next) => {
     req.user,
   )
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { customerId } = req.body
@@ -2958,7 +3102,15 @@ exports.clientHistory = async (req, res, next) => {
     returnFunction(
       '1',
       'Client Booking History',
-      { clientNote: '', customerStatus, clientBookings },
+      {
+        // The branch's note on this client (it was always sent empty, so the
+        // app's note editor opened blank and saving replaced the old note).
+        clientNote: notes?.customerNote || '',
+        customerStatus,
+        clientBookings,
+        // Step C: what the brand's other branches know (when the client shares it).
+        otherBranches: customerId && salon?.id ? await require('../../helper/clientPrivacy').fromOtherBranches(salon.id, Number(customerId)) : null,
+      },
       '',
     ),
   )
@@ -3029,6 +3181,7 @@ exports.completeBookingAfterOnlinePayment = async ({
   );
 
   Communication.online(bookingId, tipAmount, amount);
+  loyalty.onBookingCompleted(bookingId);
 
   await employeeCommission.update(
     { appointmentClosed: true },
@@ -3081,7 +3234,7 @@ exports.finalizeTapToPay = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'connectAccountId'],
   });
 
@@ -3561,6 +3714,7 @@ exports.checkoutCash = async (req, res, next) => {
   )
   //EMAIL --//TODO
   Communication.cash(bookingId, tip || 0, amount)
+  loyalty.onBookingCompleted(bookingId)
   // EmailAppointmentConfirmToSalon(['sigidevelopers@gmail.com'],inputData);
 
   employeeCommission.update(
@@ -3671,6 +3825,7 @@ exports.checkOutMinimalPayment = async (req, res, next) => {
 
     // Send communication (email and notifications)
     Communication.online(bookingId, tipAmount, amount);
+    loyalty.onBookingCompleted(bookingId);
 
     // Update employee commission records
     await employeeCommission.update(
@@ -3774,6 +3929,16 @@ exports.rescheduleSoloEmployeeAppointment = async (req, res, next) => {
   )
   const appointmentDate = new Date(appointment.on)
   const appointmentDay = dateManipulation.dayOnDate(appointmentDate)
+
+  // Home visit: keeps travel time around it (the barber stays the same here).
+  await mobileBarber.checkVisitMove({
+    bookingId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  const outsideMove = employeeId ? await periodRefusalFor(employeeId, appointment.on) : null
+  if (outsideMove) return res.json(returnFunction('2', outsideMove, {}, ''))
 
   // services offered by single employees
   if (employeeId) {
@@ -3928,7 +4093,20 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
   const assignTimeSlots = Custom.scheduleSessions(appointment, servicesinput)
   // console.log("ðŸš€ ~ assignTimeSlots:", assignTimeSlots);
 
-  JobsInput = Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  // Home visit: every service stays with the one barber who travels.
+  const visitMove = await mobileBarber.checkVisitMove({
+    bookingId,
+    employeeId: req.body?.employeeId,
+    on: appointment.on,
+    startTime: appointment.startTime,
+    endTime: appointment.endTime,
+  })
+  if (!visitMove) employeeData = await inPeriodOnly(employeeData, appointment.on)
+  JobsInput = visitMove
+    ? assignTimeSlots.map((slot) => ({ ...slot, employeeId: visitMove.employeeId, status: 'assign' }))
+    : Custom.assignEmployeesToServices(employeeData, assignTimeSlots)
+  const outsideMulti = await periodRefusalFor(JobsInput.filter((j) => j.status === 'assign').map((j) => j.employeeId), appointment.on)
+  if (outsideMulti) return res.json(returnFunction('2', outsideMulti, {}, ''))
   appointment.status = 'book'
   const findUnAssign = JobsInput.find((el) => el.status === 'pending')
   if (findUnAssign) {
@@ -3986,7 +4164,7 @@ exports.rescheduleMultipleEmployeeAppointment = async (req, res, next) => {
     )
 
     await booking.update({
-      total:appointment.total,
+      total: await mobileBarber.totalWithTravelFee(bookingId, appointment.total),
       discount:0,
       vatAmount:appointment.vatOriginalAmount,
     },
@@ -4050,7 +4228,7 @@ exports.salonServices = async (req, res, next) => {
     include: [
       {
         model: salonDetail,
-        where: { userId },
+        where: { id: await actingSalonId(req) },
         attributes: [],
       },
     ],
@@ -4206,12 +4384,7 @@ exports.serviceData = async (req, res, next) => {
       status: true,
       isExternalEmployee: false,
       // Add your conditions here
-      [Op.and]: literal(`EXISTS (
-        SELECT 1
-        FROM salonDetails
-        WHERE salonDetails.id = employee.salonDetailId
-        AND salonDetails.userId = ${userId}
-      )`),
+      salonDetailId: await actingSalonId(req), // the acting branch (Step A)
     },
     attributes: [
       ['id', 'employeeId'],
@@ -4353,7 +4526,8 @@ exports.serviceData = async (req, res, next) => {
     const total =
       parseFloat(jobData.total) +
       parseFloat(jobData.serviceDiscount) +
-      parseFloat(jobData.extraDiscount)
+      parseFloat(jobData.extraDiscount) +
+      parseFloat(jobData.loyaltyDiscount || 0)
     serviceData = {
       id: jobData.serviceId,
       serviceName: jobData.service.serviceName,
@@ -4426,12 +4600,25 @@ exports.editService = async (req, res, next) => {
     where: { id: jobId },
     include: { model: booking },
   })
+  const outsideEdit = employeeId && jobData ? await periodRefusalFor(employeeId, jobData.on) : null
+  if (outsideEdit) throw new appError(outsideEdit, 200)
   //!TODO skipped booking End Time .. because its Not required on frontend on any app (IMP .. check if it required in reports)
+
+  // A booking that used the loyalty reward keeps it on the edited line
+  // (none if the new service is excluded from the offer).
+  const lineLoyalty = await loyalty.lineDiscount(jobData.booking, serviceId, price)
+  const lineTotal = Math.max(parseFloat(price) - lineLoyalty, 0)
+  const bookingLoyalty = Math.max(
+    parseFloat(jobData.booking.loyaltyDiscount || 0) -
+      parseFloat(jobData.loyaltyDiscount || 0) +
+      lineLoyalty,
+    0,
+  )
 
   let updatedBookingTotal =
     parseFloat(jobData.booking.total) - parseFloat(jobData.total)
 
-  updatedBookingTotal = updatedBookingTotal + parseFloat(price)
+  updatedBookingTotal = updatedBookingTotal + lineTotal
 
   let updatedBookingDuration =
     parseInt(jobData.booking.duration) - parseInt(jobData.duration)
@@ -4445,7 +4632,8 @@ exports.editService = async (req, res, next) => {
       serviceId,
       startTime,
       endTime,
-      total: price,
+      total: lineTotal,
+      loyaltyDiscount: lineLoyalty,
       serviceDiscount,
       extraDiscount,
       duration,
@@ -4502,6 +4690,7 @@ exports.editService = async (req, res, next) => {
   await booking.update(
     {
       total: updatedBookingTotal,
+      loyaltyDiscount: bookingLoyalty,
       duration: updatedBookingDuration,
       status: bookingStatus,
       startTime: startFrom,
@@ -4554,6 +4743,9 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
       "noshowPolicyVersion",
       "cancellationPolicyVersion",
       "by",
+      "isMobileVisit",
+      "travelFee",
+      "arrivedAt",
     ],
     include: [
       { model: user, attributes: ["id", "stripeCustomerId", "firstName", "lastName"] },
@@ -4577,6 +4769,14 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     );
   }
 
+  // Home visit: the client was not in when the barber got there.
+  if (appointment.isMobileVisit && !appointment.arrivedAt) {
+    throw new AppError('Tap "I\'ve arrived" on this home visit first, then mark the no-show.', 200);
+  }
+  if (appointment.isMobileVisit && (await visitReports.hasOpenReport(appointment.id))) {
+    throw new AppError('Your client has reported this visit. Wait until the report is settled.', 200);
+  }
+
   const updatedBooking = { tip: 0 };
 
   if (
@@ -4597,9 +4797,14 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
     const paid =
       parseFloat(appointment.actualCapturedAmount)
 
-    const noshowCharges = parseFloat(
-      (appointment.total * (refundPercentage / 100)).toFixed(2)
-    );
+    // Home visit: the percentage on the services, plus the full travel fee.
+    const noshowCharges = appointment.isMobileVisit
+      ? mobileBarber.noShowCharge({
+          total: appointment.total,
+          travelFee: appointment.travelFee,
+          percent: refundPercentage,
+        })
+      : parseFloat((appointment.total * (refundPercentage / 100)).toFixed(2));
 
     if (paid > noshowCharges) {
       // -----> CASE: Initial payment greater, refund the difference
@@ -4697,6 +4902,7 @@ exports.markAppointmentAsNoShow = async (req, res, next) => {
 
   if (updatedBooking.status == "no-show") {
     await jobs.update({ status: "no-show" }, { where: { bookingId } });
+    loyalty.onBookingNoShow(bookingId);
     noShowMessages(appointment?.id, finePercentage, true);
   } else {
     noShowMessages(appointment?.id, finePercentage);

@@ -44,13 +44,14 @@ const {
 } = require('../../utils/reportsFormator/numberofMonths')
 
 const CustomDate = require('../../utils/currentDay')
+const { actingSalonId } = require('../../helper/branchScope')
 
 //* 1&2 Reports->  Busiest Vs Quietest  (Days and hours)---------------------------------------------------
 
 exports.busiestVsQuietest = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
   const salon = await salonDetail.findOne({
-    where: { userId: userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -100,7 +101,7 @@ exports.servicesByStaffPerWeek = async (req, res, next) => {
   const userId = req.params?.salon ?? req.user?.id
   console.log('🚀 ~ exports.servicesByStaffPerWeek= ~ userId:', userId)
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -176,7 +177,7 @@ exports.totalBookings = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -234,7 +235,7 @@ exports.mostPopularServices = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -285,7 +286,7 @@ exports.bookingPerformance = async (req, res, next) => {
   const userId = req.params?.salon || req.user?.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -383,7 +384,7 @@ exports.IncomeReportYear = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -512,7 +513,7 @@ exports.weeklyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -745,7 +746,7 @@ exports.hourlyIncomeReport = async (req, res, next) => {
 
   // Fetch the salon details for the current user
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -913,7 +914,7 @@ exports.averageJobsReport = async (req, res, next) => {
   let startDate, endDate
 
   const salonData = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id', 'createdAt'],
     raw: true,
   })
@@ -1000,7 +1001,7 @@ exports.averageJobsReport = async (req, res, next) => {
 exports.subscriptionHistory = async (req, res, next) => {
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     include: [{ model: user, attributes: ['stripeCustomerId'] }],
   });
 
@@ -1107,7 +1108,7 @@ async function resolveRentChairReportEmployee(req) {
         staffWhere.salonDetailId = salonDetailIdParam
       } else {
         const ownerSalon = await salonDetail.findOne({
-          where: { userId: req.user.id },
+          where: { id: await actingSalonId(req) },
           attributes: ['id'],
         })
         if (ownerSalon) staffWhere.salonDetailId = ownerSalon.id
@@ -1516,10 +1517,17 @@ function calculateExpectedRentForEmployee(
 function sumOwnerExpectedRentForPeriod(rentalEmployees, periodStart, periodEnd) {
   let total = 0
   rentalEmployees.forEach((emp) => {
+    // A renter who moved to another shop pays rent only up to the day they left.
+    let end = periodEnd
+    if (emp.leftAt) {
+      const left = toDateOnly(emp.leftAt)
+      if (left < toDateOnly(periodStart)) return
+      if (left < toDateOnly(end)) end = left
+    }
     total += calculateExpectedRentForEmployee(
       emp.employeeWagesMethod,
       periodStart,
-      periodEnd,
+      end,
       getEmployeeRentStartDate(emp),
     )
   })
@@ -1551,15 +1559,20 @@ exports.incomeWithRentMonthly = async (req, res, next) => {
   const thisYear = parseInt(year, 10)
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('Shop not found', 200)
 
   // Get all active rent-a-chair employees with their wages method
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id', 'createdAt'],
+    // Current renters, and renters who moved away (rent counts until leftAt).
+    where: {
+      salonDetailId: salon.id,
+      isExternalEmployee: true,
+      [Op.or]: [{ deleted: false }, { leftAt: { [Op.ne]: null } }],
+    },
+    attributes: ['id', 'createdAt', 'leftAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,
@@ -1621,14 +1634,19 @@ exports.incomeWithRentDaily = async (req, res, next) => {
     throw new AppError('startDate and endDate are required', 400)
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: req.params?.salon ? { userId } : { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('Shop not found', 200)
 
   const rentalEmployees = await employee.findAll({
-    where: { salonDetailId: salon.id, deleted: false, isExternalEmployee: true },
-    attributes: ['id', 'createdAt'],
+    // Current renters, and renters who moved away (rent counts until leftAt).
+    where: {
+      salonDetailId: salon.id,
+      isExternalEmployee: true,
+      [Op.or]: [{ deleted: false }, { leftAt: { [Op.ne]: null } }],
+    },
+    attributes: ['id', 'createdAt', 'leftAt'],
     include: [{
       model: employeeWagesMethod,
       required: true,

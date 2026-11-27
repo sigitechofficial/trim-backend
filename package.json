@@ -4,12 +4,13 @@
   "description": "",
   "main": "thetrim.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/",
     "start": "nodemon thetrim.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-cost-explorer": "3.723.0",
     "@sentry/node": "^7.92.0",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",

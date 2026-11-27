@@ -28,6 +28,8 @@ const otpGenerator = require('otp-generator')
 const EmailResetPasswordOtpToAll = require('../../helper/ResetPasswordOtpToAll')
 const EmailWelcome = require('../../helper/WelcomeForBoth')
 const clingReminderEmail = require('../../helper/clingReminderEmail')
+const { DateTime } = require('luxon')
+const { isSalonRowActive } = require('../../helper/salonSubscriptionRule')
 const IncompleteRegistrationReminder = require('../../helper/IncompleteRegistrationReminder')
 const StripeOnboardingReminderEmail = require('../../helper/StripeOnboardingReminderEmail')
 const {
@@ -54,8 +56,8 @@ const generateOTP = () =>
 //! Function to create JWT Tocken
 const { requestsLevelFrom } = require('../../helper/bookingRequestAccess')
 
-const signTocken = (id, dvToken) => {
-  return jwt.sign({ id, dvToken }, process.env.JWT_ACCESS_SECRET)
+const signTocken = (id, dvToken, extra = {}) => {
+  return jwt.sign({ id, dvToken, ...extra }, process.env.JWT_ACCESS_SECRET)
 }
 
 const defaultAccess = [
@@ -95,7 +97,7 @@ const defaultAccess = [
     level: 'none',
   },
   {
-    access: 'Coupons',
+    access: 'Coupons &\nloyalty',
     key: 'manageDeals',
     level: 'none',
   },
@@ -138,6 +140,16 @@ let returnFunction = (status, message, data, error) => {
 }
 // ! Module 1 : Auth
 // ! _________________________________________________________________________________________________________________________________
+// A chair renter's own Trim plan: they pay for it themselves, so the app can
+// show "Renew your plan" from this without asking the host shop.
+const renterSubscriptionOf = (salon) => ({
+  active: isSalonRowActive(salon, DateTime.now().toISODate()),
+  expiresOn: salon?.registrationExpiryDate ?? null,
+  status: salon?.subscriptionLatestPaymentStatus ?? null,
+  // Set when the renter's shop covers their plan (status 'shop_covered').
+  coveredByShop: salon?.subscriptionLatestPaymentStatus === 'shop_covered',
+})
+
 exports.googleSignIn = async (req, res) => {
   const { email, dvToken } = req.body
 
@@ -157,7 +169,6 @@ exports.googleSignIn = async (req, res) => {
 
   if (userData) {
     const token = signTocken(userData.id, dvToken)
-    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
     return res.status(200).json({
       status: '1',
       message: `Welcome to Trim`,
@@ -216,6 +227,22 @@ exports.signup = async (req, res, next) => {
     ],
   })
 
+  // Google / Apple / Facebook: the Firebase ID token must prove the email,
+  // both to create an account and to sign in to an existing one here.
+  {
+    const provider = userExist && ['google', 'apple', 'facebook'].includes(userExist.signedFrom)
+      ? userExist.signedFrom
+      : !userExist ? signedBy : null
+    if (provider) {
+      const social = await require('../../helper/socialSignIn').verifySocialSignIn({
+        idToken: req.body?.idToken,
+        provider,
+        email: userExist ? userExist.email : email,
+      })
+      if (!social.ok) return next(new appError(social.message, 200))
+    }
+  }
+
   if (!userExist && ['google', 'apple', 'facebook'].includes(signedBy)) {
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
     console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
@@ -248,8 +275,6 @@ exports.signup = async (req, res, next) => {
     })
     //  to return a response indicating successful social sign-up
     const token = signTocken(userData.id, dvToken)
-    redis_Client.hSet(`trim${userData.id}`, dvToken, token)
-    
     // Only send welcome email if we have a valid name
     const fullName = `${userData.firstName} ${userData.lastName}`.trim()
     if (fullName) {
@@ -300,7 +325,6 @@ exports.signup = async (req, res, next) => {
         })
       // creating accessToken
       const token = signTocken(userExist.id, dvToken)
-      redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
       // Apple gets status '1' (go to home), Google/Facebook get status '2'
       return res.status(200).json({
         status: userExist.signedFrom === 'apple' ? '1' : '2',
@@ -523,7 +547,6 @@ exports.verifyOTP = async (req, res, next) => {
       userId: userExist.id,
     })
   const token = signTocken(userExist.id, dvToken)
-  redis_Client.hSet(`trim${userExist.id}`, dvToken, token)
   EmailWelcome(
     [userExist.email],
     `${userExist.firstName} ${userExist.lastName}`,
@@ -549,6 +572,16 @@ exports.verifyOTP = async (req, res, next) => {
             4. Login
     ________________________________________
 */
+// Step C: two-step login code (helper/twoStep.js).
+exports.twoStepVerify = async (req, res) => {
+  const out = await require('../../helper/twoStep').verify(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+exports.twoStepResend = async (req, res) => {
+  const out = await require('../../helper/twoStep').resend(req)
+  return res.json(returnFunction(out.ok ? '1' : '0', out.message, {}, ''))
+}
+
 exports.login = async (req, res, next) => {
   const { email, password, dvToken } = req.body;
 
@@ -557,10 +590,14 @@ exports.login = async (req, res, next) => {
   else if (req.body.loginBy == 'email' && !password)
     throw new appError('Please provide Password', 200);
 
-  const User = await user.findOne({
+  // One email can have a client app account and a business account (e.g. a
+  // client hired from the client app): sign in to the business one.
+  const sameEmail = await user.findAll({
     where: { email, deleted: false },
     include: [{ model: deviceToken, required: false, attributes: ['tokenId', 'userId'] }],
+    order: [['id', 'DESC']],
   });
+  const User = sameEmail.find((u) => u.userTypeId != 1) || sameEmail[0] || null;
 
   if (!User && !password) {
     return res.json(
@@ -608,14 +645,30 @@ exports.login = async (req, res, next) => {
     );
   }
 
+  // Any account that is not Google / Apple / Facebook needs its password
+  // (not only 'email': an unexpected sign-in method must not skip the check).
   if (
-    User.signedFrom == 'email' &&
-    !(await bcrypt.compare(password, User.password))
+    !['google', 'apple', 'facebook'].includes(User.signedFrom) &&
+    !(password && User.password && (await bcrypt.compare(password, User.password)))
   ) {
+    // Step C: failed logins go in the activity log (security).
+    require('../../helper/activityLog').recordLogin(User.id, { ok: false, ip: req.ip, dvToken })
     return next(
       new appError('Incorrect email or password. Please try again.', 200),
     );
   }
+
+  // Google / Apple / Facebook: the Firebase ID token must prove it.
+  const social = await require('../../helper/socialSignIn').verifySocialSignIn({
+    idToken: req.body?.idToken,
+    provider: User.signedFrom,
+    email: User.email,
+  });
+  if (!social.ok) return next(new appError(social.message, 200));
+
+  // Step C: two-step login on a device this person hasn't confirmed yet.
+  const twoStepAsk = await require('../../helper/twoStep').check(req, User)
+  if (twoStepAsk) return res.json(twoStepAsk)
 
   // Device Token check
   const found = User.deviceTokens.find(
@@ -638,7 +691,6 @@ exports.login = async (req, res, next) => {
   }
 
   let token = User.userTypeId === 2 ? signTocken(User.id, dvToken) : '';
-  redis_Client.hSet(`trim${User.id}`, dvToken, token);
 
   const response = {
     status: '1',
@@ -684,9 +736,11 @@ exports.login = async (req, res, next) => {
     // Get external employee's own employeeId
     let externalEmployeeId = null;
     if (User.isExternalEmployee) {
+      // After a shop move the old host row is deleted: prefer the current one.
       const extEmployee = await employee.findOne({
         where: { userId: User.id, isExternalEmployee: true },
         attributes: ['id'],
+        order: [['deleted', 'ASC'], ['id', 'DESC']],
       });
       externalEmployeeId = extEmployee ? extEmployee.id : null;
     }
@@ -796,6 +850,9 @@ exports.login = async (req, res, next) => {
         }
       }
       response.data.profileCompletion.subscriptionStatus = subscriptionStatus;
+      if (User.isExternalEmployee) {
+        response.data.profileCompletion.renterSubscription = renterSubscriptionOf(salon);
+      }
     }
   }
 
@@ -839,8 +896,9 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    token = signTocken(salon.userId, dvToken);
-    redis_Client.hSet(`trim${salon.userId}`, dvToken, token);
+    // Staff sessions keep the owner's id (every shop lookup uses it) and now
+    // also say who the staff member is (Step A, 0.1).
+    token = signTocken(salon.userId, dvToken, { staffUserId: User.id });
     result.bookingRequests = requestsLevelFrom(result);
     response.data.accessLevels = result;
 
@@ -857,10 +915,13 @@ exports.login = async (req, res, next) => {
         hasWagesMethod: false,
       };
     } else {
+      // Step A: a manager/receptionist who doesn't take bookings needs no
+      // services, hours or pay method before they can start.
       const isAllDataAvailable =
-        employeeDetails.employeeServices.length !== 0 &&
-        employeeDetails.times.length !== 0 &&
-        employeeDetails.employeeWagesMethod;
+        employeeDetails.bookable === false ||
+        (employeeDetails.employeeServices.length !== 0 &&
+          employeeDetails.times.length !== 0 &&
+          employeeDetails.employeeWagesMethod);
 
       response.status = isAllDataAvailable ? '4' : '5';
       response.message = 'Login successful';
@@ -879,6 +940,37 @@ exports.login = async (req, res, next) => {
   response.data.isExternalEmployee = User.isExternalEmployee;
   if (response && response.data && response.data.isExternalEmployee) {
     response.data.profileCompletion.hasSubscription = true;
+  }
+
+  // Step A: every branch this login can open (the app's branch switcher).
+  // [{ salonId, name, role }], home branch first. New field; old apps ignore it.
+  if (response.data.accessToken) {
+    try {
+      const claims = jwt.verify(response.data.accessToken, process.env.JWT_ACCESS_SECRET)
+      const list = await require('../../helper/branchScope').branchesFor({ user: claims })
+      const names = await salonDetail.findAll({
+        where: { id: list.map((b) => b.salonId) },
+        attributes: ['id', 'salonName'],
+      })
+      const nameOf = new Map(names.map((n) => [n.id, n.salonName]))
+      response.data.branches = list.map((b) => ({ salonId: b.salonId, name: nameOf.get(b.salonId) || '', role: b.role }))
+      // Step C: the login in the activity log of the home branch.
+      require('../../helper/activityLog').recordLogin(User.id, {
+        ok: true, ip: req.ip, newDevice: !found, salonId: list[0]?.salonId, brandId: list[0]?.brandId, role: list[0]?.role,
+      })
+      // The brand, for the owner's branch-plan purchases (RevenueCat id).
+      const brandRow = !claims.staffUserId && list.some((b) => b.brandId)
+        ? await require('../../models').brand.findOne({ where: { ownerUserId: claims.id } })
+        : null
+      if (brandRow) {
+        response.data.brand = {
+          id: brandRow.id, name: brandRow.name, rcAppUserId: brandRow.rcAppUserId,
+          branchLimit: brandRow.branchLimit, planProductId: brandRow.planProductId, planStatus: brandRow.planStatus,
+        }
+      }
+    } catch (err) {
+      console.warn('[login] branch list failed:', err.message)
+    }
   }
 
   return res.json(
@@ -984,7 +1076,6 @@ exports.verifyPasswordOtp = async (req, res, next) => {
   otpData.verifiedInForgetCase = true
   await otpData.save()
   const accessToken = signTocken(otpData.userId, dvToken)
-  redis_Client.hSet(`trim${otpData.userId}`, dvToken, accessToken)
   return res.json(
     returnFunction('1', 'OTP verified successfully!', { accessToken }, ''),
   )
@@ -1002,7 +1093,6 @@ exports.resetPassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password reset',
@@ -1036,7 +1126,6 @@ exports.updatePassword = async (req, res, next) => {
   await User.save()
 
   const token = signTocken(User.id, dvToken)
-  redis_Client.hSet(`trim${User.id}`, dvToken, token)
   return res.status(200).json({
     status: '1',
     message: 'Password updated',
@@ -1171,9 +1260,11 @@ exports.session = async (req, res, next) => {
   // Get external employee's own employeeId
   let externalEmployeeId = null;
   if (User.isExternalEmployee) {
+    // After a shop move the old host row is deleted: prefer the current one.
     const extEmployee = await employee.findOne({
       where: { userId: User.id, isExternalEmployee: true },
       attributes: ['id'],
+      order: [['deleted', 'ASC'], ['id', 'DESC']],
     });
     externalEmployeeId = extEmployee ? extEmployee.id : null;
   }
@@ -1276,6 +1367,7 @@ exports.session = async (req, res, next) => {
         accountConnected: salon?.wallet?.accountConnected ? true : false,
         subscriptionStatus: subscriptionStatus, // Subscription status (e.g., 'active', 'canceled', 'cancelled', etc.)
         employeeId: externalEmployeeId,
+        ...(User?.isExternalEmployee ? { renterSubscription: renterSubscriptionOf(salon) } : {}),
       },
       ...(stripeRestrictions ? { stripeRestrictions } : {}), // Add stripeRestrictions at data level, same as login API
       stripeStatus,
@@ -1299,9 +1391,14 @@ exports.employeeSession = async (req, res, next) => {
   if (!User) {
     throw new appError('Inavlid user', 400)
   }
-  // If user is an employee
+  // If user is an employee. Step B: someone in several branches gets the row
+  // (and permissions) of the branch the app is in (x-salon-id).
+  const askedSalon = parseInt(req.get('x-salon-id'), 10)
+  const inAsked = askedSalon > 0
+    ? await employee.findOne({ where: { userId, salonDetailId: askedSalon, deleted: false }, attributes: ['id'] })
+    : null
   const employeeDetails = await employee.findOne({
-    where: {
+    where: inAsked ? { id: inAsked.id } : {
       userId: userId,
     },
     include: [
@@ -1356,10 +1453,13 @@ exports.employeeSession = async (req, res, next) => {
       hasWagesMethod: false,
     }
   } else {
+    // Same rule as login: a manager/receptionist who doesn't take bookings
+    // needs no services, hours or pay method.
     const isAllDataAvailable =
-      employeeDetails.employeeServices.length !== 0 &&
-      employeeDetails.times.length !== 0 &&
-      employeeDetails.employeeWagesMethod
+      employeeDetails.bookable === false ||
+      (employeeDetails.employeeServices.length !== 0 &&
+        employeeDetails.times.length !== 0 &&
+        employeeDetails.employeeWagesMethod)
 
     response.status = isAllDataAvailable ? '1' : '2'
     response.message = 'Success'

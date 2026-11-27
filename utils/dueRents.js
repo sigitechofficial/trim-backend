@@ -53,6 +53,9 @@ exports.calculateDueRents = (employee) => {
   return {
     rentDue,
     numberCycle,
+    // The business app reads this name for "Un-paid cycle" (and sends it back
+    // when rent is recorded); without it the screen always showed 0.
+    numberOfCycle: numberCycle,
     cycle,
     rentPerCycle: value,
     paymentTillDate: paymentTillDate.toISOString(), // Returning in ISO format

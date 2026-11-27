@@ -8,6 +8,8 @@ const {
   fetchServiceTypes,
 } = require('../../controllers/adminController/adminController')
 const protect = require('../../middlewares/accessCheck')
+const loyaltyController = require('../../controllers/loyaltyController')
+const mobileBarberController = require('../../controllers/mobileBarberController')
 const publicProtected = require('../../middlewares/publicProtected')
 const catchAsync = require('../../middlewares/catchAync')
 const {
@@ -38,6 +40,8 @@ const ProfileImage = multer({
 const upload = multer().none()
 
 // Apply multer middleware to the route
+// A closed, paused or blocked shop: no slots, bookings or moves (helper/shopOpen.js).
+const { requireOpenShop, fromSalonParam, fromEmployeeParam, fromBooking } = require('../../helper/shopOpen')
 router.post('/email-testing', upload, catchAsync(appController.emailtesting))
 
 router.post(
@@ -56,73 +60,28 @@ router.get('/service-types', publicProtected, catchAsync(fetchServiceTypes))
 router.post('/search', publicProtected, catchAsync(appController.searchSalons))
 router.get('/favorites/:favorite', protect, catchAsync(appController.home))
 
+// Applications for a chair or a staff job (offers with terms, like the business app)
+const chairMarketController = require('../../controllers/salonControllers/chairMarketController')
+router.get('/applications', protect, catchAsync(chairMarketController.listOffers))
+router.post('/applications', protect, catchAsync(chairMarketController.applyFromClient))
+router.post('/applications/:offer/counter', protect, catchAsync(chairMarketController.counter))
+router.patch('/applications/:offer/accept', protect, catchAsync(chairMarketController.accept))
+router.patch('/applications/:offer/decline', protect, catchAsync(chairMarketController.decline))
+
 router.get(
   '/salon-detail/:id',
   publicProtected,
   catchAsync(appController.salonDetails),
 )
-
-router.post(
-  '/rent-chair-advertisement-enquiry',
-  publicProtected,
-  catchAsync(appController.submitRentChairAdvertisementEnquiry),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiries',
-  protect,
-  catchAsync(appController.listRentChairAdvertisementEnquiries),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiry/by-salon/:salonDetailId',
-  protect,
-  catchAsync(appController.getRentChairAdvertisementEnquiryBySalon),
-)
-
-router.get(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.getRentChairAdvertisementEnquiryMessages),
-)
-
-router.post(
-  '/rent-chair-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.sendRentChairAdvertisementEnquiryMessage),
-)
+// Brand page: every branch of the brand this shop belongs to (public).
+// ?lat=&lng= sorts them nearest first.
+router.get('/brand/:salon/branches', catchAsync(async (req, res) => {
+  const data = await require('../../helper/brandPage').branchesOf(req.params.salon, { lat: req.query.lat, lng: req.query.lng })
+  if (!data) return res.json({ status: '0', message: 'This shop has no other branches.', data: {}, error: '' })
+  return res.json({ status: '1', message: 'Branches', data, error: '' })
+}))
 
 //! Staff advertisement (customer side)
-router.post(
-  '/staff-advertisement-enquiry',
-  publicProtected,
-  catchAsync(appController.submitStaffAdvertisementEnquiry),
-)
-
-router.get(
-  '/staff-advertisement-enquiries',
-  protect,
-  catchAsync(appController.listStaffAdvertisementEnquiries),
-)
-
-router.get(
-  '/staff-advertisement-enquiry/by-salon/:salonDetailId',
-  protect,
-  catchAsync(appController.getStaffAdvertisementEnquiryBySalon),
-)
-
-router.get(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.getStaffAdvertisementEnquiryMessages),
-)
-
-router.post(
-  '/staff-advertisement-enquiry/:enquiryId/messages',
-  protect,
-  catchAsync(appController.sendStaffAdvertisementEnquiryMessage),
-)
-
 router.get('/salon-times/:salon', catchAsync(appController.salonTimes))
 router.get('/employee-times/:employee', catchAsync(appController.employeeTimes))
 router.get('/employee-detail/:id', catchAsync(appController.employeeDetails))
@@ -134,12 +93,19 @@ router.post(
 )
 router.post(
   '/employees-availability/employee/:employee',
+  requireOpenShop(fromEmployeeParam),
   catchAsync(appController.employeeAvailability),
 )
 router.post(
   '/salon-availability/salon/:salon',
+  requireOpenShop(fromSalonParam),
   catchAsync(appController.salonAvailability),
 )
+router.post('/mobile-visit/quote', publicProtected, catchAsync(mobileBarberController.quote))
+router.get('/mobile-visit/active', protect, catchAsync(mobileBarberController.activeVisit))
+router.post('/mobile-visit/:booking/here', protect, catchAsync(mobileBarberController.answerHere))
+router.post('/mobile-visit/:booking/report', protect, catchAsync(mobileBarberController.report))
+router.post('/mobile-visit/:booking/report/review', protect, catchAsync(mobileBarberController.askReview))
 router.post(
   '/book-appointment',
   protect,
@@ -164,16 +130,20 @@ router.post(
 
 router.post(
   '/solo-employee-appointment-schedule/:bookingId',
+  requireOpenShop(fromBooking),
   protect,
   catchAsync(appController.rescheduleSoloEmployeeAppointment),
 )
 router.post(
   '/multiple-employee-appointment-schedule/:bookingId',
+  requireOpenShop(fromBooking),
   protect,
   catchAsync(appController.rescheduleMultipleEmployeeAppointment),
 )
 router.post(
   '/respond-time-proposal',
+  // Declining is always allowed; accepting needs the shop open.
+  requireOpenShop((req) => (req.body?.accept === true || req.body?.accept === 'true' ? fromBooking(req) : null)),
   protect,
   catchAsync(appController.respondToTimeProposal),
 )
@@ -212,6 +182,14 @@ router.put('/detach-card/:pm', protect, catchAsync(appController.detachCard))
 // Coupons
 router.post('/apply-coupon', protect, catchAsync(appController.applyCoupon))
 router.post('/test-coupon-tracking', catchAsync(appController.testCouponTracking))
+
+// Loyalty discount (visit card)
+router.post('/loyalty/quote', protect, catchAsync(loyaltyController.quote))
+router.get('/loyalty/cards', protect, catchAsync(loyaltyController.myCards))
+// Step C: sharing across a brand's branches, and asking a shop to delete my data.
+router.get('/privacy', protect, catchAsync(require('../../controllers/privacyController').myPrivacy))
+router.put('/privacy', protect, catchAsync(require('../../controllers/privacyController').setSharing))
+router.post('/privacy/delete-request', protect, catchAsync(require('../../controllers/privacyController').askToDelete))
 
 // Drawer
 router.patch(

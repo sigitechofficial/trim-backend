@@ -30,11 +30,12 @@ const response = ({ status, message, data, error }) => {
   }
 }
 const CustomDate = require('../../utils/currentDay')
+const { actingSalonId } = require('../../helper/branchScope')
 //* 1.Reports-> Peak times Report
 
 exports.peakTimesReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -74,7 +75,7 @@ exports.peakTimesReport = async (req, res, next) => {
 
 exports.financialReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -138,7 +139,7 @@ exports.financialReport = async (req, res, next) => {
 
 exports.EP_STCReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('resource not found', 404)
@@ -184,7 +185,7 @@ exports.EP_STCReport = async (req, res, next) => {
 
 exports.timeOffDayAnalysisReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('resource not found', 404)
@@ -230,7 +231,7 @@ exports.timeOffDayAnalysisReport = async (req, res, next) => {
 
 exports.clientFileReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('resource not found', 404)
@@ -285,7 +286,7 @@ exports.clientFileReport = async (req, res, next) => {
 
 exports.appointmentConversionReport = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('resource not found', 404)
@@ -327,7 +328,7 @@ exports.sevicesSoldGraph = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -387,7 +388,7 @@ exports.sevicesSoldGraph = async (req, res, next) => {
 exports.clientStatusDistributionGraph = async (req, res, next) => {
   const currentDay = CustomDate.currentDay()
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -414,7 +415,7 @@ exports.clientStatusDistributionGraph = async (req, res, next) => {
 //* 6.Reports-> Graph EP_STCReport
 exports.EP_STCGraph = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   if (!salon) throw new AppError('resource not found', 404)

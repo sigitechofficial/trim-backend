@@ -2,7 +2,7 @@
 //
 // Staff sessions use the shop owner's user id in the JWT; the device token is
 // also linked to the staff member's own user (userTypeId 3), which is how the
-// acting staff member is identified (same approach as rentChairEnquiryHelper).
+// acting staff member is identified.
 //
 // Permission "bookingRequests": none | low (own bookings only) | high (all).
 // Staff without that key yet inherit it from "appointments" (the level that
@@ -40,6 +40,14 @@ async function staffRequestsLevel(employeeId, salonDetailId) {
 
 const fullName = (u) => `${u?.firstName ?? ''} ${u?.lastName ?? ''}`.trim()
 
+// A staff member by their own user id (staffUserId in Step A tokens).
+async function staffByUserId(userId, salonDetailId) {
+  const u = await user.findOne({ where: { id: userId, userTypeId: 3 }, attributes: ['id', 'firstName', 'lastName'] })
+  if (!u) return null
+  const staff = await employee.findOne({ where: { userId: u.id, salonDetailId, deleted: false }, attributes: ['id'] })
+  return { employeeId: staff ? staff.id : null, name: fullName(u) }
+}
+
 // The staff member behind a device token within a shop, or null (owner device).
 async function staffByDeviceToken(tokenId, salonDetailId) {
   if (!tokenId) return null
@@ -67,14 +75,19 @@ async function staffByDeviceToken(tokenId, salonDetailId) {
  * (including chair renters, who own their own shop). shopId is null if unknown.
  */
 async function resolveRequestActor(req) {
-  const shop = await salonDetail.findOne({
-    where: { userId: req.user.id },
+  // The branch this request acts on (x-salon-id; the home shop for old apps).
+  const salonId = await require('./branchScope').actingSalonId(req)
+  const shop = salonId && await salonDetail.findOne({
+    where: { id: salonId },
     attributes: ['id', 'userId'],
     include: { model: user, attributes: ['firstName', 'lastName'] },
   })
   if (!shop) return { shopId: null, isOwner: false, employeeId: null, level: 'none', name: '' }
 
-  const staff = await staffByDeviceToken(req.user?.dvToken, shop.id)
+  // Tokens from Step A name the staff member; older ones are found by device.
+  const staff = req.user?.staffUserId
+    ? await staffByUserId(req.user.staffUserId, shop.id)
+    : await staffByDeviceToken(req.user?.dvToken, shop.id)
   if (!staff) {
     return { shopId: shop.id, isOwner: true, employeeId: null, level: 'high', name: fullName(shop.user) }
   }

@@ -8,6 +8,7 @@ const {
   sequelize,
 } = require('../models')
 const Throw = require('../utils/throwNotification')
+const { activeSalonCaseSql } = require('../helper/salonSubscriptionRule')
 
 // Same salon-subscription rule that gates the "Book again" / "Rebook" buttons
 // (Home's rule, incl. external-employee → parent salon). Returns a Map of
@@ -17,20 +18,7 @@ async function getSalonInfo(salonIds, dateOnly) {
   if (!salonIds || salonIds.length === 0) return info
   const rows = await sequelize.query(
     `SELECT s.id AS id, s.salonName AS salonName,
-      (CASE
-        WHEN s.isExternalEmployee = 1 THEN (
-          SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM salonDetails p
-          WHERE p.id = s.parentSalonId
-            AND p.registrationExpiryDate >= :dateOnly
-            AND (p.subscriptionLatestPaymentStatus IS NULL
-                 OR p.subscriptionLatestPaymentStatus NOT IN ('expired','cancelled','canceled','payment_failed','paused','refunded')))
-        ELSE (CASE
-          WHEN s.registrationExpiryDate >= :dateOnly
-            AND s.subscriptionLatestPaymentStatus IS NOT NULL
-            AND s.subscriptionLatestPaymentStatus NOT IN ('expired','payment_failed','paused','refunded')
-          THEN 1 ELSE 0 END)
-      END) AS active
+      ${activeSalonCaseSql('s', ':dateOnly')} AS active
      FROM salonDetails s
      WHERE s.id IN (:salonIds)`,
     {

@@ -1,5 +1,6 @@
 const { Op, literal, col, fn, where } = require('sequelize')
 const { resolveRequestActor } = require('../../helper/bookingRequestAccess')
+const chairMarket = require('../../helper/chairMarket')
 const { CURRENCY_UNIT } = process.env
 const fs = require('fs').promises
 const {
@@ -45,24 +46,7 @@ const {
   cities,
   countries,
   zones,
-  rentChairAdvertisementEnquiry,
-  rentChairAdvertisementEnquiryMessage,
-  staffAdvertisementEnquiry,
-  staffAdvertisementEnquiryMessage,
 } = require('../../models')
-const {
-  formatEnquiryResponse,
-  MESSAGE_ATTRIBUTES,
-  canSalonReplyToEnquiry,
-  formatRentChairEnquiryForSalon,
-  getLatestMessagesByEnquiryIds,
-  dedupeSalonEnquiryRows,
-} = require('../../utils/rentChairEnquiryHelper')
-const {
-  MESSAGE_ATTRIBUTES: STAFF_MESSAGE_ATTRIBUTES,
-  formatStaffEnquiryForSalon,
-  getLatestMessagesByEnquiryIds: getStaffLatestMessagesByEnquiryIds,
-} = require('../../utils/staffAdvertisementEnquiryHelper')
 const appError = require('../../utils/appError')
 const factory = require('../handlerFactory')
 const Convert = require('../../utils/dateManipulation')
@@ -91,6 +75,7 @@ const ThrowSalonPermotionalNotification = require('../../utils/throwNotification
 const { findZones } = require('../../utils/zoneFind');
 
 const { deleteEmployeesAll } = require('../../utils/deleteEmployeesMultiple')
+const { actingSalonId } = require('../../helper/branchScope')
 const {
   processAllAppointments,
   processAppointment,
@@ -137,6 +122,7 @@ exports.addSalonDetail = async (req, res, next) => {
     businessPhoneNum,
     isVATRegistered,
     vatType,
+    workMode,
   } = req.body;
 
   const salon = await salonDetail.findOne({ where: { userId } });
@@ -177,6 +163,8 @@ exports.addSalonDetail = async (req, res, next) => {
     businessPhoneNum,
     isVATRegistered,
     vatType,
+    // 'mobile': no shop, the address is a private base for travel distance.
+    workMode: ['shop', 'mobile', 'both'].includes(workMode) ? workMode : 'shop',
   });
 
   const ownerEmployee = await employee.create({
@@ -184,6 +172,8 @@ exports.addSalonDetail = async (req, res, next) => {
     userId,
     salonDetailId: newEntry.id,
     isOwner: true,
+    // Sign-up asks "Do you take client bookings yourself?" (default yes).
+    bookable: !['false', '0', false, 0].includes(req.body?.ownerTakesBookings),
   });
 
   // --------------- UPDATED CANCELLATION POLICY -----------------
@@ -306,7 +296,7 @@ exports.choosePlan = async (req, res, next) => {
 
     // Get salon data
     let salonData = await salonDetail.findOne({
-      where: { userId },
+      where: { id: await actingSalonId(req) },
       include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
     })
 
@@ -374,6 +364,7 @@ exports.choosePlan = async (req, res, next) => {
             'trimbiz_owner_four_staff': 'Owner + 4 staff member',
             'trimbiz_owner_five_staff': 'Owner + 5 staff member',
             'trimbiz_owner_unlimited_staff': 'Owner + unlimited staff member',
+            'trimbiz_monthly_renter': 'Chair Renter',
           };
           return productMapping[productId] || 'Apple Subscription';
         };
@@ -388,8 +379,9 @@ exports.choosePlan = async (req, res, next) => {
             'trimbiz_owner_four_staff': 5,
             'trimbiz_owner_five_staff': 6,
             'trimbiz_owner_unlimited_staff': 999,
+            'trimbiz_monthly_renter': 0,
           };
-          return productTeamSizeMapping[productId] || null;
+          return productTeamSizeMapping[productId] ?? null;
         };
 
         const productId = appleSubscription.appleProductId;
@@ -647,7 +639,7 @@ exports.choosePlan = async (req, res, next) => {
 exports.createOnboardingLink = async (req, res, next) => {
   const userId = req.user.id
   let salonData = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     include: [{ model: user, attributes: ['stripeCustomerId', 'email'] }],
   })
   let account = salonData.connectAccountId
@@ -680,7 +672,7 @@ exports.accountAdded = async (req, res, next) => {
   const userId = req.user.id
 
   let salonData = await salonDetail.findOne({
-    where: { userId: userId },
+    where: { id: await actingSalonId(req) },
     attributes: ['connectAccountId', 'id'],
   })
 
@@ -881,7 +873,7 @@ exports.addSocialLinks = async (req, res, next) => {
 //* UPDATE SocialLinks
 exports.updateSocialLinks = async (req, res, next) => {
   const { links } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   const finalInput = links.map((ele) => ({ ...ele, salonDetailId: salon.id }))
   socialLink.destroy({ where: { salonDetailId: salon.id } })
   await socialLink.bulkCreate(finalInput)
@@ -953,7 +945,7 @@ exports.updateSalonDetail = async (req, res, next) => {
   } = req.body
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -1016,7 +1008,7 @@ exports.salonProfile = async (req, res, next) => {
 
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: [
       {
@@ -1213,7 +1205,7 @@ exports.getGalleryImages = async (req, res, next) => {
   const userId = req.user.id
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   const galleryImages = await salonImage.findAll({
@@ -1584,7 +1576,7 @@ exports.defaultCategories = async (req, res, next) => {
 //* Add multiple categories
 exports.addMultipleCategories = async (req, res, next) => {
   const { categories } = req.body
-  const salon = await salonDetail.findOne({ where: { userId: req?.user?.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   console.log('------------', req?.user)
   const Input = categories.filter((cat) => cat.isSelected === true)
   let finalInput = Input.map((cat) => ({ ...cat, salonDetailId: salon?.id }))
@@ -1690,7 +1682,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
     ________________________________________
 */
 // exports.fecthCoupons = async (req, res, next) => {
-//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
 //   if (!salon) {
 //     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
 //   }
@@ -1716,7 +1708,7 @@ exports.changeCategoryStatus = async (req, res, next) => {
 // }
 
 exports.fetchCoupons = async (req, res, next) => {
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon) {
     return res
       .status(200)
@@ -1786,7 +1778,7 @@ exports.fetchCoupons = async (req, res, next) => {
 */
 // exports.addCoupons = async (req, res, next) => {
 //   const input = req.body
-//   const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+//   const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
 //   if (!salon) {
 //     return res.status(200).json(returnFunction('0', 'Data not found.', {}, ''))
 //   }
@@ -1809,7 +1801,7 @@ exports.fetchCoupons = async (req, res, next) => {
 exports.addCoupons = async (req, res, next) => {
   const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon)
   {
     return res.status(200).json({
@@ -1898,7 +1890,7 @@ exports.updateCoupon = async (req, res, next) => {
   const { couponId } = req.params;
   const { promoCode, limit, from, till, value, days, timeRanges } = req.body;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon)
     return res
       .status(200)
@@ -1984,7 +1976,7 @@ exports.updateCoupon = async (req, res, next) => {
 exports.deleteCoupon = async (req, res, next) => {
   const { couponId } = req.params;
 
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } });
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } });
   if (!salon) {
     return res
       .status(200)
@@ -2019,13 +2011,62 @@ exports.deleteCoupon = async (req, res, next) => {
     Get Customer Subscription Plans
     __________________________
 */
+/** App Store / Google Play list price (GBP) of a branch plan: 2 branches £19.99, +£10 per branch. */
+const branchPlanPrice = (n) => (n >= 2 && n <= 10 ? (19.99 + (n - 2) * 10).toFixed(2) : null)
+
+/**
+ * Step A: the customerSubscription for a shop whose plan comes from its brand
+ * (planSource 'brand' with a branch product), or null for any other shop.
+ */
+async function brandPlanSubscription(salonData) {
+  const row = await salonDetail.findByPk(salonData.id, { attributes: ['brandId', 'planSource'] })
+  if (!row?.brandId || row.planSource !== 'brand') return null
+  const b = await require('../../models').brand.findByPk(row.brandId)
+  const plan = require('../../helper/brandPlan')
+  const name = plan.planNameForProduct(b?.planProductId)
+  if (!b || !name) return null
+  const n = branchLimitForProductId(b.planProductId) // null: a staff plan kept on the brand
+  const statusMap = { payment_succeeded: 'active', cancelled: 'canceled', canceled: 'canceled', expired: 'expired', payment_failed: 'past_due', paused: 'paused' }
+  let status = statusMap[String(b.planStatus || '').toLowerCase()] || 'active'
+  if (b.planExpiry && new Date(b.planExpiry) < new Date() && status !== 'canceled') status = 'expired'
+  return {
+    id: b.planProductId,
+    status,
+    name,
+    description: n ? `${name}, unlimited staff in every branch` : name,
+    price: b.planPrice != null ? Number(b.planPrice).toFixed(2) : (n && branchPlanPrice(n)) || salonData.subscriptionPrice || 0,
+    PriceId: b.planProductId,
+    duration: 'month',
+    paymentMethods: String(b.planProductId).includes(':') ? 'RevenueCat' : 'Apple Pay', // Google ids are subscription:baseplan
+    expire: salonData.registrationExpiryDate,
+    start: salonData.registrationDate,
+    subscriptionLatestPaymentStatus: b.planStatus,
+    source: 'revenuecat',
+    subscriptionSource: 'revenuecat',
+    currency: b.planPrice != null && b.planCurrency ? b.planCurrency : 'gbp',
+    VAT: '0', // the app reads these as text
+    revenueCatUserId: b.rcAppUserId,
+    revenueCatStore: String(b.planProductId).includes(':') ? 'PLAY_STORE' : 'APP_STORE',
+    periodEnd: b.planExpiry,
+    teamSize: plan.teamSizeForProduct(b.planProductId),
+    branchLimit: n || 1,
+    planScope: 'brand',
+    metaData: { freeTrialDays: '', members: '1', membersCount: '1', paymentMethodId: 'revenuecat', sloanId: String(salonData.id), subscriptionName: name },
+  }
+}
+
+const branchLimitForProductId = (id) => {
+  const m = String(id || '').match(/branches[-_](\d+)/)
+  return m ? Number(m[1]) : null
+}
+
 exports.customerSubscription = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
     // Get salon data with subscription info
     const salonData = await salonDetail.findOne({
-      where: { userId },
+      where: { id: await actingSalonId(req) },
       attributes: [
         'id',
         'subscriptionPlan',
@@ -2046,6 +2087,14 @@ exports.customerSubscription = async (req, res, next) => {
 
     if (!salonData) {
       return res.json(returnFunction('2', 'Shop not found', {}, ''));
+    }
+
+    // Step A: a branch on the brand's branch plan shows that plan, not the
+    // shop's last staff-plan record.
+    const branchPlan = await brandPlanSubscription(salonData)
+    if (branchPlan) {
+      const code = branchPlan.status === 'canceled' && new Date(branchPlan.periodEnd) < new Date() ? '2' : '1'
+      return res.json(returnFunction(code, code === '1' ? 'All subscription plan' : 'Subscription expired', { customerSubscription: branchPlan }, ''))
     }
 
     // ============================================
@@ -2323,6 +2372,8 @@ exports.customerSubscription = async (req, res, next) => {
       // Update price, currency and name from subscription record
       customerSubscription.price = subscriptionRecord.amountPaid || customerSubscription.price || 0;
       customerSubscription.currency = subscriptionRecord.currency || customerSubscription.currency || 'gbp';
+      // Older free lifetime grants were saved as USD 0.00: show them in pounds.
+      if (!(Number(customerSubscription.price) > 0)) customerSubscription.currency = 'gbp';
       customerSubscription.name = subscriptionRecord.name || customerSubscription.name || '';
       // Renewable price: the real price user will be charged when trial converts to paid
       if (subscriptionRecord.renewablePrice !== null && subscriptionRecord.renewablePrice !== undefined) {
@@ -2431,7 +2482,7 @@ exports.cancelActiveSubscription = async (req, res, next) => {
   const userId = req.user.id
   let salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
   const cancelSubscription = await Stripe.cancelSubscription(
@@ -2505,7 +2556,7 @@ exports.updateSubscription = async (req, res, next) => {
   } = req.body
   let salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     include: {
       model: user,
@@ -2714,7 +2765,7 @@ exports.updateSubscription = async (req, res, next) => {
     ________________________________________
 */
 exports.billingDetail = async (req, res, next) => {
-  const salon = await salonDetail.findOne({ where: { userId: req.user.id } })
+  const salon = await salonDetail.findOne({ where: { id: await actingSalonId(req) } })
   if (!salon) {
     return res.status(200).json(returnFunction('0', 'Data Not found.', {}, ''))
   }
@@ -2743,7 +2794,7 @@ exports.getCancellationPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2816,7 +2867,7 @@ exports.updateCancellationPolicies = async (req, res) => {
   const { cancelationPolicies } = req.body
   const salon = await salonDetail.findOne({
     where: {
-      userId: req.user.id,
+      id: await actingSalonId(req),
     },
     attributes: ['id'],
   })
@@ -2863,7 +2914,7 @@ exports.getDepositPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2920,7 +2971,7 @@ exports.depositPolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -2960,7 +3011,7 @@ exports.getNoShowPolicies = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3000,7 +3051,7 @@ exports.noShowPolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3069,7 +3120,7 @@ exports.getreschedulePolicy = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3103,7 +3154,7 @@ exports.reschedulePolicyHistory = async (req, res) => {
   // Find the salon by ID
   const salon = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
   })
 
@@ -3170,7 +3221,7 @@ exports.updatereschedulePolicy = async (req, res) => {
 exports.salonHistory = async (req, res) => {
   const userId = req.user.id
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { startDate, endDate, filter } = req.body
@@ -3217,9 +3268,22 @@ exports.salonHistory = async (req, res) => {
     }
   }
 
+  // Card list (Nov 2026): who, what and with whom, newest first. Older apps
+  // read only the first six fields and ignore the rest.
   const salonHistory = await booking.findAll({
     where: condition,
-    attributes: ['id', 'createdAt', 'total', 'status', 'on', 'startTime'],
+    attributes: [
+      'id', 'createdAt', 'total', 'status', 'on', 'startTime', 'isMobileVisit',
+      [literal(`COALESCE(
+        NULLIF(TRIM(CONCAT(IFNULL(booking.clientFirstName, ''), ' ', IFNULL(booking.clientLastName, ''))), ''),
+        (SELECT NULLIF(TRIM(CONCAT(IFNULL(u.firstName, ''), ' ', IFNULL(u.lastName, ''))), '') FROM users u WHERE u.id = booking.customerId),
+        'Walk-in client')`), 'clientName'],
+      [literal(`(SELECT GROUP_CONCAT(DISTINCT s.serviceName ORDER BY j.startTime SEPARATOR ', ')
+        FROM jobs j JOIN services s ON s.id = j.serviceId WHERE j.bookingId = booking.id)`), 'services'],
+      [literal(`(SELECT GROUP_CONCAT(DISTINCT TRIM(CONCAT(IFNULL(u.firstName, ''), ' ', IFNULL(u.lastName, ''))) SEPARATOR ', ')
+        FROM jobs j JOIN employees e ON e.id = j.employeeId JOIN users u ON u.id = e.userId WHERE j.bookingId = booking.id)`), 'barbers'],
+    ],
+    order: [['on', 'DESC'], ['startTime', 'DESC']],
   })
 
   return res
@@ -3352,6 +3416,8 @@ exports.saleDetails = async (req, res, next) => {
   let bookingDetail = {
     id: bookingData.id,
     status: bookingData.status,
+    loyaltyDiscount: bookingData.loyaltyDiscount,
+    loyaltyPercentage: bookingData.loyaltyPercentage,
     actualCapturedAmount: bookingData.actualCapturedAmount,
     noshowCharges: bookingData.noshowCharges,
     cancellationCharges: bookingData.cancellationCharges,
@@ -3396,7 +3462,7 @@ exports.salonWallet = async (req, res, next) => {
   const userId = req.user.id
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'vatType'],
   })
@@ -3495,7 +3561,7 @@ exports.savingTimeHistory = async (req, res, next) => {
   const userId = req.user.id
 
   const salon = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'id',
       [
@@ -3561,7 +3627,7 @@ exports.addCategory = async (req, res, next) => {
 
 exports.addServices = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   let { serviceData, employees } = req.body
@@ -3609,7 +3675,7 @@ exports.addServices = async (req, res, next) => {
 exports.activeBlockCustomer = async (req, res, next) => {
   const { userId, status } = req.body
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3630,7 +3696,7 @@ exports.salonOnlineOffline = async (req, res, next) => {
   const status = isOnline ? 'Online' : 'Offline'
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3647,7 +3713,7 @@ exports.salonOnlineOffline = async (req, res, next) => {
 
 exports.salonLiveStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'isOnline',
       'coverImage',
@@ -3676,7 +3742,7 @@ exports.salonLiveStatus = async (req, res, next) => {
 
 exports.getRentChairAdvertisementStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'rentChairAdvertisementChairCount',
       'rentChairAdvertisementStatus',
@@ -3811,7 +3877,7 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3830,6 +3896,13 @@ exports.updateRentChairAdvertisement = async (req, res, next) => {
     },
     { where: { userId: req.user.id } },
   )
+  // The "Hiring chair renters" listing is the shop's one chair advert.
+  await chairMarket.syncListingFromAdvert(req.user.id, {
+    status: normalizedStatus === 1,
+    chairs: chairCount,
+    rentType: normalizedRentType,
+    rentAmount: normalizedRentAmount,
+  })
 
   return res.status(200).json(
     returnFunction('1', 'Success', {
@@ -3853,7 +3926,7 @@ exports.updateAnnouncement = async (req, res, next) => {
 
 exports.fetchAnnouncements = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -3912,21 +3985,21 @@ exports.fetchNotifications = async (req, res, next) => {
   const groupedNotifications = notifications.reduce(
     (accumulator, notification) => {
       const { type, to } = notification
+      // Chair renter offers, moves and the renter's own plan have their own tab.
+      let dataType = notification.data?.type
+      if (!dataType && typeof notification.data === 'string') {
+        try { dataType = JSON.parse(notification.data)?.type } catch (_) {}
+      }
 
-      if (type === 'appointment' && to === 'regular') {
+      if (['chairOffer', 'renterMove', 'renterPlan', 'hiringAdvert', 'renterCover'].includes(dataType)) {
+        accumulator.chairNotifications.push(notification)
+      } else if (type === 'appointment' && to === 'regular') {
         accumulator.appointmentNotifications.push(notification)
       } else if (type === 'rating') {
         accumulator.reviewNotifications.push(notification)
       } else if (type === 'advert') {
         accumulator.advertNotifications.push(notification)
         accumulator.advertisementNotifications.push(notification)
-        const dataType = notification.data?.type
-        if (
-          dataType === 'rentChairAdvertisementEnquiry' ||
-          dataType === 'rentChairAdvertisementEnquiryMessage'
-        ) {
-          accumulator.enquiryNotifications.push(notification)
-        }
       } else {
         //All other notifications from admin side ... we can use thrid arry as well
         accumulator.otherNotifications.push(notification)
@@ -3939,8 +4012,8 @@ exports.fetchNotifications = async (req, res, next) => {
       reviewNotifications: [],
       advertNotifications: [],
       advertisementNotifications: [],
-      enquiryNotifications: [],
       otherNotifications: [],
+      chairNotifications: [],
     }, // Initial accumulator
   )
 
@@ -3952,238 +4025,20 @@ exports.fetchNotifications = async (req, res, next) => {
   )
 }
 
-exports.listRentChairAdvertisementEnquiries = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiries = await rentChairAdvertisementEnquiry.findAll({
-    where: { salonDetailId: salon.id },
-    order: [['updatedAt', 'DESC']],
-  })
-
-  const latestMap = await getLatestMessagesByEnquiryIds(
-    enquiries.map((enquiry) => enquiry.id),
-  )
-
-  const formattedEnquiries = enquiries.map((enquiry) =>
-    formatRentChairEnquiryForSalon(enquiry, latestMap.get(enquiry.id)),
-  )
-
-  const enquiriesList = dedupeSalonEnquiryRows(formattedEnquiries)
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { enquiries: enquiriesList }, ''),
-  )
-}
-
-exports.getRentChairAdvertisementEnquiryDetail = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: [
-      'id',
-      'salonDetailId',
-      'customerUserId',
-      'firstName',
-      'lastName',
-      'email',
-      'phoneNumber',
-      'currentLocation',
-      'yearsExperience',
-      'socialMedia',
-      'preferredWorkingDays',
-      'notes',
-      'status',
-      'createdAt',
-    ],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { enquiry: formatEnquiryResponse(enquiry) }, ''),
-  )
-}
-
-exports.getRentChairAdvertisementEnquiryMessages = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: ['id'],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  const messages = await rentChairAdvertisementEnquiryMessage.findAll({
-    where: { rentChairAdvertisementEnquiryId: enquiry.id },
-    attributes: MESSAGE_ATTRIBUTES,
-    order: [['createdAt', 'ASC']],
-  })
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { messages }, ''),
-  )
-}
-
-exports.sendRentChairAdvertisementEnquiryMessage = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id', 'userId', 'salonName'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await rentChairAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: [
-      'id',
-      'salonDetailId',
-      'customerUserId',
-      'firstName',
-      'lastName',
-    ],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  if (!enquiry.customerUserId) {
-    return res.status(200).json(
-      returnFunction(
-        '0',
-        'This enquiry was submitted by a guest. Please contact them using their email or phone number.',
-        {},
-        '',
-      ),
-    )
-  }
-
-  const permission = await canSalonReplyToEnquiry(req, salon)
-  if (!permission.allowed) {
-    return res.status(200).json(
-      returnFunction(
-        '0',
-        'You do not have permission to respond to enquiries',
-        {},
-        '',
-      ),
-    )
-  }
-
-  const trimmedMessage =
-    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
-
-  if (!trimmedMessage) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'message is required', {}, ''))
-  }
-
-  if (trimmedMessage.length > 2000) {
-    return res.status(200).json(
-      returnFunction('0', 'message must be at most 2000 characters', {}, ''),
-    )
-  }
-
-  const createdMessage = await rentChairAdvertisementEnquiryMessage.create({
-    rentChairAdvertisementEnquiryId: enquiry.id,
-    senderRole: 'salon',
-    senderUserId: permission.actingUserId,
-    message: trimmedMessage,
-  })
-
-  const customerTokens = await deviceToken.findAll({
-    where: { userId: enquiry.customerUserId },
-    attributes: ['tokenId'],
-  })
-
-  const tokens = customerTokens.map((row) => row.tokenId).filter(Boolean)
-
-  await ThrowNotification(
-    tokens,
-    {
-      title: 'Chair rental enquiry reply',
-      body: `${salon.salonName || 'Shop'} replied to your chair rental enquiry.`,
-    },
-    {
-      type: 'rentChairAdvertisementEnquiryMessage',
-      enquiryId: String(enquiry.id),
-      messageId: String(createdMessage.id),
-      salonDetailId: String(enquiry.salonDetailId),
-    },
-    enquiry.customerUserId,
-  )
-
-  return res.status(200).json(
-    returnFunction('1', 'Message sent successfully', { message: createdMessage }, ''),
-  )
-}
-
 // ─── Staff advertisement (owner side) ────────────────────────────────────────
 // Same shape as the rent-a-chair advert (on/off + count), but no rent. Backed by
-// the staffAdvertisement* columns and the staffAdvertisementEnquiry* tables.
+// the staffAdvertisement* columns.
 
 exports.getStaffAdvertisementStatus = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: [
       'staffAdvertisementCount',
       'staffAdvertisementStatus',
       'staffAdvertisementWagesType',
       'staffAdvertisementWagesAmount',
       'staffAdvertisementWagesCycle',
+      'staffAdvertisementDays',
     ],
   })
 
@@ -4204,6 +4059,7 @@ exports.getStaffAdvertisementStatus = async (req, res, next) => {
           ? null
           : Number(salon.staffAdvertisementWagesAmount),
       staffAdvertisementWagesCycle: salon.staffAdvertisementWagesCycle ?? null,
+      staffAdvertisementDays: require('../../helper/chairMarket').daysOf(salon.staffAdvertisementDays),
     }, ''),
   )
 }
@@ -4215,6 +4071,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
     staffAdvertisementWagesType,
     staffAdvertisementWagesAmount,
     staffAdvertisementWagesCycle,
+    staffAdvertisementDays,
   } = req.body
 
   if (
@@ -4327,7 +4184,7 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
   }
 
   const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
 
@@ -4344,8 +4201,13 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
       staffAdvertisementWagesCycle: normalizedWagesCycle,
+      // Days the shop needs someone; not sent by older apps (left as it was).
+      ...(staffAdvertisementDays !== undefined
+        ? { staffAdvertisementDays: require('../../helper/chairMarket').daysOf(staffAdvertisementDays).join(',') || null }
+        : {}),
     },
-    { where: { userId: req.user.id } },
+    // The shop being edited (a multi-branch owner has more than one).
+    { where: { id: salon.id } },
   )
 
   return res.status(200).json(
@@ -4355,226 +4217,8 @@ exports.updateStaffAdvertisement = async (req, res, next) => {
       staffAdvertisementWagesType: normalizedWagesType,
       staffAdvertisementWagesAmount: normalizedWagesAmount,
       staffAdvertisementWagesCycle: normalizedWagesCycle,
+      staffAdvertisementDays: require('../../helper/chairMarket').daysOf(staffAdvertisementDays),
     }, ''),
-  )
-}
-
-exports.listStaffAdvertisementEnquiries = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiries = await staffAdvertisementEnquiry.findAll({
-    where: { salonDetailId: salon.id },
-    order: [['updatedAt', 'DESC']],
-  })
-
-  const latestMap = await getStaffLatestMessagesByEnquiryIds(
-    enquiries.map((enquiry) => enquiry.id),
-  )
-
-  const formattedEnquiries = enquiries.map((enquiry) =>
-    formatStaffEnquiryForSalon(enquiry, latestMap.get(enquiry.id)),
-  )
-
-  const enquiriesList = dedupeSalonEnquiryRows(formattedEnquiries)
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { enquiries: enquiriesList }, ''),
-  )
-}
-
-exports.getStaffAdvertisementEnquiryDetail = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: [
-      'id',
-      'salonDetailId',
-      'customerUserId',
-      'firstName',
-      'lastName',
-      'email',
-      'phoneNumber',
-      'currentLocation',
-      'yearsExperience',
-      'socialMedia',
-      'preferredWorkingDays',
-      'notes',
-      'status',
-      'createdAt',
-    ],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { enquiry: formatEnquiryResponse(enquiry) }, ''),
-  )
-}
-
-exports.getStaffAdvertisementEnquiryMessages = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: ['id'],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  const messages = await staffAdvertisementEnquiryMessage.findAll({
-    where: { staffAdvertisementEnquiryId: enquiry.id },
-    attributes: STAFF_MESSAGE_ATTRIBUTES,
-    order: [['createdAt', 'ASC']],
-  })
-
-  return res.status(200).json(
-    returnFunction('1', 'success', { messages }, ''),
-  )
-}
-
-exports.sendStaffAdvertisementEnquiryMessage = async (req, res, next) => {
-  const salon = await salonDetail.findOne({
-    where: { userId: req.user.id },
-    attributes: ['id', 'userId', 'salonName'],
-  })
-
-  if (!salon) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Shop not found', {}, ''))
-  }
-
-  const enquiry = await staffAdvertisementEnquiry.findOne({
-    where: {
-      id: req.params.enquiryId,
-      salonDetailId: salon.id,
-    },
-    attributes: [
-      'id',
-      'salonDetailId',
-      'customerUserId',
-      'firstName',
-      'lastName',
-    ],
-  })
-
-  if (!enquiry) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'Enquiry not found', {}, ''))
-  }
-
-  if (!enquiry.customerUserId) {
-    return res.status(200).json(
-      returnFunction(
-        '0',
-        'This enquiry was submitted by a guest. Please contact them using their email or phone number.',
-        {},
-        '',
-      ),
-    )
-  }
-
-  const permission = await canSalonReplyToEnquiry(req, salon)
-  if (!permission.allowed) {
-    return res.status(200).json(
-      returnFunction(
-        '0',
-        'You do not have permission to respond to enquiries',
-        {},
-        '',
-      ),
-    )
-  }
-
-  const trimmedMessage =
-    typeof req.body?.message === 'string' ? req.body.message.trim() : ''
-
-  if (!trimmedMessage) {
-    return res
-      .status(200)
-      .json(returnFunction('0', 'message is required', {}, ''))
-  }
-
-  if (trimmedMessage.length > 2000) {
-    return res.status(200).json(
-      returnFunction('0', 'message must be at most 2000 characters', {}, ''),
-    )
-  }
-
-  const createdMessage = await staffAdvertisementEnquiryMessage.create({
-    staffAdvertisementEnquiryId: enquiry.id,
-    senderRole: 'salon',
-    senderUserId: permission.actingUserId,
-    message: trimmedMessage,
-  })
-
-  const customerTokens = await deviceToken.findAll({
-    where: { userId: enquiry.customerUserId },
-    attributes: ['tokenId'],
-  })
-
-  const tokens = customerTokens.map((row) => row.tokenId).filter(Boolean)
-
-  await ThrowNotification(
-    tokens,
-    {
-      title: 'Staff enquiry reply',
-      body: `${salon.salonName || 'Shop'} replied to your staff enquiry.`,
-    },
-    {
-      type: 'staffAdvertisementEnquiryMessage',
-      enquiryId: String(enquiry.id),
-      messageId: String(createdMessage.id),
-      salonDetailId: String(enquiry.salonDetailId),
-    },
-    enquiry.customerUserId,
-  )
-
-  return res.status(200).json(
-    returnFunction('1', 'Message sent successfully', { message: createdMessage }, ''),
   )
 }
 
@@ -4782,7 +4426,7 @@ exports.reviewReply = async (req, res, next) => {
 
 exports.customPermotionalNotificaiton = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req?.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'coverImage', 'salonName'],
   })
   console.log(
@@ -4918,7 +4562,7 @@ exports.customPermotionalNotificaiton = async (req, res, next) => {
 
 exports.addAllergies = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'userId'],
   })
   if (!salon) {
@@ -4935,7 +4579,7 @@ exports.addAllergies = async (req, res, next) => {
 
 exports.fetchAllergies = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'userId'],
   })
   if (!salon) {
@@ -4949,14 +4593,17 @@ exports.fetchAllergies = async (req, res, next) => {
     },
   })
 
-  return res.json(returnFunction('1', 'Success', { allergiesList }, ''))
+  // Step C: allergies the brand's other branches noted (read-only here), when the client shares them.
+  const shared = await require('../../helper/clientPrivacy').fromOtherBranches(salon.id, Number(req.params.id))
+  return res.json(returnFunction('1', 'Success', { allergiesList, otherBranchAllergies: shared.allergies, sharingOff: !!shared.sharingOff }, ''))
 }
 
 //* Remove Client's allergies
 
 exports.removeAllergies = async (req, res, next) => {
+  // Only an allergy this branch noted: another branch's stays (Step C sharing shows them read-only).
   const newAllergy = await allergies.destroy({
-    where: { id: req.params?.id },
+    where: { id: req.params?.id, salonDetailId: await actingSalonId(req) },
   })
   return res.json(returnFunction('1', 'Success', { newAllergy }, ''))
 }
@@ -4965,7 +4612,7 @@ exports.removeAllergies = async (req, res, next) => {
 
 exports.addUpdateClientNote = async (req, res, next) => {
   const salon = await salonDetail.findOne({
-    where: { userId: req.user?.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id'],
   })
   const { customerNote } = req.body
@@ -4999,7 +4646,7 @@ exports.onlinePayments = async (req, res, next) => {
   const { onlinePayments } = req.body
   const salonData = await salonDetail.findOne({
     where: {
-      userId,
+      id: await actingSalonId(req),
     },
     attributes: ['id', 'onlinePayments'],
   })
@@ -5018,7 +4665,7 @@ exports.bookingApprovalSettings = async (req, res, next) => {
     return res.json(returnFunction('0', 'Only the shop owner can change booking settings.', {}, ''))
   }
   const salonData = await salonDetail.findOne({
-    where: { userId: req.user.id },
+    where: { id: await actingSalonId(req) },
     attributes: ['id', 'autoAcceptBookings', 'approvalScope'],
   })
   if (!salonData) return res.json(returnFunction('0', 'Shop not found', {}, ''))
@@ -5129,6 +4776,43 @@ exports.accountDelete = async (req, res, next) => {
   ])
 
   if (!data || !salon) throw new appError('resource not found', 200)
+
+  // Step A: an owner with branches deletes the whole business. Every branch
+  // must be free of upcoming work, and a brand plan bought in the app store
+  // keeps charging until it is cancelled there (Apple requires saying so).
+  const branchRows = await salonDetail.findAll({
+    where: { userId: id, isExternalEmployee: { [Op.or]: [false, null] } },
+    attributes: ['id', 'brandId'],
+  })
+  const branchIds = branchRows.length ? branchRows.map((b) => b.id) : [salon.id]
+  const brandId = branchRows.find((b) => b.brandId)?.brandId
+  if (brandId) {
+    const b = await require('../../models').brand.findByPk(brandId)
+    const planLive = b?.planProductId && b?.planExpiry && new Date(b.planExpiry) > new Date() && !['cancelled', 'canceled', 'expired'].includes(String(b.planStatus || '').toLowerCase())
+    if (planLive) {
+      return res.json(
+        returnFunction(
+          '2',
+          'Your branch plan was bought through the app store. Please cancel it in the store first; otherwise you will keep being charged after your account is deleted.',
+          {},
+          '',
+        ),
+      )
+    }
+    const upcoming = await booking.count({
+      where: { salonDetailId: branchIds, status: { [Op.in]: ['assign', 'pending', 'book', 'requested'] } },
+    })
+    if (upcoming > 0) {
+      return res.json(
+        returnFunction(
+          '2',
+          `Your branches have ${upcoming} active or upcoming appointment(s). Please complete or cancel all bookings before deleting your account.`,
+          { activeBookingsCount: upcoming },
+          '',
+        ),
+      )
+    }
+  }
 
   // ─── CHECK 1: Block if an active RevenueCat subscription exists ──────────
   // RevenueCat subscriptions are managed by the App Store / Play Store.
@@ -5253,12 +4937,17 @@ exports.accountDelete = async (req, res, next) => {
     { where: { id } },
   )
 
-  await subscriptions.destroy({ where: { salonDetailId: salon.id } })
-  await salonDetail.update({ approvedByAdmin: false }, { where: { id: salon.id } })
+  // Every branch goes (one row for a single shop).
+  await subscriptions.destroy({ where: { salonDetailId: branchIds } })
+  await salonDetail.update(
+    { approvedByAdmin: false, ...(brandId ? { closedAt: new Date() } : {}) },
+    { where: { id: branchIds } },
+  )
+  if (brandId) await require('../../models').brand.update({ status: false }, { where: { id: brandId } })
 
   //Stripe.deleteCustomer(data?.stripeCustomerId, 'salon')
   deviceToken.destroy({ where: { userId: id } })
-  deleteEmployeesAll(salon.id)
+  for (const branchId of branchIds) deleteEmployeesAll(branchId)
   return res.json(response({ message: 'Account deleted', data: { data } }))
 }
 
@@ -5466,7 +5155,7 @@ exports.createConnectionToken = async (req, res, next) => {
   }
 
   const salonData = await salonDetail.findOne({
-    where: { userId },
+    where: { id: await actingSalonId(req) },
     include: [{ model: addressDBS }],
   });
 
@@ -5569,3 +5258,66 @@ exports.createConnectionToken = async (req, res, next) => {
     }, ''),
   );
 };
+
+/*
+    Branches (Step A)
+    ________________________________________
+*/
+const branchesHelper = () => require('../../helper/branches')
+
+exports.myBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', await branchesHelper().myBranches(req.user.id), ''))
+
+exports.addBranch = async (req, res) => {
+  try {
+    const branch = await branchesHelper().addBranch(req.user.id, req.body)
+    return res.json(returnFunction('1', 'Branch added.', branch, ''))
+  } catch (err) {
+    // Over the plan's branch limit: the app opens the branch-plan paywall.
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+exports.closeBranch = async (req, res) =>
+  res.json(returnFunction('1', 'Branch closed. Clients no longer see it.', await branchesHelper().closeBranch(req.user.id, req.params.salonId), ''))
+
+exports.reopenBranch = async (req, res) => {
+  try {
+    return res.json(returnFunction('1', 'Branch reopened.', await branchesHelper().reopenBranch(req.user.id, req.params.salonId), ''))
+  } catch (err) {
+    if (err.data?.code === 'PLAN_LIMIT') return res.json(returnFunction('0', err.message, err.data, ''))
+    throw err
+  }
+}
+
+// Step B: one person in several branches.
+const membersHelper = () => require('../../helper/branchMembers')
+
+exports.memberBranches = async (req, res) =>
+  res.json(returnFunction('1', 'Branches', { branches: await membersHelper().memberBranches(req.user.id, req.params.employeeId) }, ''))
+
+exports.addMemberToBranch = async (req, res) => {
+  const r = await membersHelper().addToBranch(req.user.id, req.body?.employeeId, req.params.salonId, {
+    role: req.body?.role,
+    from: req.body?.from, // Step C: optional period
+    until: req.body?.until,
+  })
+  const msg = r.created ? 'Added to the branch.' : req.body?.until ? 'Access period saved.' : 'Already works in this branch.'
+  return res.json(returnFunction('1', msg, { employeeId: r.row.id, salonId: r.row.salonDetailId, accessUntil: r.row.accessUntil || null }, ''))
+}
+
+exports.setMemberAllBranches = async (req, res) => {
+  const on = req.body?.allBranches === true || req.body?.allBranches === 'true'
+  const r = await membersHelper().setAllBranches(req.user.id, req.params.employeeId, on)
+  return res.json(returnFunction('1', on ? 'Now a manager over all branches.' : 'Manager of their current branches only.', r, ''))
+}
+
+exports.branchesSummary = async (req, res) =>
+  res.json(returnFunction('1', 'All branches', await branchesHelper().branchesSummary(req.user.id, req.query || {}), ''))
+
+exports.branchesDay = async (req, res) =>
+  res.json(returnFunction('1', 'All branches day', await branchesHelper().branchesDay(req.user.id, req.query?.date), ''))
+
+exports.renameBrand = async (req, res) =>
+  res.json(returnFunction('1', 'Business name saved.', await branchesHelper().renameBrand(req.user.id, req.body?.name), ''))
