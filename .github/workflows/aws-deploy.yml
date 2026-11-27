@@ -50,7 +50,7 @@ jobs:
       - name: Build and push the image
         id: image
         run: |
-          TAG="${GITHUB_SHA::12}"
+          TAG="prod-${GITHUB_SHA::12}"
           IMAGE="${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG"
           # Tags are immutable in ECR: reuse the image if this commit was built before.
           if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
